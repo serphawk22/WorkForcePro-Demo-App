@@ -55,13 +55,14 @@ def decode_token(token: str) -> Optional[TokenData]:
     """Decode and validate a JWT token."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            return None
+        user_id: int = int(user_id_str)  # Convert string back to int
         email: str = payload.get("email")
         role: str = payload.get("role")
-        if user_id is None:
-            return None
         return TokenData(user_id=user_id, email=email, role=role)
-    except JWTError:
+    except (JWTError, ValueError):
         return None
 
 

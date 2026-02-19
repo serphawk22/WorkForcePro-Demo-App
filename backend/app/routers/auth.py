@@ -93,7 +93,7 @@ async def login(
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": user.id,
+            "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
             "role": user.role.value,
             "name": user.name
@@ -144,7 +144,7 @@ async def login_json(
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": user.id,
+            "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
             "role": user.role.value,
             "name": user.name
