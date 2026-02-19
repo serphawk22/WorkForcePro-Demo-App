@@ -2,7 +2,6 @@
 
 A modern, full-stack workforce management platform designed to streamline employee management, attendance tracking, task assignment, leave management, and payroll processing. Built with cutting-edge technologies for scalability, performance, and an exceptional user experience.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)
@@ -353,7 +352,7 @@ Streamlined request workflow:
 - Leave history
 - Calendar integration
 
-## 🔒 Security Best Practices
+## 🔒 Security Features
 
 - JWT tokens for stateless authentication
 - Password hashing using bcrypt (cost factor: 12)
@@ -361,39 +360,11 @@ Streamlined request workflow:
 - SQL injection protection via SQLModel ORM
 - Input validation using Pydantic models
 - Environment variables for sensitive data
-- HTTPS recommended for production
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 👨‍💻 Author
 
 **Sai Varsha Devoju**
 - GitHub: [@saivarshadevoju](https://github.com/saivarshadevoju)
-- Repository: [WorkForcePro](https://github.com/saivarshadevoju/WorkForcePro)
-
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/) for the amazing Python web framework
-- [Next.js](https://nextjs.org/) for the powerful React framework
-- [shadcn/ui](https://ui.shadcn.com/) for the beautiful UI components
-- [Vercel](https://vercel.com/) for deployment platform
-- All open-source contributors
-
-## 📧 Support
-
-For support, email your-email@example.com or open an issue in the GitHub repository.
 
 ---
 
