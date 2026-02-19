@@ -5,9 +5,9 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Users, Wifi, Clock, ListTodo, TrendingUp, CalendarOff, Loader2 } from "lucide-react";
+import { Users, Wifi, Clock, ListTodo, TrendingUp, CalendarOff, Loader2, Activity } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { fetchDashboardStats, getTaskStats, DashboardStats, TaskStats } from "@/lib/api";
+import { fetchAdminDashboard, getTaskStats, AdminDashboardStats, TaskStats } from "@/lib/api";
 
 const velocityData = [
   { week: "W1", tasks: 10 },
@@ -20,7 +20,7 @@ const velocityData = [
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -28,7 +28,7 @@ export default function AdminDashboard() {
     async function loadData() {
       setIsLoading(true);
       const [dashboardResult, taskResult] = await Promise.all([
-        fetchDashboardStats(),
+        fetchAdminDashboard(),
         getTaskStats()
       ]);
       
@@ -106,10 +106,10 @@ export default function AdminDashboard() {
                 <StatCard 
                   icon={CalendarOff} 
                   label="Pending Leave Requests" 
-                  value={stats?.pending_leaves || 0} 
+                  value={stats?.leave_requests_pending || 0} 
                   subtitle="Awaiting approval" 
-                  trend={stats?.pending_leaves ? "Review Needed" : "None"} 
-                  trendType={stats?.pending_leaves ? "down" : "stable"} 
+                  trend={stats?.leave_requests_pending ? "Review Needed" : "None"} 
+                  trendType={stats?.leave_requests_pending ? "down" : "stable"} 
                 />
               </div>
 
@@ -176,6 +176,41 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+
+              {/* Recent Activities */}
+              {stats?.recent_activities && stats.recent_activities.length > 0 && (
+                <div className="rounded-xl border border-border bg-card p-6 card-shadow">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity size={18} className="text-muted-foreground" />
+                    <h3 className="text-base font-semibold text-card-foreground">Recent Activities</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {stats.recent_activities.map((activity, index) => (
+                      <div key={index} className="flex items-start gap-3 pb-3 border-b border-border last:border-0 last:pb-0">
+                        <div className={`mt-1 h-2 w-2 rounded-full ${
+                          activity.status === 'done' || activity.status === 'approved' ? 'bg-green-500' :
+                          activity.status === 'in_progress' || activity.status === 'pending' ? 'bg-yellow-500' :
+                          'bg-blue-500'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-card-foreground">{activity.description}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(activity.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          activity.status === 'done' || activity.status === 'approved' ? 'bg-green-500/10 text-green-600' :
+                          activity.status === 'in_progress' || activity.status === 'pending' ? 'bg-yellow-500/10 text-yellow-600' :
+                          activity.status === 'rejected' ? 'bg-red-500/10 text-red-600' :
+                          'bg-blue-500/10 text-blue-600'
+                        }`}>
+                          {activity.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

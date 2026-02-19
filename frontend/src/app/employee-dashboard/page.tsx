@@ -5,8 +5,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2 } from "lucide-react";
-import { getAttendanceStatus, punchIn, punchOut, getMyTasks, updateTaskStatus, Task, AttendanceStatus } from "@/lib/api";
+import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar } from "lucide-react";
+import { fetchEmployeeDashboard, punchIn, punchOut, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ export default function EmployeeDashboard() {
   const firstName = user?.name?.split(" ")[0] || "Employee";
   
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [punchLoading, setPunchLoading] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
@@ -47,12 +47,12 @@ export default function EmployeeDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statusResponse, tasksResponse] = await Promise.all([
-        getAttendanceStatus(),
+      const [statsResponse, tasksResponse] = await Promise.all([
+        fetchEmployeeDashboard(),
         getMyTasks(),
       ]);
-      if (statusResponse.data) {
-        setAttendanceStatus(statusResponse.data);
+      if (statsResponse.data) {
+        setDashboardStats(statsResponse.data);
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
@@ -68,15 +68,15 @@ export default function EmployeeDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Timer for current session - use elapsed_seconds from backend or calculate
+  // Timer for current session - use data from dashboard stats
   useEffect(() => {
-    const isWorking = attendanceStatus?.status === "working";
-    if (!isWorking || !attendanceStatus?.punch_in) {
+    const isWorking = dashboardStats?.current_session?.clocked_in || false;
+    if (!isWorking || !dashboardStats?.current_session?.punch_in) {
       setElapsedTime(0);
       return;
     }
 
-    const punchInTime = new Date(attendanceStatus.punch_in).getTime();
+    const punchInTime = new Date(dashboardStats.current_session.punch_in).getTime();
     
     const updateElapsed = () => {
       const now = Date.now();
@@ -86,7 +86,7 @@ export default function EmployeeDashboard() {
     updateElapsed();
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [attendanceStatus?.status, attendanceStatus?.punch_in]);
+  }, [dashboardStats?.current_session]);
 
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -134,12 +134,17 @@ export default function EmployeeDashboard() {
     }
   };
 
+  // Use stats from dashboard API
+  const tasksDueToday = dashboardStats?.tasks_due_today || 0;
+  const tasksCompleted = dashboardStats?.tasks_completed || 0;
+  const productivityScore = dashboardStats?.productivity_score || 0;
+  const activeProjects = dashboardStats?.active_projects || 0;
+  const leaveBalance = dashboardStats?.leave_balance || 0;
+  const pendingLeaveRequests = dashboardStats?.pending_leave_requests || 0;
+  const isWorking = dashboardStats?.current_session?.clocked_in || false;
+  
+  // Calculate from tasks list for display
   const activeTasks = tasks.filter((t) => t.status !== "done");
-  const highPriorityCount = tasks.filter((t) => t.priority === "high" && t.status !== "done").length;
-  const completedToday = tasks.filter((t) => t.status === "done").length;
-  const totalTasks = tasks.length;
-  const productivityPercent = totalTasks > 0 ? Math.round((completedToday / totalTasks) * 100) : 0;
-  const isWorking = attendanceStatus?.status === "working";
 
   if (loading) {
     return (
@@ -205,25 +210,47 @@ export default function EmployeeDashboard() {
             />
             <StatCard
               icon={AlertCircle}
-              label="Active Tasks"
-              value={activeTasks.length}
-              subtitle={`${highPriorityCount} High Priority`}
-              trend={highPriorityCount > 0 ? "Attention" : "Good"}
-              trendType={highPriorityCount > 0 ? "down" : "up"}
+              label="Due Today"
+              value={tasksDueToday}
+              subtitle="Tasks due today"
+              trend={tasksDueToday > 0 ? "Attention" : "Good"}
+              trendType={tasksDueToday > 0 ? "down" : "up"}
             />
             <StatCard
               icon={Zap}
-              label="Completed"
-              value={`${productivityPercent}%`}
-              subtitle={`${completedToday} of ${totalTasks} tasks`}
-              trend={productivityPercent >= 50 ? "Great" : "Keep going"}
-              trendType={productivityPercent >= 50 ? "up" : "stable"}
+              label="Productivity"
+              value={`${productivityScore}%`}
+              subtitle={`${tasksCompleted} completed`}
+              trend={productivityScore >= 50 ? "Great" : "Keep going"}
+              trendType={productivityScore >= 50 ? "up" : "stable"}
             />
             <StatCard
               icon={Building2}
-              label="Today's Hours"
-              value={attendanceStatus?.total_hours?.toFixed(1) || "0.0"}
-              subtitle="Hours worked today"
+              label="Active Projects"
+              value={activeProjects}
+              subtitle="In progress"
+              trend={activeProjects > 0 ? "Working" : "None"}
+              trendType={activeProjects > 0 ? "up" : "stable"}
+            />
+          </div>
+
+          {/* Leave Balance Card */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <StatCard
+              icon={Calendar}
+              label="Leave Balance"
+              value={leaveBalance}
+              subtitle="Days remaining"
+              trend={leaveBalance > 10 ? "Healthy" : leaveBalance > 5 ? "Moderate" : "Low"}
+              trendType={leaveBalance > 10 ? "up" : leaveBalance > 5 ? "stable" : "down"}
+            />
+            <StatCard
+              icon={Clock}
+              label="Pending Requests"
+              value={pendingLeaveRequests}
+              subtitle="Leave requests"
+              trend={pendingLeaveRequests > 0 ? "Pending" : "None"}
+              trendType="stable"
             />
           </div>
 
