@@ -13,7 +13,7 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<any>>();
-const CACHE_DURATION = 5000; // 5 seconds
+const CACHE_DURATION = 2000; // 2 seconds - shorter to prevent stale data
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -240,6 +240,9 @@ async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+  
   try {
     const token = getToken();
     const headers: HeadersInit = {
@@ -256,7 +259,10 @@ async function apiFetch<T>(
       ...options,
       credentials: "include", // Send cookies
       headers,
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     // Handle empty responses (like 204 No Content)
     const text = await response.text();
@@ -278,7 +284,12 @@ async function apiFetch<T>(
     }
 
     return { data };
-  } catch (error) {
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error("Request timeout:", endpoint);
+      return { error: "Request timeout. Please check your connection." };
+    }
     console.error("API Error:", error);
     return { error: "Network error. Please try again." };
   }
