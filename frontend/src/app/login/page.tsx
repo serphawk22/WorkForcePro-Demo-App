@@ -5,14 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Zap, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/components/AuthProvider";
+import { login as apiLogin } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,18 +19,25 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    const result = await login(email, password);
+    try {
+      const result = await apiLogin(email, password);
 
-    if (result.success) {
-      // Redirect based on role from login response
-      const role = (result as any).role;
-      if (role === "employee") {
-        router.push("/employee-dashboard");
-      } else {
-        router.push("/dashboard");
+      if (result.error) {
+        setError(result.error);
+        setIsLoading(false);
+        return;
       }
-    } else {
-      setError(result.error || "Login failed");
+
+      if (result.data) {
+        // Redirect based on role
+        if (result.data.role === "admin") {
+          router.push("/dashboard");
+        } else {
+          router.push("/employee-dashboard");
+        }
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
       setIsLoading(false);
     }
   };

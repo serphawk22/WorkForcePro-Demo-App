@@ -101,7 +101,14 @@ async def login(
         expires_delta=access_token_expires
     )
     
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role.value
+    )
 
 
 @router.post("/login/json", response_model=Token)
@@ -151,9 +158,10 @@ async def login_json(
     return Token(
         access_token=access_token,
         token_type="bearer",
-        role=user.role.value,
         user_id=user.id,
-        name=user.name
+        email=user.email,
+        name=user.name,
+        role=user.role.value
     )
 
 

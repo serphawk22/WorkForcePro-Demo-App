@@ -20,6 +20,7 @@ const adminRoutes = [
   "/employees",
   "/reports",
   "/payroll",
+  "/requests",
 ];
 
 // Routes that require employee role
@@ -50,8 +51,12 @@ export async function middleware(request: NextRequest) {
   
   const isPublicRoute = publicRoutes.includes(pathname);
   
-  // Get the access token from cookies
+  // Get the access token from cookies (fallback support)
   const token = request.cookies.get("access_token")?.value;
+  
+  // Note: With localStorage, we can't check auth in middleware
+  // So we rely on client-side checks using useAuth hook
+  // This middleware primarily handles cookie-based auth as fallback
   
   // If no token and trying to access protected route, redirect to login
   if (isProtectedRoute && !token) {
@@ -67,7 +72,14 @@ export async function middleware(request: NextRequest) {
       const tokenPart = token.split(".")[1];
       const base64 = tokenPart.replace(/-/g, "+").replace(/_/g, "/");
       const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-      const payload = JSON.parse(Buffer.from(padded, "base64").toString());
+      
+      let payload;
+      if (typeof Buffer !== 'undefined') {
+        payload = JSON.parse(Buffer.from(padded, "base64").toString());
+      } else {
+        // Browser environment fallback
+        payload = JSON.parse(atob(padded));
+      }
       
       const userRole = payload.role;
       const isExpired = payload.exp * 1000 < Date.now();

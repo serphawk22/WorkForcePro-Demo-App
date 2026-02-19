@@ -1,13 +1,10 @@
 /**
  * API client for connecting to FastAPI backend.
- * Uses HTTP-only cookies for authentication.
+ * Uses both localStorage (access token) and HTTP-only cookies for authentication.
  */
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined"
-    ? `http://${window.location.hostname}:8000`
-    : "http://localhost:8000");
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ==================== TYPES ====================
 
@@ -19,9 +16,10 @@ interface ApiResponse<T> {
 interface LoginResponse {
   access_token: string;
   token_type: string;
-  role: string;
   user_id: number;
+  email: string;
   name: string;
+  role: string;
 }
 
 interface RegisterResponse {
@@ -103,6 +101,29 @@ export interface LeaveRequestCreate {
   leave_type?: string;
 }
 
+export interface AdminDashboardStats {
+  total_employees: number;
+  active_sessions: number;
+  pending_tasks: number;
+  avg_daily_hours: number;
+  recent_activities: any[];
+  leave_requests_pending: number;
+}
+
+export interface EmployeeDashboardStats {
+  current_session: {
+    clocked_in: boolean;
+    punch_in: string | null;
+    hours_worked: number;
+  } | null;
+  tasks_due_today: number;
+  tasks_completed: number;
+  productivity_score: number;
+  active_projects: number;
+  leave_balance: number;
+  pending_leave_requests: number;
+}
+
 export interface DashboardStats {
   total_employees: number;
   active_sessions: number;
@@ -118,23 +139,81 @@ export interface TaskStats {
   done: number;
 }
 
+// ==================== AUTH HELPERS ====================
+
+/**
+ * Store authentication token and user data
+ */
+export function setAuth(token: string, user: Omit<LoginResponse, 'access_token' | 'token_type'>) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+  }
+}
+
+/**
+ * Get stored access token
+ */
+export function getToken(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('access_token');
+  }
+  return null;
+}
+
+/**
+ * Get stored user data
+ */
+export function getStoredUser(): Omit<LoginResponse, 'access_token' | 'token_type'> | null {
+  if (typeof window !== 'undefined') {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  }
+  return null;
+}
+
+/**
+ * Clear authentication data
+ */
+export function clearAuth() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+  }
+}
+
+/**
+ * Check if user is authenticated
+ */
+export function isAuthenticated(): boolean {
+  return getToken() !== null;
+}
+
 // ==================== BASE FETCH ====================
 
 /**
- * Base fetch function with credentials for cookies.
+ * Base fetch function with auth headers.
  */
 async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   try {
+    const token = getToken();
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      ...options.headers,
+    };
+
+    // Add Authorization header if token exists
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
-      credentials: "include", // Important: Send cookies with requests
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      credentials: "include", // Send cookies
+      headers,
     });
 
     // Handle empty responses (like 204 No Content)
@@ -143,8 +222,15 @@ async function apiFetch<T>(
 
     if (!response.ok) {
       if (response.status === 401) {
-        // Session expired or not authenticated
+        // Clear auth and redirect to login
+        clearAuth();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
         return { error: "Session expired. Please login again." };
+      }
+      if (response.status === 403) {
+        return { error: "Access forbidden. Insufficient permissions." };
       }
       return { error: data.detail || "Request failed" };
     }
@@ -174,25 +260,39 @@ export async function register(
 }
 
 /**
- * Login user (sets HTTP-only cookie automatically).
+ * Login user and store auth data.
  */
 export async function login(
   email: string,
   password: string
 ): Promise<ApiResponse<LoginResponse>> {
-  return apiFetch<LoginResponse>("/auth/login/json", {
+  const response = await apiFetch<LoginResponse>("/auth/login/json", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  
+  // Store auth data on successful login
+  if (response.data) {
+    setAuth(response.data.access_token, {
+      user_id: response.data.user_id,
+      email: response.data.email,
+      name: response.data.name,
+      role: response.data.role,
+    });
+  }
+  
+  return response;
 }
 
 /**
- * Logout user (clears HTTP-only cookie).
+ * Logout user and clear auth data.
  */
 export async function logout(): Promise<ApiResponse<{ message: string }>> {
-  return apiFetch<{ message: string }>("/auth/logout", {
+  const response = await apiFetch<{ message: string }>("/auth/logout", {
     method: "POST",
   });
+  clearAuth();
+  return response;
 }
 
 /**
@@ -212,10 +312,33 @@ export async function fetchCurrentUser(): Promise<ApiResponse<User>> {
   return apiFetch<User>("/auth/me");
 }
 
+// ==================== DASHBOARD ====================
+
+/**
+ * Get admin dashboard statistics.
+ */
+export async function fetchAdminDashboard(): Promise<ApiResponse<AdminDashboardStats>> {
+  return apiFetch<AdminDashboardStats>("/dashboard/admin");
+}
+
+/**
+ * Get employee dashboard statistics.
+ */
+export async function fetchEmployeeDashboard(): Promise<ApiResponse<EmployeeDashboardStats>> {
+  return apiFetch<EmployeeDashboardStats>("/dashboard/employee");
+}
+
+/**
+ * Get all users (admin only).
+ */
+export async function fetchAllUsers(): Promise<ApiResponse<User[]>> {
+  return apiFetch<User[]>("/dashboard/users");
+}
+
 // ==================== ADMIN ====================
 
 /**
- * Get dashboard statistics (admin only).
+ * Get dashboard statistics (admin only) - DEPRECATED, use fetchAdminDashboard.
  */
 export async function fetchDashboardStats(): Promise<ApiResponse<DashboardStats>> {
   return apiFetch<DashboardStats>("/admin/dashboard/stats");
@@ -226,13 +349,6 @@ export async function fetchDashboardStats(): Promise<ApiResponse<DashboardStats>
  */
 export async function fetchEmployees(): Promise<ApiResponse<User[]>> {
   return apiFetch<User[]>("/admin/employees");
-}
-
-/**
- * Get all users (admin only).
- */
-export async function fetchAllUsers(): Promise<ApiResponse<User[]>> {
-  return apiFetch<User[]>("/admin/users");
 }
 
 /**
