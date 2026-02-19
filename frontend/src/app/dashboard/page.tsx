@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -24,9 +24,9 @@ export default function AdminDashboard() {
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
       const [dashboardResult, taskResult] = await Promise.all([
         fetchAdminDashboard(),
         getTaskStats()
@@ -38,10 +38,16 @@ export default function AdminDashboard() {
       if (taskResult.data) {
         setTaskStats(taskResult.data);
       }
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
       setIsLoading(false);
     }
-    loadData();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const distributionData = taskStats ? [
     { name: "Done", value: taskStats.done, color: "hsl(142 71% 45%)" },

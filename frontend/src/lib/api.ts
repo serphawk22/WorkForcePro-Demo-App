@@ -6,6 +6,48 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Simple cache to prevent redundant API calls
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const cache = new Map<string, CacheEntry<any>>();
+const CACHE_DURATION = 5000; // 5 seconds
+
+function getCached<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  
+  const now = Date.now();
+  if (now - entry.timestamp > CACHE_DURATION) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return entry.data;
+}
+
+function setCached<T>(key: string, data: T): void {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+function clearCache(keyPattern?: string): void {
+  if (!keyPattern) {
+    cache.clear();
+    return;
+  }
+  
+  const keysToDelete: string[] = [];
+  cache.forEach((_, key) => {
+    if (key.includes(keyPattern)) {
+      keysToDelete.push(key);
+    }
+  });
+  
+  keysToDelete.forEach(key => cache.delete(key));
+}
+
 // ==================== TYPES ====================
 
 interface ApiResponse<T> {
@@ -318,14 +360,36 @@ export async function fetchCurrentUser(): Promise<ApiResponse<User>> {
  * Get admin dashboard statistics.
  */
 export async function fetchAdminDashboard(): Promise<ApiResponse<AdminDashboardStats>> {
-  return apiFetch<AdminDashboardStats>("/dashboard/admin");
+  const cacheKey = 'admin-dashboard';
+  const cached = getCached<AdminDashboardStats>(cacheKey);
+  
+  if (cached) {
+    return { data: cached };
+  }
+  
+  const result = await apiFetch<AdminDashboardStats>("/dashboard/admin");
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
 }
 
 /**
  * Get employee dashboard statistics.
  */
 export async function fetchEmployeeDashboard(): Promise<ApiResponse<EmployeeDashboardStats>> {
-  return apiFetch<EmployeeDashboardStats>("/dashboard/employee");
+  const cacheKey = 'employee-dashboard';
+  const cached = getCached<EmployeeDashboardStats>(cacheKey);
+  
+  if (cached) {
+    return { data: cached };
+  }
+  
+  const result = await apiFetch<EmployeeDashboardStats>("/dashboard/employee");
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
 }
 
 /**
@@ -379,18 +443,26 @@ export async function activateUser(
  * Punch in for current day.
  */
 export async function punchIn(): Promise<ApiResponse<AttendanceRecord>> {
-  return apiFetch<AttendanceRecord>("/attendance/punch-in", {
+  const result = await apiFetch<AttendanceRecord>("/attendance/punch-in", {
     method: "POST",
   });
+  if (result.data) {
+    clearCache('dashboard'); // Clear dashboard cache to refresh stats
+  }
+  return result;
 }
 
 /**
  * Punch out for current day.
  */
 export async function punchOut(): Promise<ApiResponse<AttendanceRecord>> {
-  return apiFetch<AttendanceRecord>("/attendance/punch-out", {
+  const result = await apiFetch<AttendanceRecord>("/attendance/punch-out", {
     method: "POST",
   });
+  if (result.data) {
+    clearCache('dashboard'); // Clear dashboard cache to refresh stats
+  }
+  return result;
 }
 
 /**
@@ -437,7 +509,18 @@ export async function getMyTasks(
   statusFilter?: string
 ): Promise<ApiResponse<Task[]>> {
   const query = statusFilter ? `?status_filter=${statusFilter}` : "";
-  return apiFetch<Task[]>(`/tasks/me${query}`);
+  const cacheKey = `my-tasks${query}`;
+  const cached = getCached<Task[]>(cacheKey);
+  
+  if (cached) {
+    return { data: cached };
+  }
+  
+  const result = await apiFetch<Task[]>(`/tasks/me${query}`);
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
 }
 
 /**
