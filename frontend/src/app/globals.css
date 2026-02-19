@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  WorkForce Pro — STRICT Beige × Purple Design System
+  
+  OFFICIAL PALETTE (DO NOT INVENT COLORS):
+  #190019 → hsl(300, 100%, 5%)   — Deep Dark Purple
+  #2B124C → hsl(266, 62%, 18%)   — Primary Dark Purple
+  #522B5B → hsl(289, 36%, 26%)   — Mid Purple
+  #854F6C → hsl(328, 26%, 42%)   — Light Purple
+  #DFB6B2 → hsl(5, 38%, 79%)     — Beige Soft
+  #FBE4D8 → hsl(22, 85%, 91%)    — Lightest Beige
+  #FFFFFF → hsl(0, 0%, 100%)     — White
+*/
+
+@layer base {
+  :root {
+    /* ── Light Mode ── */
+    --background:          22 85% 91%;      /* #FBE4D8 - Lightest Beige */
+    --background-soft:     0 0% 100%;       /* White */
+    --foreground:          300 100% 5%;     /* #190019 - Deep Dark Purple */
+
+    --card:                0 0% 100%;       /* White */
+    --card-foreground:     300 100% 5%;     /* #190019 */
+
+    --popover:             0 0% 100%;       /* White */
+    --popover-foreground:  300 100% 5%;     /* #190019 */
+
+    --primary:             289 36% 26%;     /* #522B5B - Mid Purple */
+    --primary-foreground:  0 0% 100%;       /* White */
+
+    --primary-light:       328 26% 42%;     /* #854F6C - Light Purple */
+    --primary-glow:        328 26% 52%;     /* Light Purple hover */
+
+    --secondary:           5 38% 79%;       /* #DFB6B2 - Beige Soft */
+    --secondary-foreground: 300 100% 5%;    /* #190019 */
+
+    --muted:               5 38% 79%;       /* #DFB6B2 - Beige Soft */
+    --muted-foreground:    289 36% 26%;     /* #522B5B */
+
+    --accent:              328 26% 42%;     /* #854F6C - Light Purple */
+    --accent-foreground:   0 0% 100%;       /* White */
+
+    --destructive:         0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:              5 38% 79%;       /* #DFB6B2 */
+    --input:               22 85% 91%;      /* #FBE4D8 */
+    --ring:                289 36% 26%;     /* #522B5B */
+
+    --radius:              0.75rem;
+
+    /* Status colors */
+    --success:             142 71% 45%;
+    --success-foreground:  0 0% 100%;
+    --warning:             38 92% 50%;
+    --warning-foreground:  0 0% 100%;
+    --info:                289 36% 26%;
+    --info-foreground:     0 0% 100%;
+
+    /* Gradient tokens */
+    --gradient-hero:        linear-gradient(135deg, hsl(22 85% 91%), hsl(5 38% 79%), hsl(328 26% 42%));
+    --gradient-primary:     linear-gradient(135deg, hsl(289 36% 26%), hsl(266 62% 18%));
+    --gradient-primary-btn: linear-gradient(135deg, hsl(289 36% 26%), hsl(266 62% 18%));
+    --gradient-card:        linear-gradient(145deg, hsl(0 0% 100%), hsl(22 85% 95%));
+    --shadow-card:          0 4px 24px -4px hsl(289 36% 26% / 0.12), 0 1px 4px hsl(289 36% 26% / 0.06);
+    --shadow-primary:       0 8px 32px -8px hsl(289 36% 26% / 0.4);
+    --shadow-glow:          0 0 40px hsl(328 26% 42% / 0.25);
+
+    /* Sidebar */
+    --sidebar-background:  22 85% 91%;      /* #FBE4D8 */
+    --sidebar-foreground:  300 100% 5%;     /* #190019 */
+    --sidebar-primary:     289 36% 26%;     /* #522B5B */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:      5 38% 79%;       /* #DFB6B2 */
+    --sidebar-accent-foreground: 289 36% 26%;
+    --sidebar-border:      5 38% 79%;       /* #DFB6B2 */
+    --sidebar-ring:        289 36% 26%;
+
+    /* Charts */
+    --chart-1: 266 62% 18%;   /* #2B124C */
+    --chart-2: 289 36% 26%;   /* #522B5B */
+    --chart-3: 328 26% 42%;   /* #854F6C */
+    --chart-4: 5 38% 79%;     /* #DFB6B2 */
+    --chart-5: 22 85% 91%;    /* #FBE4D8 */
+  }
+
+  .dark {
+    /* ── Dark Mode ── */
+    --background:          300 100% 5%;     /* #190019 - Deep Dark Purple */
+    --background-soft:     266 62% 18%;     /* #2B124C - Primary Dark Purple */
+    --foreground:          22 85% 91%;      /* #FBE4D8 - Lightest Beige */
+
+    --card:                266 62% 18%;     /* #2B124C - Primary Dark Purple */
+    --card-foreground:     22 85% 91%;      /* #FBE4D8 */
+
+    --popover:             266 62% 18%;     /* #2B124C */
+    --popover-foreground:  22 85% 91%;      /* #FBE4D8 */
+
+    --primary:             328 26% 42%;     /* #854F6C - Light Purple */
+    --primary-foreground:  22 85% 91%;      /* #FBE4D8 */
+
+    --primary-light:       289 36% 26%;     /* #522B5B - hover */
+    --primary-glow:        328 26% 52%;     /* Light Purple glow */
+
+    --secondary:           266 62% 18%;     /* #2B124C */
+    --secondary-foreground: 22 85% 91%;     /* #FBE4D8 */
+
+    --muted:               266 62% 18%;     /* #2B124C */
+    --muted-foreground:    5 38% 79%;       /* #DFB6B2 - Beige Soft */
+
+    --accent:              289 36% 26%;     /* #522B5B - Mid Purple */
+    --accent-foreground:   22 85% 91%;      /* #FBE4D8 */
+
+    --destructive:         0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:              289 36% 26%;     /* #522B5B */
+    --input:               289 36% 26%;     /* #522B5B */
+    --ring:                328 26% 42%;     /* #854F6C */
+
+    /* Status colors - dark */
+    --success:             142 71% 45%;
+    --success-foreground:  0 0% 100%;
+    --warning:             38 92% 50%;
+    --warning-foreground:  0 0% 100%;
+    --info:                328 26% 42%;
+    --info-foreground:     22 85% 91%;
+
+    /* Gradient tokens — dark */
+    --gradient-hero:        linear-gradient(135deg, hsl(300 100% 5%), hsl(266 62% 18%), hsl(289 36% 26%));
+    --gradient-primary:     linear-gradient(135deg, hsl(328 26% 42%), hsl(289 36% 26%));
+    --gradient-primary-btn: linear-gradient(135deg, hsl(328 26% 42%), hsl(289 36% 26%));
+    --gradient-card:        linear-gradient(145deg, hsl(266 62% 20%), hsl(266 62% 16%));
+    --shadow-card:          0 4px 24px -4px hsl(300 100% 5% / 0.6), 0 1px 4px hsl(300 100% 5% / 0.3);
+    --shadow-primary:       0 8px 32px -8px hsl(328 26% 42% / 0.5);
+    --shadow-glow:          0 0 60px hsl(328 26% 42% / 0.4);
+
+    /* Sidebar - Navbar */
+    --sidebar-background:  266 62% 18%;     /* #2B124C */
+    --sidebar-foreground:  22 85% 91%;      /* #FBE4D8 */
+    --sidebar-primary:     328 26% 42%;     /* #854F6C */
+    --sidebar-primary-foreground: 22 85% 91%;
+    --sidebar-accent:      289 36% 26%;     /* #522B5B */
+    --sidebar-accent-foreground: 22 85% 91%;
+    --sidebar-border:      289 36% 26%;     /* #522B5B */
+    --sidebar-ring:        328 26% 42%;     /* #854F6C */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-poppins), system-ui, -apple-system, sans-serif;
+    transition: background-color 0.4s ease, color 0.3s ease;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.4);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
+}
+
+@layer utilities {
+  .gradient-hero     { background: var(--gradient-hero); }
+  .gradient-primary  { background: var(--gradient-primary); }
+  .gradient-card     { background: var(--gradient-card); }
+  .shadow-card       { box-shadow: var(--shadow-card); }
+  .shadow-primary    { box-shadow: var(--shadow-primary); }
+  .shadow-glow       { box-shadow: var(--shadow-glow); }
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .sidebar-gradient {
+    background: hsl(var(--sidebar-background));
+  }
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+  .card-shadow-hover {
+    box-shadow: var(--shadow-primary);
+  }
+}
