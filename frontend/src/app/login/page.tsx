@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Zap, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +39,7 @@ export default function LoginPage() {
     try {
       console.log("Attempting login with:", { email, password: "***" });
       
-      const res = await fetch("http://localhost:8000/auth/login/json", {
+      const res = await fetch(`${API_BASE_URL}/auth/login/json`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
