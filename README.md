@@ -403,3 +403,4 @@ WorkForcePro is ready for production deployment to Railway (Backend) and Vercel 
 ---
 
 **Made with ❤️ by Sai Varsha Devoju**
+# Force Vercel rebuild - Fri Feb 20 15:30:59 IST 2026
