@@ -361,6 +361,40 @@ Streamlined request workflow:
 - Input validation using Pydantic models
 - Environment variables for sensitive data
 
+## 🌐 Deployment
+
+### Production Deployment
+
+WorkForcePro is ready for production deployment to Railway (Backend) and Vercel (Frontend).
+
+#### Quick Deploy
+
+**Backend (Railway):**
+1. Create Railway account
+2. New Project → Deploy from GitHub
+3. Add PostgreSQL database
+4. Configure environment variables
+5. Deploy automatically
+
+**Frontend (Vercel):**
+1. Create Vercel account
+2. Import GitHub repository
+3. Set root directory to `frontend`
+4. Add `NEXT_PUBLIC_API_URL` environment variable
+5. Deploy automatically
+
+#### Detailed Guides
+
+- **📖 [Complete Deployment Guide](./DEPLOYMENT_GUIDE.md)** - Step-by-step instructions
+- **✅ [Deployment Checklist](./DEPLOYMENT_CHECKLIST.md)** - Pre and post-deployment tasks
+- **🚂 [Railway Setup](./backend/RAILWAY_SETUP.md)** - Backend specific configuration
+- **▲ [Vercel Setup](./frontend/VERCEL_SETUP.md)** - Frontend specific configuration
+
+#### Demo Deployment
+
+- **Live Demo:** [Coming Soon]
+- **API Documentation:** [Coming Soon]
+
 ## 👨‍💻 Author
 
 **Sai Varsha Devoju**

@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import auth, admin, attendance, tasks, leave, dashboard
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users
 
 load_dotenv()
 
@@ -34,12 +34,17 @@ async def lifespan(app: FastAPI):
         
         if not existing_admin:
             # Create default admin
+            from datetime import date
             admin_user = User(
                 name="admin",
                 email=admin_email,
                 hashed_password=get_password_hash("admin"),
                 role=UserRole.admin,
-                is_active=True
+                is_active=True,
+                age=30,
+                date_joined=date.today(),
+                github_url="https://github.com/admin",
+                linkedin_url="https://linkedin.com/in/admin"
             )
             session.add(admin_user)
             session.commit()
@@ -60,15 +65,30 @@ app = FastAPI(
 
 # CORS configuration
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+PRODUCTION_FRONTEND = os.getenv("PRODUCTION_FRONTEND_URL", "")
+
 origins = [
-    FRONTEND_URL,
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
+# Add production frontend URL if set
+if FRONTEND_URL and FRONTEND_URL not in origins:
+    origins.append(FRONTEND_URL)
+
+if PRODUCTION_FRONTEND and PRODUCTION_FRONTEND not in origins:
+    origins.append(PRODUCTION_FRONTEND)
+
+# Allow all Vercel preview deployments
+origins.extend([
+    "https://*.vercel.app",
+])
+
+print(f"[CORS] Allowed origins: {origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"] if os.getenv("ENVIRONMENT") == "production" else origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +96,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)

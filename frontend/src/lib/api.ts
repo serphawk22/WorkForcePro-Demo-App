@@ -76,6 +76,11 @@ export interface User {
   role: "admin" | "employee";
   is_active: boolean;
   created_at: string;
+  age?: number;
+  date_joined?: string;
+  github_url?: string;
+  linkedin_url?: string;
+  profile_picture?: string;
 }
 
 export interface AttendanceRecord {
@@ -188,8 +193,15 @@ export interface TaskStats {
  */
 export function setAuth(token: string, user: Omit<LoginResponse, 'access_token' | 'token_type'>) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('access_token', token);
+    // Store with "token" key as requested
+    localStorage.setItem('token', token);
+    localStorage.setItem('access_token', token); // Keep for backward compatibility
+    localStorage.setItem('role', user.role);
+    localStorage.setItem('user_id', user.user_id.toString());
+    localStorage.setItem('user_name', user.name);
+    localStorage.setItem('user_email', user.email);
     localStorage.setItem('user', JSON.stringify(user));
+    console.log('[API] Auth data stored:', { role: user.role, user_id: user.user_id, name: user.name });
   }
 }
 
@@ -198,7 +210,8 @@ export function setAuth(token: string, user: Omit<LoginResponse, 'access_token' 
  */
 export function getToken(): string | null {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('access_token');
+    // Check both "token" and "access_token" for compatibility
+    return localStorage.getItem('token') || localStorage.getItem('access_token');
   }
   return null;
 }
@@ -219,8 +232,14 @@ export function getStoredUser(): Omit<LoginResponse, 'access_token' | 'token_typ
  */
 export function clearAuth() {
   if (typeof window !== 'undefined') {
+    localStorage.removeItem('token');
     localStorage.removeItem('access_token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('user_email');
     localStorage.removeItem('user');
+    console.log('[API] Auth data cleared');
   }
 }
 
@@ -253,6 +272,9 @@ async function apiFetch<T>(
     // Add Authorization header if token exists
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
+      console.log(`[API] ${options.method || 'GET'} ${endpoint} - Authorization header added`);
+    } else {
+      console.log(`[API] ${options.method || 'GET'} ${endpoint} - No token, skipping Authorization header`);
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -270,6 +292,7 @@ async function apiFetch<T>(
 
     if (!response.ok) {
       if (response.status === 401) {
+        console.error(`[API] 401 Unauthorized on ${endpoint}`);
         // Clear auth and redirect to login
         clearAuth();
         if (typeof window !== 'undefined') {
@@ -319,19 +342,27 @@ export async function login(
   email: string,
   password: string
 ): Promise<ApiResponse<LoginResponse>> {
+  console.log('[API] Login request for:', email);
+  
   const response = await apiFetch<LoginResponse>("/auth/login/json", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
   
+  console.log('[API] Login response:', response);
+  
   // Store auth data on successful login
   if (response.data) {
+    console.log('[API] Storing auth data...');
     setAuth(response.data.access_token, {
       user_id: response.data.user_id,
       email: response.data.email,
       name: response.data.name,
       role: response.data.role,
     });
+    console.log('[API] Auth data stored successfully');
+  } else if (response.error) {
+    console.error('[API] Login failed:', response.error);
   }
   
   return response;
@@ -355,7 +386,21 @@ export async function verifySession(): Promise<ApiResponse<{
   authenticated: boolean;
   user: { id: number; email: string; name: string; role: string };
 }>> {
-  return apiFetch("/auth/verify");
+  const token = getToken();
+  console.log('[API] Verifying session - Token:', token ? '✓ Present' : '✗ Missing');
+  
+  if (!token) {
+    console.log('[API] No token found, skipping verify');
+    return { error: 'No token found' };
+  }
+  
+  const response = await apiFetch<{
+    authenticated: boolean;
+    user: { id: number; email: string; name: string; role: string };
+  }>("/auth/verify");
+  
+  console.log('[API] Verify response:', response.data ? '✓ Success' : `✗ Failed: ${response.error}`);
+  return response;
 }
 
 /**
@@ -678,6 +723,125 @@ export async function getLeaveStats(): Promise<
   ApiResponse<{ total: number; pending: number; approved: number; rejected: number }>
 > {
   return apiFetch("/leave/stats");
+}
+
+// ==================== PROFILE MANAGEMENT ====================
+
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "employee";
+  is_active: boolean;
+  created_at: string;
+  age?: number;
+  date_joined?: string;
+  github_url?: string;
+  linkedin_url?: string;
+  profile_picture?: string;
+}
+
+export interface ProfileUpdate {
+  name: string;
+  age: number;
+  date_joined: string;
+  github_url: string;
+  linkedin_url: string;
+  profile_picture?: string;
+}
+
+/**
+ * Get current user's profile.
+ */
+export async function getMyProfile(): Promise<ApiResponse<UserProfile>> {
+  console.log('[API] Get my profile - Token:', getToken() ? '✓ Present' : '✗ Missing');
+  return apiFetch<UserProfile>("/users/me");
+}
+
+/**
+ * Update current user's profile.
+ */
+export async function updateMyProfile(
+  data: ProfileUpdate
+): Promise<ApiResponse<UserProfile>> {
+  console.log('[API] Update my profile - Token:', getToken() ? '✓ Present' : '✗ Missing');
+  console.log('[API] Update data:', data);
+  clearCache("users/me");
+  return apiFetch<UserProfile>("/users/me", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Upload profile picture.
+ */
+export async function uploadProfilePicture(
+  file: File
+): Promise<ApiResponse<{ message: string; preview?: string }>> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getToken();
+  console.log('[API] Upload profile picture - Token:', token ? '✓ Present' : '✗ Missing');
+  
+  if (!token) {
+    console.error('[API] No token found, cannot upload');
+    clearAuth();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    return { error: 'Session expired. Please login again.' };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/users/me/upload-picture`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+      body: formData,
+    });
+
+    console.log('[API] Upload response status:', response.status);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.error('[API] 401 Unauthorized - clearing auth');
+        clearAuth();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return { error: 'Session expired. Please login again.' };
+      }
+      const error = await response.json();
+      console.error('[API] Upload failed:', error);
+      return { error: error.detail || "Upload failed" };
+    }
+
+    const data = await response.json();
+    console.log('[API] Upload successful');
+    clearCache("users/me");
+    return { data };
+  } catch (error: any) {
+    console.error('[API] Upload error:', error);
+    return { error: 'Network error. Please try again.' };
+  }
+}
+
+/**
+ * Get user by ID (admin only).
+ */
+export async function getUserById(userId: number): Promise<ApiResponse<UserProfile>> {
+  return apiFetch<UserProfile>(`/admin/users/${userId}`);
+}
+
+/**
+ * Get all users (admin only).
+ */
+export async function getAllUsers(): Promise<ApiResponse<UserProfile[]>> {
+  return apiFetch<UserProfile[]>("/admin/users");
 }
 
 export type { ApiResponse, LoginResponse, RegisterResponse };

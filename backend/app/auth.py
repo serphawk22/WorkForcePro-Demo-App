@@ -106,21 +106,30 @@ async def get_current_user(
     cookie_token = request.cookies.get(COOKIE_NAME)
     auth_token = cookie_token or token
     
+    print(f"[AUTH] get_current_user - Cookie token: {bool(cookie_token)}, Header token: {bool(token)}")
+    
     if not auth_token:
+        print("[AUTH] No token found in cookie or header")
         raise credentials_exception
     
     token_data = decode_token(auth_token)
     if token_data is None:
+        print("[AUTH] Token decode failed - invalid token")
         raise credentials_exception
+    
+    print(f"[AUTH] Token decoded - User ID: {token_data.user_id}, Email: {token_data.email}, Role: {token_data.role}")
     
     statement = select(User).where(User.id == token_data.user_id)
     user = session.exec(statement).first()
     
     if user is None:
+        print(f"[AUTH] User not found in database for ID: {token_data.user_id}")
         raise credentials_exception
     if not user.is_active:
+        print(f"[AUTH] User {user.email} is inactive")
         raise HTTPException(status_code=400, detail="Inactive user")
     
+    print(f"[AUTH] User authenticated successfully: {user.email}")
     return user
 
 

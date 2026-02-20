@@ -39,6 +39,11 @@ class UserBase(SQLModel):
     email: str = Field(unique=True, index=True)
     role: UserRole = Field(default=UserRole.employee)
     is_active: bool = Field(default=True)
+    age: Optional[int] = Field(default=None, ge=18, le=100)
+    date_joined: Optional[DateType] = Field(default=None)
+    github_url: Optional[str] = Field(default=None, max_length=255)
+    linkedin_url: Optional[str] = Field(default=None, max_length=255)
+    profile_picture: Optional[str] = Field(default=None)  # No max_length for base64 images
 
 
 class User(UserBase, table=True):
@@ -66,6 +71,11 @@ class UserRead(SQLModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    age: Optional[int] = None
+    date_joined: Optional[DateType] = None
+    github_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    profile_picture: Optional[str] = None
 
 
 class UserLogin(SQLModel):
@@ -81,6 +91,7 @@ class Token(SQLModel):
     role: str
     user_id: int
     name: str
+    email: str
 
 
 class TokenData(SQLModel):

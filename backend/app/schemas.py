@@ -48,9 +48,24 @@ class UserRead(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    age: Optional[int] = None
+    date_joined: Optional[date] = None
+    github_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    profile_picture: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating user profile."""
+    name: str = Field(min_length=2, max_length=100)
+    age: int = Field(ge=18, le=100)
+    date_joined: date
+    github_url: str = Field(pattern=r'^https://github\.com/.*')
+    linkedin_url: str = Field(pattern=r'^https://linkedin\.com/.*|^https://www\.linkedin\.com/.*')
+    profile_picture: Optional[str] = None
 
 
 # ==================== DASHBOARD SCHEMAS ====================

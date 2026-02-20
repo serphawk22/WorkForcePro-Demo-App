@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
@@ -41,7 +42,28 @@ interface SidebarProps {
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { user, logout } = useAuth();
   const links = role === "admin" ? adminLinks : employeeLinks;
+
+  // Debug: Log when user changes
+  useEffect(() => {
+    console.log('[AppSidebar] User state changed:', user?.email || 'null');
+    console.log('[AppSidebar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
+  }, [user]);
+
+  // Use data from AuthContext if available
+  const displayName = user?.name || userName;
+  const displayHandle = user?.email || userHandle;
+  const profilePicture = user?.profile_picture;
+
+  const getProfilePictureUrl = () => {
+    if (!profilePicture) return null;
+    // If it's a data URI (base64), return it directly
+    if (profilePicture.startsWith("data:")) return profilePicture;
+    // Otherwise treat as URL
+    if (profilePicture.startsWith("http")) return profilePicture;
+    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${profilePicture}`;
+  };
 
   return (
     <aside
@@ -102,17 +124,29 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       {/* User section */}
       <div className="border-t border-sidebar-border px-3 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-sm font-semibold">
-            {userName[0]}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-sm font-semibold overflow-hidden">
+            {getProfilePictureUrl() ? (
+              <img
+                src={getProfilePictureUrl()!}
+                alt={displayName}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              displayName[0]
+            )}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{userName}</p>
-              <p className="text-xs text-sidebar-foreground/50 truncate">{userHandle}</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
+              <p className="text-xs text-sidebar-foreground/50 truncate">{displayHandle}</p>
             </div>
           )}
           {!collapsed && (
-            <button className="text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors">
+            <button 
+              onClick={logout}
+              className="text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+              title="Logout"
+            >
               <LogOut size={16} />
             </button>
           )}

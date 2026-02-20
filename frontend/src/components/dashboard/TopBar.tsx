@@ -3,14 +3,22 @@
 import { Bell, Moon, Sun, User, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function TopBar() {
   const { theme, setTheme } = useTheme();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
+
+  // Debug: Log when user changes
+  useEffect(() => {
+    console.log('[TopBar] User state changed:', user?.email || 'null');
+    console.log('[TopBar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
+  }, [user]);
 
   useEffect(() => {
     setMounted(true);
@@ -25,6 +33,15 @@ export default function TopBar() {
   }, []);
 
   const isDark = theme === "dark";
+
+  const getProfilePictureUrl = () => {
+    if (!user?.profile_picture) return null;
+    // If it's a data URI (base64), return it directly
+    if (user.profile_picture.startsWith("data:")) return user.profile_picture;
+    // Otherwise treat as URL
+    if (user.profile_picture.startsWith("http")) return user.profile_picture;
+    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${user.profile_picture}`;
+  };
 
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
@@ -50,8 +67,22 @@ export default function TopBar() {
           <Bell size={18} />
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
         </button>
-        <button className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-          <User size={18} />
+        <button 
+          onClick={() => router.push("/profile")}
+          className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          title="Profile"
+        >
+          {getProfilePictureUrl() ? (
+            <img
+              src={getProfilePictureUrl()!}
+              alt={user?.name || "User"}
+              className="h-7 w-7 rounded-full object-cover"
+            />
+          ) : (
+            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold">
+              {user?.name?.[0] || <User size={18} />}
+            </div>
+          )}
         </button>
         <button 
           onClick={logout}

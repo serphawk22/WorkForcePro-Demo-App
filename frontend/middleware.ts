@@ -1,40 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Routes that require authentication
-const protectedRoutes = [
-  "/dashboard",
-  "/employee-dashboard",
-  "/employees",
-  "/tasks",
-  "/attendance",
-  "/requests",
-  "/reports",
-  "/payroll",
-  "/profile",
-];
-
-// Routes that require admin role
-const adminRoutes = [
-  "/dashboard",
-  "/employees",
-  "/reports",
-  "/payroll",
-  "/requests",
-];
-
-// Routes that require employee role
-const employeeRoutes = [
-  "/employee-dashboard",
-];
-
-// Public routes (no auth required)
+// 1️⃣ Define public routes (no auth required)
 const publicRoutes = ["/", "/login", "/signup"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Skip middleware for API routes, static files, etc.
+  // Skip middleware for Next.js internals and static files
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -44,32 +17,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if route is protected
-  const isProtectedRoute = protectedRoutes.some(route => 
-    pathname === route || pathname.startsWith(route + "/")
-  );
+  console.log('[MIDDLEWARE] Processing:', pathname);
+
+  // 2️⃣ Check if current route is public - allow without redirect
+  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + "/"));
   
-  const isPublicRoute = publicRoutes.includes(pathname);
-  
-  // Get the access token from cookies (fallback support)
-  const token = request.cookies.get("access_token")?.value;
-  
-  // Note: With localStorage, we can't check auth in middleware
-  // So we rely on client-side checks using useAuth hook
-  // This middleware primarily handles cookie-based auth as fallback
-  
-  // If no token and trying to access protected route, redirect to login
-  if (isProtectedRoute && !token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (isPublicRoute && pathname !== "/login") {
+    // Public routes (except login) always allowed
+    return NextResponse.next();
   }
+
+  // Get token and role from localStorage (client-side only, middleware can't access it)
+  // So we rely on cookies for middleware auth OR let client-side ProtectedRoute handle it
+  const cookieToken = request.cookies.get("access_token")?.value;
   
-  // If has token, verify and get user role
-  if (token) {
+  let userRole: string | null = null;
+  let isExpired = false;
+
+  // Decode token if exists
+  if (cookieToken) {
     try {
-      // Decode JWT to get role (basic decode, not verification)
-      const tokenPart = token.split(".")[1];
+      const tokenPart = cookieToken.split(".")[1];
       const base64 = tokenPart.replace(/-/g, "+").replace(/_/g, "/");
       const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
       
@@ -77,54 +45,92 @@ export async function middleware(request: NextRequest) {
       if (typeof Buffer !== 'undefined') {
         payload = JSON.parse(Buffer.from(padded, "base64").toString());
       } else {
-        // Browser environment fallback
         payload = JSON.parse(atob(padded));
       }
       
-      const userRole = payload.role;
-      const isExpired = payload.exp * 1000 < Date.now();
+      userRole = payload.role;
+      isExpired = payload.exp * 1000 < Date.now();
       
-      // If token is expired, redirect to login
-      if (isExpired) {
-        const response = NextResponse.redirect(new URL("/login", request.url));
-        response.cookies.delete("access_token");
-        return response;
-      }
-      
-      // If authenticated user tries to access login/signup, redirect to appropriate dashboard
-      if (isPublicRoute && pathname !== "/") {
-        const dashboardUrl = userRole === "admin" ? "/dashboard" : "/employee-dashboard";
-        return NextResponse.redirect(new URL(dashboardUrl, request.url));
-      }
-      
-      // Check role-based access
-      const isAdminRoute = adminRoutes.some(route => 
-        pathname === route || pathname.startsWith(route + "/")
-      );
-      const isEmployeeRoute = employeeRoutes.some(route => 
-        pathname === route || pathname.startsWith(route + "/")
-      );
-      
-      // Admin trying to access employee-only route
-      if (isEmployeeRoute && userRole === "admin") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-      
-      // Employee trying to access admin-only route
-      if (isAdminRoute && userRole === "employee") {
-        return NextResponse.redirect(new URL("/employee-dashboard", request.url));
-      }
-      
+      console.log('[MIDDLEWARE] Token found - Role:', userRole, 'Expired:', isExpired);
     } catch (error) {
-      // Invalid token, clear it and redirect to login
-      if (isProtectedRoute) {
-        const response = NextResponse.redirect(new URL("/login", request.url));
-        response.cookies.delete("access_token");
-        return response;
-      }
+      console.log('[MIDDLEWARE] Invalid token');
+      isExpired = true;
     }
   }
+
+  // 5️⃣ If user has valid token and visits /login, redirect to correct dashboard
+  if (pathname === "/login") {
+    if (cookieToken && !isExpired && userRole) {
+      const dashboardUrl = userRole === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+      console.log('[MIDDLEWARE] Already authenticated, redirecting from login to:', dashboardUrl);
+      return NextResponse.redirect(new URL(dashboardUrl, request.url));
+    }
+    // No token or expired - allow login page
+    return NextResponse.next();
+  }
+
+  // 3️⃣ Check if route starts with /admin
+  if (pathname.startsWith("/admin")) {
+    // No token or expired → redirect to login
+    if (!cookieToken || isExpired) {
+      console.log('[MIDDLEWARE] Admin route without valid token, redirecting to login');
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      if (cookieToken) response.cookies.delete("access_token");
+      return response;
+    }
+    
+    // Has token but not admin → redirect to employee dashboard
+    if (userRole !== "admin") {
+      console.log('[MIDDLEWARE] Non-admin accessing admin route, redirecting to employee dashboard');
+      return NextResponse.redirect(new URL("/employee/dashboard", request.url));
+    }
+    
+    // Admin with valid token - allow
+    return NextResponse.next();
+  }
+
+  // 4️⃣ Check if route starts with /employee
+  if (pathname.startsWith("/employee")) {
+    // No token or expired → redirect to login
+    if (!cookieToken || isExpired) {
+      console.log('[MIDDLEWARE] Employee route without valid token, redirecting to login');
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      if (cookieToken) response.cookies.delete("access_token");
+      return response;
+    }
+    
+    // Has token but not employee → redirect to admin dashboard
+    if (userRole !== "employee") {
+      console.log('[MIDDLEWARE] Non-employee accessing employee route, redirecting to admin dashboard');
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+    }
+    
+    // Employee with valid token - allow
+    return NextResponse.next();
+  }
+
+  // Other protected routes (tasks, attendance, etc.)
+  const protectedRoutes = ["/dashboard", "/employees", "/tasks", "/attendance", "/requests", "/reports", "/payroll", "/profile"];
+  const isProtectedRoute = protectedRoutes.some(route => pathname === route || pathname.startsWith(route + "/"));
   
+  if (isProtectedRoute) {
+    // Note: localStorage token is checked client-side in ProtectedRoute component
+    // If no cookie, let client-side handle it (for localStorage-based auth)
+    if (!cookieToken) {
+      console.log('[MIDDLEWARE] Protected route without cookie - allowing (client-side will check localStorage)');
+      return NextResponse.next();
+    }
+    
+    // Has cookie but expired
+    if (isExpired) {
+      console.log('[MIDDLEWARE] Expired token on protected route, redirecting to login');
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      response.cookies.delete("access_token");
+      return response;
+    }
+  }
+
+  // 6️⃣ Default: allow access
   return NextResponse.next();
 }
 

@@ -1,44 +1,90 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Zap, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { login as apiLogin } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
+  // 2️⃣ Auto-redirect if user is already logged in
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    
+    if (token && role) {
+      console.log("User already logged in:", role);
+      if (role === "admin") {
+        window.location.href = "/admin/dashboard";
+      } else {
+        window.location.href = "/employee/dashboard";
+      }
+    }
+  }, []);
+
+  // 1️⃣ Login handler with direct fetch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setIsLoading(true);
+    setIsSubmitting(true);
 
     try {
-      const result = await apiLogin(email, password);
+      console.log("Attempting login with:", { email, password: "***" });
+      
+      const res = await fetch("http://localhost:8000/auth/login/json", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      });
 
-      if (result.error) {
-        setError(result.error);
-        setIsLoading(false);
+      console.log("Response status:", res.status);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: "Unknown error" }));
+        console.error("Login failed:", errorData);
+        throw new Error(errorData.detail || "Invalid credentials");
+      }
+
+      const data = await res.json();
+      
+      console.log("LOGIN SUCCESS:", data);
+
+      // Ensure role exists
+      if (!data.role) {
+        console.error("Role missing in response");
+        setError("Login failed: Role information missing");
+        setIsSubmitting(false);
         return;
       }
 
-      if (result.data) {
-        // Redirect based on role
-        if (result.data.role === "admin") {
-          router.push("/dashboard");
-        } else {
-          router.push("/employee-dashboard");
-        }
+      // Store token and role
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("user_id", data.user_id.toString());
+      localStorage.setItem("user_name", data.name);
+      localStorage.setItem("user_email", data.email);
+
+      // Redirect based on role using window.location for full page reload
+      if (data.role === "admin") {
+        console.log("Redirecting to admin dashboard");
+        window.location.href = "/admin/dashboard";
+      } else {
+        console.log("Redirecting to employee dashboard");
+        window.location.href = "/employee/dashboard";
       }
-    } catch (err) {
-      setError("An unexpected error occurred");
-      setIsLoading(false);
+      
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || "An unexpected error occurred");
+      setIsSubmitting(false);
     }
   };
 
@@ -67,6 +113,15 @@ export default function LoginPage() {
               {error}
             </div>
           )}
+
+          {/* Default credentials hint */}
+          <div className="mb-6 p-3 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-sm">
+            <div className="font-semibold mb-1">Default Admin Credentials:</div>
+            <div className="flex flex-col gap-0.5 text-xs">
+              <div><strong>Email:</strong> admin@gmail.com</div>
+              <div><strong>Password:</strong> admin</div>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
@@ -113,10 +168,10 @@ export default function LoginPage() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-primary-foreground gradient-primary shadow-primary hover:shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
                   Signing in...

@@ -189,6 +189,7 @@ async def verify_session(
     current_user: User = Depends(get_current_user)
 ):
     """Verify if the current session is valid."""
+    print(f"[VERIFY] User authenticated: {current_user.email} (Role: {current_user.role.value})")
     return {
         "authenticated": True,
         "user": {
