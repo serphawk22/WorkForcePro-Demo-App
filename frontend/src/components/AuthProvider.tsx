@@ -65,11 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Role:', role || 'none');
       
       if (token && role && userId && userEmail) {
+        // Validate role is one of the expected values
+        const validRole = (role === 'admin' || role === 'employee') ? role : 'employee';
+        
         // Restore user from localStorage
         const restoredUser: User = {
           id: parseInt(userId),
           email: userEmail,
-          role: role,
+          role: validRole,
           name: userName || userEmail,
         };
         
