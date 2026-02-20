@@ -13,7 +13,7 @@ import {
 interface User {
   id: number;
   email: string;
-  role: string;
+  role: "admin" | "employee";
   name: string;
   profile_picture?: string;
   age?: number;

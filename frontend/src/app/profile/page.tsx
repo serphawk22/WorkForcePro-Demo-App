@@ -159,7 +159,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <DashboardLayout role={(user?.role as "admin" | "employee") || "employee"}>
+      <DashboardLayout role={user?.role || "employee"}>
         <div className="flex h-[60vh] items-center justify-center">
           <div className="text-center">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
@@ -171,7 +171,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <DashboardLayout role={(user?.role as "admin" | "employee") || "employee"}>
+    <DashboardLayout role={user?.role || "employee"}>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">My Profile</h1>

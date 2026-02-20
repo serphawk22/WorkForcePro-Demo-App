@@ -61,7 +61,7 @@ interface LoginResponse {
   user_id: number;
   email: string;
   name: string;
-  role: string;
+  role: "admin" | "employee";
 }
 
 interface RegisterResponse {
@@ -384,7 +384,7 @@ export async function logout(): Promise<ApiResponse<{ message: string }>> {
  */
 export async function verifySession(): Promise<ApiResponse<{
   authenticated: boolean;
-  user: { id: number; email: string; name: string; role: string };
+  user: { id: number; email: string; name: string; role: "admin" | "employee" };
 }>> {
   const token = getToken();
   console.log('[API] Verifying session - Token:', token ? '✓ Present' : '✗ Missing');
@@ -396,7 +396,7 @@ export async function verifySession(): Promise<ApiResponse<{
   
   const response = await apiFetch<{
     authenticated: boolean;
-    user: { id: number; email: string; name: string; role: string };
+    user: { id: number; email: string; name: string; role: "admin" | "employee" };
   }>("/auth/verify");
   
   console.log('[API] Verify response:', response.data ? '✓ Success' : `✗ Failed: ${response.error}`);

@@ -11,7 +11,7 @@ interface AuthUser {
   user_id: number;
   email: string;
   name: string;
-  role: string;
+  role: "admin" | "employee";
 }
 
 export function useAuth(requiredRole?: 'admin' | 'employee') {
