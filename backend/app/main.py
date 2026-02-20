@@ -70,6 +70,7 @@ PRODUCTION_FRONTEND = os.getenv("PRODUCTION_FRONTEND_URL", "")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://work-force-pro-4jae.vercel.app",  # Your Vercel deployment
 ]
 
 # Add production frontend URL if set
@@ -78,11 +79,6 @@ if FRONTEND_URL and FRONTEND_URL not in origins:
 
 if PRODUCTION_FRONTEND and PRODUCTION_FRONTEND not in origins:
     origins.append(PRODUCTION_FRONTEND)
-
-# Allow all Vercel preview deployments
-origins.extend([
-    "https://*.vercel.app",
-])
 
 print(f"[CORS] Allowed origins: {origins}")
 
