@@ -24,27 +24,37 @@ async def punch_in(
     """
     Punch in for the current day.
     Creates a new attendance record with punch_in time.
+    Automatically closes any previous open session.
     """
     today = date.today()
     
-    # Check if already punched in today
+    # Close any previous open session (where punch_out is null)
+    active_session_statement = select(Attendance).where(
+        Attendance.user_id == current_user.id,
+        Attendance.punch_out == None
+    )
+    active_session = session.exec(active_session_statement).first()
+    
+    if active_session:
+        # Auto-close the previous session
+        active_session.punch_out = datetime.utcnow()
+        if active_session.punch_in:
+            delta = active_session.punch_out - active_session.punch_in
+            active_session.total_hours = round(delta.total_seconds() / 3600, 2)
+        session.add(active_session)
+    
+    # Check if already completed attendance for today
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
         Attendance.date == today
     )
     existing = session.exec(statement).first()
     
-    if existing:
-        if existing.punch_in and not existing.punch_out:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Already punched in today. Please punch out first."
-            )
-        elif existing.punch_out:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Already completed attendance for today."
-            )
+    if existing and existing.punch_out:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Already completed attendance for today."
+        )
     
     # Create new attendance record
     attendance = Attendance(

@@ -116,11 +116,14 @@ export default function AttendancePage() {
       setIsPunching(false);
     } else  {
       toast.success("Punched in successfully!");
-      // Reset timer to 0 and start counting
+      // HARD RESET TIMER - start from 00:00:00
       setSeconds(0);
       setIsActive(true);
-      // Reload data to get updated status
-      await loadData();
+      // Update status without recalculating timer
+      const statusResult = await getAttendanceStatus();
+      if (statusResult.data) {
+        setStatus(statusResult.data);
+      }
       setIsPunching(false);
     }
   };
