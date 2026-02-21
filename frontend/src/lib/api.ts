@@ -6,6 +6,8 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+console.log("[API] Base URL:", API_BASE_URL);
+
 // Simple cache to prevent redundant API calls
 interface CacheEntry<T> {
   data: T;
@@ -313,8 +315,21 @@ async function apiFetch<T>(
       console.error("Request timeout:", endpoint);
       return { error: "Request timeout. Please check your connection." };
     }
+    
+    // Check for CORS errors
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      console.error("[API] CORS or Network Error:", {
+        endpoint,
+        apiBaseUrl: API_BASE_URL,
+        error: error.message
+      });
+      return { 
+        error: "Cannot connect to server. Please check:\n1. Backend is running\n2. CORS is configured\n3. API URL is correct: " + API_BASE_URL 
+      };
+    }
+    
     console.error("API Error:", error);
-    return { error: "Network error. Please try again." };
+    return { error: error.message || "Network error. Please try again." };
   }
 }
 

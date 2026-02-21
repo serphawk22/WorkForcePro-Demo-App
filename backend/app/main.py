@@ -69,7 +69,9 @@ PRODUCTION_FRONTEND = os.getenv("PRODUCTION_FRONTEND_URL", "")
 
 origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
     "https://work-force-pro-4jae.vercel.app",  # Your Vercel deployment
 ]
 
@@ -82,12 +84,15 @@ if PRODUCTION_FRONTEND and PRODUCTION_FRONTEND not in origins:
 
 print(f"[CORS] Allowed origins: {origins}")
 
+# CRITICAL: Cannot use allow_origins=["*"] with allow_credentials=True
+# This will cause browsers to reject CORS requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if os.getenv("ENVIRONMENT") == "production" else origins,
+    allow_origins=origins,  # Use explicit origins list instead of wildcard
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers
