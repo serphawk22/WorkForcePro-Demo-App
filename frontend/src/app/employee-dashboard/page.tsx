@@ -64,6 +64,12 @@ export default function EmployeeDashboard() {
           const elapsedSeconds = Math.floor((now - punchInTime) / 1000);
           setSeconds(elapsedSeconds);
           setIsActive(true);
+        } else if (statsResponse.data.current_session && !isWorking) {
+          // Completed session for today - show total hours
+          const totalHours = statsResponse.data.current_session.hours_worked || 0;
+          const totalSeconds = Math.floor(totalHours * 3600);
+          setSeconds(totalSeconds);
+          setIsActive(false);
         } else {
           setSeconds(0);
           setIsActive(false);
@@ -136,9 +142,9 @@ export default function EmployeeDashboard() {
     try {
       await punchOut();
       toast.success("Punched out successfully!");
-      // Stop the timer
+      // Stop the live timer
       setIsActive(false);
-      // Fetch updated data
+      // Fetch updated data to get completed session total
       await fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to punch out";
@@ -227,10 +233,16 @@ export default function EmployeeDashboard() {
             <StatCard
               icon={Clock}
               label="Current Session"
-              value={isWorking ? formatDuration(seconds) : "--"}
-              subtitle={isWorking ? "Active session" : "Not clocked in"}
-              trend={isWorking ? "LIVE" : undefined}
-              trendType="up"
+              value={dashboardStats?.current_session ? formatDuration(seconds) : "--"}
+              subtitle={
+                isWorking 
+                  ? "Active session" 
+                  : dashboardStats?.current_session 
+                    ? "Completed today" 
+                    : "Not clocked in"
+              }
+              trend={isWorking ? "LIVE" : dashboardStats?.current_session ? "Done" : undefined}
+              trendType={isWorking ? "up" : "stable"}
               iconColor="bg-accent text-accent-foreground"
             />
             <StatCard

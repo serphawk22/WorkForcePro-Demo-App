@@ -131,7 +131,7 @@ async def get_employee_dashboard(
     """
     today = date.today()
     
-    # Current session
+    # Current session - check for active session first
     current_session_record = session.exec(
         select(Attendance).where(
             Attendance.user_id == current_user.id,
@@ -142,6 +142,7 @@ async def get_employee_dashboard(
     
     current_session = None
     if current_session_record:
+        # Active session - calculate hours from punch_in to now
         hours_worked = 0
         if current_session_record.punch_in:
             delta = datetime.utcnow() - current_session_record.punch_in
@@ -152,6 +153,24 @@ async def get_employee_dashboard(
             "punch_in": current_session_record.punch_in.isoformat() if current_session_record.punch_in else None,
             "hours_worked": hours_worked
         }
+    else:
+        # No active session - check for today's completed session
+        completed_session_record = session.exec(
+            select(Attendance).where(
+                Attendance.user_id == current_user.id,
+                Attendance.date == today,
+                Attendance.punch_out.isnot(None)
+            )
+        ).first()
+        
+        if completed_session_record:
+            # Show today's completed session
+            current_session = {
+                "clocked_in": False,
+                "punch_in": completed_session_record.punch_in.isoformat() if completed_session_record.punch_in else None,
+                "punch_out": completed_session_record.punch_out.isoformat() if completed_session_record.punch_out else None,
+                "hours_worked": completed_session_record.total_hours or 0
+            }
     
     # Tasks due today
     tasks_due_today = session.exec(
