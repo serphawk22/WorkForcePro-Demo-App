@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -39,7 +39,9 @@ export default function AttendancePage() {
   const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPunching, setIsPunching] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -50,7 +52,23 @@ export default function AttendancePage() {
     
     if (statusResult.data) {
       setStatus(statusResult.data);
-      setElapsedTime(statusResult.data.elapsed_seconds);
+      
+      // Initialize timer based on current session
+      if (statusResult.data.status === "working" && statusResult.data.punch_in) {
+        // Calculate elapsed time from punch_in to now
+        const punchInTime = new Date(statusResult.data.punch_in).getTime();
+        const now = Date.now();
+        const elapsedSeconds = Math.floor((now - punchInTime) / 1000);
+        setSeconds(elapsedSeconds);
+        setIsActive(true);
+      } else if (statusResult.data.status === "completed") {
+        // Show total elapsed time for completed session
+        setSeconds(statusResult.data.elapsed_seconds || 0);
+        setIsActive(false);
+      } else {
+        setSeconds(0);
+        setIsActive(false);
+      }
     }
     if (historyResult.data) {
       setHistory(historyResult.data);
@@ -70,27 +88,41 @@ export default function AttendancePage() {
     loadData();
   }, [loadData]);
 
-  // Live timer effect
+  // Live timer effect - increments every second when active
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (status?.status === "working") {
-      interval = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
+    if (isActive) {
+      intervalRef.current = setInterval(() => {
+        setSeconds(prev => prev + 1);
       }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
-    return () => clearInterval(interval);
-  }, [status?.status]);
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isActive]);
 
   const handlePunchIn = async () => {
     setIsPunching(true);
     const result = await punchIn();
     if (result.error) {
       toast.error(result.error);
-    } else {
+      setIsPunching(false);
+    } else  {
       toast.success("Punched in successfully!");
-      loadData();
+      // Reset timer to 0 and start counting
+      setSeconds(0);
+      setIsActive(true);
+      // Reload data to get updated status
+      await loadData();
+      setIsPunching(false);
     }
-    setIsPunching(false);
   };
 
   const handlePunchOut = async () => {
@@ -98,11 +130,15 @@ export default function AttendancePage() {
     const result = await punchOut();
     if (result.error) {
       toast.error(result.error);
+      setIsPunching(false);
     } else {
       toast.success("Punched out successfully!");
-      loadData();
+      // Stop the timer
+      setIsActive(false);
+      // Reload data to get final total
+      await loadData();
+      setIsPunching(false);
     }
-    setIsPunching(false);
   };
 
   const getStatusBadge = (attendanceStatus: string) => {
@@ -162,7 +198,7 @@ export default function AttendancePage() {
                     <div className="flex items-center gap-2">
                       <Timer className="h-5 w-5 text-primary" />
                       <span className="text-3xl font-mono font-bold text-card-foreground">
-                        {formatTime(elapsedTime)}
+                        {formatTime(seconds)}
                       </span>
                     </div>
                     

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -36,7 +36,9 @@ export default function EmployeeDashboard() {
   const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [punchLoading, setPunchLoading] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [seconds, setSeconds] = useState<number>(0);
+  const [isActive, setIsActive] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -53,6 +55,19 @@ export default function EmployeeDashboard() {
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
+        
+        // Initialize timer if actively working
+        const isWorking = statsResponse.data.current_session?.clocked_in || false;
+        if (isWorking && statsResponse.data.current_session?.punch_in) {
+          const punchInTime = new Date(statsResponse.data.current_session.punch_in).getTime();
+          const now = Date.now();
+          const elapsedSeconds = Math.floor((now - punchInTime) / 1000);
+          setSeconds(elapsedSeconds);
+          setIsActive(true);
+        } else {
+          setSeconds(0);
+          setIsActive(false);
+        }
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
@@ -68,25 +83,25 @@ export default function EmployeeDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Timer for current session - use data from dashboard stats
+  // Timer effect - increments every second when active
   useEffect(() => {
-    const isWorking = dashboardStats?.current_session?.clocked_in || false;
-    if (!isWorking || !dashboardStats?.current_session?.punch_in) {
-      setElapsedTime(0);
-      return;
+    if (isActive) {
+      intervalRef.current = setInterval(() => {
+        setSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
 
-    const punchInTime = new Date(dashboardStats.current_session.punch_in).getTime();
-    
-    const updateElapsed = () => {
-      const now = Date.now();
-      setElapsedTime(Math.floor((now - punchInTime) / 1000));
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [dashboardStats?.current_session]);
+  }, [isActive]);
 
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -100,7 +115,11 @@ export default function EmployeeDashboard() {
     try {
       await punchIn();
       toast.success("Punched in successfully!");
-      fetchData();
+      // Reset timer to 0 and start
+      setSeconds(0);
+      setIsActive(true);
+      // Fetch updated data
+      await fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to punch in";
       toast.error(errorMessage);
@@ -114,7 +133,10 @@ export default function EmployeeDashboard() {
     try {
       await punchOut();
       toast.success("Punched out successfully!");
-      fetchData();
+      // Stop the timer
+      setIsActive(false);
+      // Fetch updated data
+      await fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to punch out";
       toast.error(errorMessage);
@@ -202,7 +224,7 @@ export default function EmployeeDashboard() {
             <StatCard
               icon={Clock}
               label="Current Session"
-              value={isWorking ? formatDuration(elapsedTime) : "--"}
+              value={isWorking ? formatDuration(seconds) : "--"}
               subtitle={isWorking ? "Active session" : "Not clocked in"}
               trend={isWorking ? "LIVE" : undefined}
               trendType="up"
