@@ -148,10 +148,12 @@ class TaskBase(SQLModel):
 
 
 class Task(TaskBase, table=True):
-    """Task database model."""
+    """Task database model with hierarchical structure."""
     __tablename__ = "tasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    task_code: Optional[str] = Field(default=None, index=True)  # e.g., "1", "1.1", "1.1.1"
+    parent_id: Optional[int] = Field(default=None, foreign_key="tasks.id")  # Reference to parent task
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     created_by: int = Field(foreign_key="users.id")
     status: TaskStatus = Field(default=TaskStatus.todo)
@@ -161,6 +163,7 @@ class Task(TaskBase, table=True):
 
 class TaskCreate(TaskBase):
     """Schema for creating task."""
+    parent_id: Optional[int] = None  # ID of parent task for hierarchy
     assigned_to: Optional[int] = None
 
 
@@ -172,11 +175,14 @@ class TaskUpdate(SQLModel):
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
     assigned_to: Optional[int] = None
+    parent_id: Optional[int] = None
 
 
 class TaskRead(TaskBase):
     """Schema for reading task data."""
     id: int
+    task_code: Optional[str]  # Hierarchical code like "1.1.2"
+    parent_id: Optional[int]
     assigned_to: Optional[int]
     created_by: int
     status: TaskStatus
@@ -185,9 +191,10 @@ class TaskRead(TaskBase):
 
 
 class TaskWithAssignee(TaskRead):
-    """Task with assignee info."""
+    """Task with assignee info and hierarchy."""
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
+    parent_task_code: Optional[str] = None  # Code of parent task
 
 
 # ==================== LEAVE REQUEST MODELS ====================

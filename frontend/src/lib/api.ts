@@ -106,6 +106,8 @@ export interface AttendanceStatus {
 
 export interface Task {
   id: number;
+  task_code?: string;  // Hierarchical code like "1", "1.1", "1.1.1"
+  parent_id?: number;  // ID of parent task
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high";
@@ -117,6 +119,7 @@ export interface Task {
   updated_at: string;
   assignee_name?: string;
   assignee_email?: string;
+  parent_task_code?: string;  // Code of parent task
 }
 
 export interface TaskCreate {
@@ -125,6 +128,7 @@ export interface TaskCreate {
   priority?: "low" | "medium" | "high";
   due_date?: string;
   assigned_to?: number;
+  parent_id?: number;  // ID of parent task for creating subtasks
 }
 
 export interface LeaveRequest {

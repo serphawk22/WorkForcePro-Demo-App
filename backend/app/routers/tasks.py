@@ -40,8 +40,18 @@ async def get_my_tasks(
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
         
+        # Get parent task code if exists
+        parent_task_code = None
+        if task.parent_id:
+            parent_stmt = select(Task).where(Task.id == task.parent_id)
+            parent = session.exec(parent_stmt).first()
+            if parent:
+                parent_task_code = parent.task_code
+        
         result.append(TaskWithAssignee(
             id=task.id,
+            task_code=task.task_code,
+            parent_id=task.parent_id,
             title=task.title,
             description=task.description,
             priority=task.priority,
@@ -52,7 +62,8 @@ async def get_my_tasks(
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
-            assignee_email=assignee.email if assignee else None
+            assignee_email=assignee.email if assignee else None,
+            parent_task_code=parent_task_code
         ))
     
     return result
@@ -100,7 +111,7 @@ async def create_task(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user)
 ):
-    """Create a new task (admin only)."""
+    """Create a new task with hierarchical ID (admin only)."""
     # Verify assignee exists if provided
     if task_data.assigned_to:
         assignee_stmt = select(User).where(User.id == task_data.assigned_to)
@@ -111,13 +122,64 @@ async def create_task(
                 detail="Assigned user not found"
             )
     
+    # Verify parent task exists if provided
+    parent_task = None
+    if task_data.parent_id:
+        parent_stmt = select(Task).where(Task.id == task_data.parent_id)
+        parent_task = session.exec(parent_stmt).first()
+        if not parent_task:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent task not found"
+            )
+    
+    # Generate hierarchical task_code
+    if parent_task:
+        # Subtask: parent_code + "." + next_number
+        # Find all siblings (tasks with same parent)
+        siblings_stmt = select(Task).where(Task.parent_id == task_data.parent_id)
+        siblings = session.exec(siblings_stmt).all()
+        
+        # Get max subtask number
+        max_num = 0
+        for sibling in siblings:
+            if sibling.task_code:
+                parts = sibling.task_code.split(".")
+                if len(parts) > 0:
+                    try:
+                        last_num = int(parts[-1])
+                        max_num = max(max_num, last_num)
+                    except ValueError:
+                        pass
+        
+        task_code = f"{parent_task.task_code}.{max_num + 1}"
+    else:
+        # Main task: just a number (1, 2, 3, etc.)
+        # Find all main tasks (parent_id is None)
+        main_tasks_stmt = select(Task).where(Task.parent_id == None)
+        main_tasks = session.exec(main_tasks_stmt).all()
+        
+        # Get max main task number
+        max_num = 0
+        for main_task in main_tasks:
+            if main_task.task_code:
+                try:
+                    num = int(main_task.task_code.split(".")[0])
+                    max_num = max(max_num, num)
+                except ValueError:
+                    pass
+        
+        task_code = str(max_num + 1)
+    
     task = Task(
         title=task_data.title,
         description=task_data.description,
         priority=task_data.priority,
         due_date=task_data.due_date,
         assigned_to=task_data.assigned_to,
-        created_by=admin.id
+        created_by=admin.id,
+        parent_id=task_data.parent_id,
+        task_code=task_code
     )
     
     session.add(task)
@@ -153,8 +215,18 @@ async def get_all_tasks(
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
         
+        # Get parent task code if exists
+        parent_task_code = None
+        if task.parent_id:
+            parent_stmt = select(Task).where(Task.id == task.parent_id)
+            parent = session.exec(parent_stmt).first()
+            if parent:
+                parent_task_code = parent.task_code
+        
         result.append(TaskWithAssignee(
             id=task.id,
+            task_code=task.task_code,
+            parent_id=task.parent_id,
             title=task.title,
             description=task.description,
             priority=task.priority,
@@ -165,7 +237,8 @@ async def get_all_tasks(
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
-            assignee_email=assignee.email if assignee else None
+            assignee_email=assignee.email if assignee else None,
+            parent_task_code=parent_task_code
         ))
     
     return result
