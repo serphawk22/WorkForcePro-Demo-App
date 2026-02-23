@@ -106,20 +106,21 @@ export interface AttendanceStatus {
 
 export interface Task {
   id: number;
-  task_code?: string;  // Hierarchical code like "1", "1.1", "1.1.1"
-  parent_id?: number;  // ID of parent task
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high";
   due_date: string | null;
   assigned_to: number | null;
-  created_by: number;
-  status: "todo" | "in_progress" | "done";
+  assigned_by: number;
+  status: "todo" | "in_progress" | "submitted" | "reviewing" | "approved" | "rejected";
+  done_by_employee?: boolean;
+  github_link?: string | null;
+  deployed_link?: string | null;
   created_at: string;
   updated_at: string;
   assignee_name?: string;
   assignee_email?: string;
-  parent_task_code?: string;  // Code of parent task
+  assigned_by_name?: string;
 }
 
 export interface TaskCreate {
@@ -128,7 +129,8 @@ export interface TaskCreate {
   priority?: "low" | "medium" | "high";
   due_date?: string;
   assigned_to?: number;
-  parent_id?: number;  // ID of parent task for creating subtasks
+  github_link?: string;
+  deployed_link?: string;
 }
 
 export interface LeaveRequest {
@@ -189,7 +191,58 @@ export interface TaskStats {
   total: number;
   todo: number;
   in_progress: number;
-  done: number;
+  submitted: number;
+  reviewing: number;
+  approved: number;
+  rejected: number;
+}
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  type: string;
+  message: string;
+  task_id: number | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface TaskComment {
+  id: number;
+  task_id: number;
+  user_id: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  user_email?: string;
+  user_role?: "admin" | "employee";
+}
+
+export interface TaskCommentCreate {
+  task_id: number;
+  comment: string;
+}
+
+export interface Subtask {
+  id: number;
+  parent_task_id: number;
+  title: string;
+  description: string | null;
+  assigned_to: number | null;
+  assigned_by: number;
+  status: "todo" | "in_progress" | "completed";
+  created_at: string;
+  updated_at: string;
+  assignee_name?: string;
+  assignee_email?: string;
+  assigned_by_name?: string;
+}
+
+export interface SubtaskCreate {
+  title: string;
+  description?: string;
+  assigned_to?: number;
 }
 
 // ==================== AUTH HELPERS ====================
@@ -512,6 +565,17 @@ export async function activateUser(
   });
 }
 
+/**
+ * Permanently delete a user (admin only).
+ */
+export async function deleteUser(
+  userId: number
+): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
 // ==================== ATTENDANCE ====================
 
 /**
@@ -600,10 +664,12 @@ export async function getMyTasks(
 
 /**
  * Update task status.
+ * Employee can use: todo, in_progress, submitted (when marking done)
+ * Admin can use: todo, in_progress, submitted, approved, rejected
  */
 export async function updateTaskStatus(
   taskId: number,
-  status: "todo" | "in_progress" | "done"
+  status: "todo" | "in_progress" | "submitted" | "approved" | "rejected"
 ): Promise<ApiResponse<Task>> {
   return apiFetch<Task>(`/tasks/${taskId}/status?new_status=${status}`, {
     method: "PATCH",
@@ -621,7 +687,7 @@ export async function getAllTasks(
   if (statusFilter) params.append("status_filter", statusFilter);
   if (assignedTo) params.append("assigned_to", String(assignedTo));
   const query = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<Task[]>(`/tasks${query}`);
+  return apiFetch<Task[]>(`/tasks/${query}`);
 }
 
 /**
@@ -630,7 +696,7 @@ export async function getAllTasks(
 export async function createTask(
   taskData: TaskCreate
 ): Promise<ApiResponse<Task>> {
-  return apiFetch<Task>("/tasks", {
+  return apiFetch<Task>("/tasks/", {
     method: "POST",
     body: JSON.stringify(taskData),
   });
@@ -675,7 +741,7 @@ export async function getTaskStats(): Promise<ApiResponse<TaskStats>> {
 export async function createLeaveRequest(
   data: LeaveRequestCreate
 ): Promise<ApiResponse<LeaveRequest>> {
-  return apiFetch<LeaveRequest>("/leave", {
+  return apiFetch<LeaveRequest>("/leave/", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -709,7 +775,7 @@ export async function getAllLeaveRequests(
   statusFilter?: string
 ): Promise<ApiResponse<LeaveRequest[]>> {
   const query = statusFilter ? `?status_filter=${statusFilter}` : "";
-  return apiFetch<LeaveRequest[]>(`/leave${query}`);
+  return apiFetch<LeaveRequest[]>(`/leave/${query}`);
 }
 
 /**
@@ -775,6 +841,13 @@ export interface ProfileUpdate {
 export async function getMyProfile(): Promise<ApiResponse<UserProfile>> {
   console.log('[API] Get my profile - Token:', getToken() ? '✓ Present' : '✗ Missing');
   return apiFetch<UserProfile>("/users/me");
+}
+
+/**
+ * Get all active employees (for task/subtask assignment).
+ */
+export async function getAllEmployees(): Promise<ApiResponse<User[]>> {
+  return apiFetch<User[]>("/users/employees");
 }
 
 /**
@@ -861,6 +934,106 @@ export async function getUserById(userId: number): Promise<ApiResponse<UserProfi
  */
 export async function getAllUsers(): Promise<ApiResponse<UserProfile[]>> {
   return apiFetch<UserProfile[]>("/admin/users");
+}
+
+// ==================== NOTIFICATION API ====================
+
+/**
+ * Get all notifications for current user.
+ */
+export async function getNotifications(): Promise<ApiResponse<Notification[]>> {
+  return apiFetch<Notification[]>("/notifications/");
+}
+
+/**
+ * Get unread notification count.
+ */
+export async function getUnreadNotificationCount(): Promise<ApiResponse<{ count: number }>> {
+  return apiFetch<{ count: number }>("/notifications/unread/count");
+}
+
+/**
+ * Mark a notification as read.
+ */
+export async function markNotificationRead(notificationId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/notifications/${notificationId}/read`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Mark all notifications as read.
+ */
+export async function markAllNotificationsRead(): Promise<ApiResponse<{ message: string }>> {
+  clearCache("notifications");
+  return apiFetch<{ message: string }>("/notifications/read-all", {
+    method: "PATCH",
+  });
+}
+
+// ==================== TASK COMMENTS API ====================
+
+/**
+ * Create a comment on a task.
+ */
+export async function createTaskComment(commentData: TaskCommentCreate): Promise<ApiResponse<TaskComment>> {
+  return apiFetch<TaskComment>("/comments", {
+    method: "POST",
+    body: JSON.stringify(commentData),
+  });
+}
+
+/**
+ * Get all comments for a specific task.
+ */
+export async function getTaskComments(taskId: number): Promise<ApiResponse<TaskComment[]>> {
+  return apiFetch<TaskComment[]>(`/comments/task/${taskId}`);
+}
+
+/**
+ * Delete a comment.
+ */
+export async function deleteTaskComment(commentId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/comments/${commentId}`, {
+    method: "DELETE",
+  });
+}
+
+// ==================== SUBTASKS API ====================
+
+/**
+ * Create a subtask for a task.
+ */
+export async function createSubtask(taskId: number, subtaskData: SubtaskCreate): Promise<ApiResponse<Subtask>> {
+  return apiFetch<Subtask>(`/tasks/${taskId}/subtasks`, {
+    method: "POST",
+    body: JSON.stringify(subtaskData),
+  });
+}
+
+/**
+ * Get all subtasks for a task.
+ */
+export async function getTaskSubtasks(taskId: number): Promise<ApiResponse<Subtask[]>> {
+  return apiFetch<Subtask[]>(`/tasks/${taskId}/subtasks`);
+}
+
+/**
+ * Update subtask status.
+ */
+export async function updateSubtaskStatus(subtaskId: number, status: string): Promise<ApiResponse<Subtask>> {
+  return apiFetch<Subtask>(`/tasks/subtasks/${subtaskId}/status?new_status=${status}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Delete a subtask.
+ */
+export async function deleteSubtask(subtaskId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/tasks/subtasks/${subtaskId}`, {
+    method: "DELETE",
+  });
 }
 
 export type { ApiResponse, LoginResponse, RegisterResponse };

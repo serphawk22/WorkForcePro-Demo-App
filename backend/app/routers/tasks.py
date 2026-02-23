@@ -1,5 +1,5 @@
 """
-Task management routes.
+Task management routes with flat structure and deliverable tracking.
 """
 from datetime import datetime
 from typing import List, Optional
@@ -9,9 +9,10 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
-    TaskStatus, UserRole
+    TaskStatus, UserRole, NotificationType
 )
 from app.auth import get_current_user, get_current_admin_user
+from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -40,30 +41,28 @@ async def get_my_tasks(
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
         
-        # Get parent task code if exists
-        parent_task_code = None
-        if task.parent_id:
-            parent_stmt = select(Task).where(Task.id == task.parent_id)
-            parent = session.exec(parent_stmt).first()
-            if parent:
-                parent_task_code = parent.task_code
+        assigner = None
+        if task.assigned_by:
+            assigner_stmt = select(User).where(User.id == task.assigned_by)
+            assigner = session.exec(assigner_stmt).first()
         
         result.append(TaskWithAssignee(
             id=task.id,
-            task_code=task.task_code,
-            parent_id=task.parent_id,
             title=task.title,
             description=task.description,
             priority=task.priority,
             due_date=task.due_date,
             assigned_to=task.assigned_to,
-            created_by=task.created_by,
+            assigned_by=task.assigned_by,
             status=task.status,
+            done_by_employee=task.done_by_employee,
+            github_link=task.github_link,
+            deployed_link=task.deployed_link,
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
-            parent_task_code=parent_task_code
+            assigned_by_name=assigner.name if assigner else None
         ))
     
     return result
@@ -77,7 +76,11 @@ async def update_task_status(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Update task status (for assigned employee or admin)."""
+    """Update task status with role-based restrictions.
+    
+    Employee workflow: To Do → In Progress → Done (submits for review)
+    Admin workflow: Can set any status including Approved/Rejected
+    """
     statement = select(Task).where(Task.id == task_id)
     task = session.exec(statement).first()
     
@@ -93,6 +96,71 @@ async def update_task_status(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this task"
         )
+    
+    # Role-based status restrictions
+    if current_user.role == UserRole.employee:
+        # Employees can only set to todo, in_progress, or submitted (when marking done)
+        allowed_statuses = [TaskStatus.todo, TaskStatus.in_progress, TaskStatus.submitted]
+        if new_status not in allowed_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Employees can only change status to 'To Do', 'In Progress', or 'Done'"
+            )
+        
+        # When employee marks task as "Done" (submitted), notify all admins
+        if new_status == TaskStatus.submitted:
+            task.done_by_employee = True
+            
+            # Notify all admins
+            admin_stmt = select(User).where(User.role == UserRole.admin)
+            admins = session.exec(admin_stmt).all()
+            
+            for admin in admins:
+                create_notification(
+                    session=session,
+                    user_id=admin.id,
+                    type=NotificationType.TASK_SUBMITTED,
+                    message=f"Task #{task.id} - {task.title} has been submitted for review by {current_user.name}",
+                    task_id=task.id
+                )
+    
+    elif current_user.role == UserRole.admin:
+        # Admin can only set: reviewing, approved, rejected
+        allowed_statuses = [TaskStatus.reviewing, TaskStatus.approved, TaskStatus.rejected]
+        if new_status not in allowed_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admins can only change status to 'Reviewing', 'Approved', or 'Rejected'"
+            )
+        
+        # Notify assigned employee when admin changes status
+        if task.assigned_to and new_status != task.status:
+            if new_status == TaskStatus.reviewing:
+                create_notification(
+                    session=session,
+                    user_id=task.assigned_to,
+                    type=NotificationType.TASK_COMMENT,
+                    message=f"Admin is reviewing your task #{task.id} - {task.title}",
+                    task_id=task.id
+                )
+            elif new_status == TaskStatus.approved:
+                create_notification(
+                    session=session,
+                    user_id=task.assigned_to,
+                    type=NotificationType.TASK_APPROVED,
+                    message=f"Your task #{task.id} - {task.title} has been approved!",
+                    task_id=task.id
+                )
+            elif new_status == TaskStatus.rejected:
+                # Reset done_by_employee so employee can resubmit
+                task.done_by_employee = False
+                create_notification(
+                    session=session,
+                    user_id=task.assigned_to,
+                    type=NotificationType.TASK_REJECTED,
+                    message=f"Task #{task.id} - {task.title} needs changes. Please review and resubmit.",
+                    task_id=task.id
+                )
     
     task.status = new_status
     task.updated_at = datetime.utcnow()
@@ -111,8 +179,9 @@ async def create_task(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user)
 ):
-    """Create a new task with hierarchical ID (admin only)."""
+    """Create a new task with deliverable tracking (admin only)."""
     # Verify assignee exists if provided
+    assignee = None
     if task_data.assigned_to:
         assignee_stmt = select(User).where(User.id == task_data.assigned_to)
         assignee = session.exec(assignee_stmt).first()
@@ -122,54 +191,18 @@ async def create_task(
                 detail="Assigned user not found"
             )
     
-    # Verify parent task exists if provided
-    parent_task = None
-    if task_data.parent_id:
-        parent_stmt = select(Task).where(Task.id == task_data.parent_id)
-        parent_task = session.exec(parent_stmt).first()
-        if not parent_task:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Parent task not found"
-            )
+    # Validate GitHub and deployed links if provided
+    if task_data.github_link and not (task_data.github_link.startswith("http://") or task_data.github_link.startswith("https://")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub link must be a valid URL starting with http:// or https://"
+        )
     
-    # Generate hierarchical task_code
-    if parent_task:
-        # Subtask: parent_code + "." + next_number
-        # Find all siblings (tasks with same parent)
-        siblings_stmt = select(Task).where(Task.parent_id == task_data.parent_id)
-        siblings = session.exec(siblings_stmt).all()
-        
-        # Get max subtask number
-        max_num = 0
-        for sibling in siblings:
-            if sibling.task_code:
-                parts = sibling.task_code.split(".")
-                if len(parts) > 0:
-                    try:
-                        last_num = int(parts[-1])
-                        max_num = max(max_num, last_num)
-                    except ValueError:
-                        pass
-        
-        task_code = f"{parent_task.task_code}.{max_num + 1}"
-    else:
-        # Main task: just a number (1, 2, 3, etc.)
-        # Find all main tasks (parent_id is None)
-        main_tasks_stmt = select(Task).where(Task.parent_id == None)
-        main_tasks = session.exec(main_tasks_stmt).all()
-        
-        # Get max main task number
-        max_num = 0
-        for main_task in main_tasks:
-            if main_task.task_code:
-                try:
-                    num = int(main_task.task_code.split(".")[0])
-                    max_num = max(max_num, num)
-                except ValueError:
-                    pass
-        
-        task_code = str(max_num + 1)
+    if task_data.deployed_link and not (task_data.deployed_link.startswith("http://") or task_data.deployed_link.startswith("https://")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Deployed link must be a valid URL starting with http:// or https://"
+        )
     
     task = Task(
         title=task_data.title,
@@ -177,14 +210,24 @@ async def create_task(
         priority=task_data.priority,
         due_date=task_data.due_date,
         assigned_to=task_data.assigned_to,
-        created_by=admin.id,
-        parent_id=task_data.parent_id,
-        task_code=task_code
+        assigned_by=admin.id,
+        github_link=task_data.github_link,
+        deployed_link=task_data.deployed_link
     )
     
     session.add(task)
     session.commit()
     session.refresh(task)
+    
+    # Send notification to assigned employee
+    if assignee:
+        create_notification(
+            session=session,
+            user_id=assignee.id,
+            type=NotificationType.TASK_ASSIGNED,
+            message=f"New task assigned: Task #{task.id} - {task.title}",
+            task_id=task.id
+        )
     
     return task
 
@@ -215,30 +258,28 @@ async def get_all_tasks(
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
         
-        # Get parent task code if exists
-        parent_task_code = None
-        if task.parent_id:
-            parent_stmt = select(Task).where(Task.id == task.parent_id)
-            parent = session.exec(parent_stmt).first()
-            if parent:
-                parent_task_code = parent.task_code
+        assigner = None
+        if task.assigned_by:
+            assigner_stmt = select(User).where(User.id == task.assigned_by)
+            assigner = session.exec(assigner_stmt).first()
         
         result.append(TaskWithAssignee(
             id=task.id,
-            task_code=task.task_code,
-            parent_id=task.parent_id,
             title=task.title,
             description=task.description,
             priority=task.priority,
             due_date=task.due_date,
             assigned_to=task.assigned_to,
-            created_by=task.created_by,
+            assigned_by=task.assigned_by,
             status=task.status,
+            done_by_employee=task.done_by_employee,
+            github_link=task.github_link,
+            deployed_link=task.deployed_link,
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
-            parent_task_code=parent_task_code
+            assigned_by_name=assigner.name if assigner else None
         ))
     
     return result
@@ -280,12 +321,16 @@ async def get_task(
         priority=task.priority,
         due_date=task.due_date,
         assigned_to=task.assigned_to,
-        created_by=task.created_by,
+        assigned_by=task.assigned_by,
         status=task.status,
+        done_by_employee=task.done_by_employee,
+        github_link=task.github_link,
+        deployed_link=task.deployed_link,
         created_at=task.created_at,
         updated_at=task.updated_at,
         assignee_name=assignee.name if assignee else None,
-        assignee_email=assignee.email if assignee else None
+        assignee_email=assignee.email if assignee else None,
+        assigned_by_name=None  # Can be added if needed
     )
 
 
@@ -353,11 +398,17 @@ async def get_task_stats(
     total = len(session.exec(select(Task)).all())
     todo = len(session.exec(select(Task).where(Task.status == TaskStatus.todo)).all())
     in_progress = len(session.exec(select(Task).where(Task.status == TaskStatus.in_progress)).all())
-    done = len(session.exec(select(Task).where(Task.status == TaskStatus.done)).all())
+    submitted = len(session.exec(select(Task).where(Task.status == TaskStatus.submitted)).all())
+    reviewing = len(session.exec(select(Task).where(Task.status == TaskStatus.reviewing)).all())
+    approved = len(session.exec(select(Task).where(Task.status == TaskStatus.approved)).all())
+    rejected = len(session.exec(select(Task).where(Task.status == TaskStatus.rejected)).all())
     
     return {
         "total": total,
         "todo": todo,
         "in_progress": in_progress,
-        "done": done
+        "submitted": submitted,
+        "reviewing": reviewing,
+        "approved": approved,
+        "rejected": rejected
     }

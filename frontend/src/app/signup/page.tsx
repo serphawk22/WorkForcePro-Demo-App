@@ -64,20 +64,20 @@ export default function SignupPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-card">
+        <div className="rounded-2xl glass-card glow-sm p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-card-foreground">Create an account</h1>
             <p className="text-sm text-muted-foreground mt-1">Join WorkForce Pro today</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="mb-6 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl glass-light bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm text-center">
               {success}
             </div>
           )}
@@ -95,7 +95,7 @@ export default function SignupPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   minLength={2}
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>
@@ -111,7 +111,7 @@ export default function SignupPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>
@@ -124,7 +124,7 @@ export default function SignupPage() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as "admin" | "employee")}
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm appearance-none cursor-pointer"
                 >
                   <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
@@ -144,7 +144,7 @@ export default function SignupPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>
@@ -161,7 +161,7 @@ export default function SignupPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>

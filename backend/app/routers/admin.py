@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models import (
     User, UserRead, UserRole, Attendance, Task, LeaveRequest,
-    TaskStatus, LeaveStatus, DashboardStats
+    TaskStatus, LeaveStatus, DashboardStats, Notification, TaskComment, Subtask
 )
 from app.auth import get_current_admin_user
 
@@ -40,9 +40,9 @@ async def get_dashboard_stats(
     ).all()
     active_sessions = len(active)
     
-    # Pending tasks
+    # Pending tasks (tasks submitted for review)
     pending_tasks = len(session.exec(
-        select(Task).where(Task.status == TaskStatus.pending)
+        select(Task).where(Task.status == TaskStatus.submitted)
     ).all())
     
     # Pending leave requests
@@ -177,3 +177,72 @@ async def activate_user(
     session.commit()
     
     return {"message": f"User {user.email} has been activated"}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Permanently delete a user from the database (admin only).
+    WARNING: This will also delete all associated records (tasks, attendance, etc.)
+    """
+    statement = select(User).where(User.id == user_id)
+    user = session.exec(statement).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    user_email = user.email
+    
+    # Delete all related records
+    # 1. Delete subtasks assigned to or created by this user
+    subtasks = session.exec(select(Subtask).where(
+        (Subtask.assigned_to == user_id) | (Subtask.assigned_by == user_id)
+    )).all()
+    for subtask in subtasks:
+        session.delete(subtask)
+    
+    # 2. Delete task comments by this user
+    comments = session.exec(select(TaskComment).where(TaskComment.user_id == user_id)).all()
+    for comment in comments:
+        session.delete(comment)
+    
+    # 3. Delete tasks assigned to or created by this user
+    tasks = session.exec(select(Task).where(
+        (Task.assigned_to == user_id) | (Task.assigned_by == user_id)
+    )).all()
+    for task in tasks:
+        session.delete(task)
+    
+    # 4. Delete attendance records
+    attendance_records = session.exec(select(Attendance).where(Attendance.user_id == user_id)).all()
+    for record in attendance_records:
+        session.delete(record)
+    
+    # 5. Delete leave requests
+    leave_requests = session.exec(select(LeaveRequest).where(LeaveRequest.user_id == user_id)).all()
+    for leave in leave_requests:
+        session.delete(leave)
+    
+    # 6. Delete notifications
+    notifications = session.exec(select(Notification).where(Notification.user_id == user_id)).all()
+    for notification in notifications:
+        session.delete(notification)
+    
+    # Finally, delete the user
+    session.delete(user)
+    session.commit()
+    
+    return {"message": f"User {user_email} has been permanently deleted along with all associated data"}

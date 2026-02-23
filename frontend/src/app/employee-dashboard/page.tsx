@@ -19,13 +19,17 @@ const priorityStyles: Record<string, string> = {
 const statusStyles: Record<string, string> = {
   in_progress: "text-blue-500",
   todo: "text-muted-foreground",
-  done: "text-green-500",
+  submitted: "text-green-500",  // Employee sees "Done" as green
+  approved: "text-green-600",
+  rejected: "text-red-500",
 };
 
 const statusLabels: Record<string, string> = {
   todo: "To Do",
   in_progress: "In Progress",
-  done: "Done",
+  submitted: "Done",  // For employees, "submitted" displays as "Done"
+  approved: "Approved",
+  rejected: "Needs Changes",
 };
 
 export default function EmployeeDashboard() {
@@ -154,10 +158,21 @@ export default function EmployeeDashboard() {
     }
   };
 
-  const handleTaskStatusChange = async (taskId: number, newStatus: "todo" | "in_progress" | "done") => {
+  const handleTaskStatusChange = async (taskId: number, selectedStatus: string) => {
     try {
-      await updateTaskStatus(taskId, newStatus);
-      toast.success("Task status updated!");
+      // Map employee UI status to backend status
+      // "done" in UI → "submitted" in backend (triggers admin review)
+      const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
+      
+      await updateTaskStatus(taskId, backendStatus as "todo" | "in_progress" | "submitted");
+      
+      // Show appropriate toast message
+      if (selectedStatus === "done") {
+        toast.success("Task submitted for review!");
+      } else {
+        toast.success("Task status updated!");
+      }
+      
       fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to update task";
@@ -174,8 +189,8 @@ export default function EmployeeDashboard() {
   const pendingLeaveRequests = dashboardStats?.pending_leave_requests || 0;
   const isWorking = dashboardStats?.current_session?.clocked_in || false;
   
-  // Calculate from tasks list for display
-  const activeTasks = tasks.filter((t) => t.status !== "done");
+  // Calculate from tasks list for display - filter out approved and rejected
+  const activeTasks = tasks.filter((t) => t.status !== "approved" && t.status !== "rejected");
 
   if (loading) {
     return (
@@ -345,9 +360,10 @@ export default function EmployeeDashboard() {
                         </td>
                         <td className="py-3.5 text-right">
                           <select
-                            value={task.status}
-                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value as "todo" | "in_progress" | "done")}
+                            value={task.status === "submitted" ? "done" : task.status}
+                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
                             className="bg-secondary border border-border rounded px-2 py-1 text-xs cursor-pointer"
+                            disabled={task.status === "submitted" || task.status === "approved"}
                           >
                             <option value="todo">To Do</option>
                             <option value="in_progress">In Progress</option>

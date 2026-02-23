@@ -50,9 +50,12 @@ export default function AdminDashboard() {
   }, [loadData]);
 
   const distributionData = taskStats ? [
-    { name: "Done", value: taskStats.done, color: "hsl(142 71% 45%)" },
-    { name: "In Progress", value: taskStats.in_progress, color: "hsl(266 62% 18%)" },
-    { name: "To Do", value: taskStats.todo, color: "hsl(289 36% 26%)" },
+    { name: "Approved", value: taskStats.approved, color: "hsl(142 71% 45%)" },
+    { name: "Reviewing", value: taskStats.reviewing, color: "hsl(271 91% 65%)" },
+    { name: "Submitted", value: taskStats.submitted, color: "hsl(38 92% 50%)" },
+    { name: "In Progress", value: taskStats.in_progress, color: "hsl(217 91% 60%)" },
+    { name: "To Do", value: taskStats.todo, color: "hsl(215 16% 47%)" },
+    { name: "Rejected", value: taskStats.rejected, color: "hsl(0 84% 60%)" },
   ] : [];
   
   return (
@@ -157,7 +160,7 @@ export default function AdminDashboard() {
                     </div>
                     <Activity size={18} className="text-muted-foreground" />
                   </div>
-                  {taskStats && (taskStats.done + taskStats.in_progress + taskStats.todo) > 0 ? (
+                  {taskStats && (taskStats.approved + taskStats.reviewing + taskStats.submitted + taskStats.in_progress + taskStats.todo + taskStats.rejected) > 0 ? (
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
                         <Pie
@@ -195,15 +198,37 @@ export default function AdminDashboard() {
 
               {/* Task Summary */}
               {taskStats && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div className="rounded-xl border border-border bg-card p-4 card-shadow">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-500/10">
                         <div className="w-3 h-3 rounded-full bg-green-500" />
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Done</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.done}</p>
+                        <p className="text-xs text-muted-foreground">Approved</p>
+                        <p className="text-lg font-semibold text-card-foreground">{taskStats.approved}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-500/10">
+                        <div className="w-3 h-3 rounded-full bg-purple-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Reviewing</p>
+                        <p className="text-lg font-semibold text-card-foreground">{taskStats.reviewing}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-yellow-500/10">
+                        <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Submitted</p>
+                        <p className="text-lg font-semibold text-card-foreground">{taskStats.submitted}</p>
                       </div>
                     </div>
                   </div>
@@ -220,12 +245,23 @@ export default function AdminDashboard() {
                   </div>
                   <div className="rounded-xl border border-border bg-card p-4 card-shadow">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-500/10">
-                        <div className="w-3 h-3 rounded-full bg-purple-500" />
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-500/10">
+                        <div className="w-3 h-3 rounded-full bg-gray-500" />
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">To Do</p>
                         <p className="text-lg font-semibold text-card-foreground">{taskStats.todo}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/10">
+                        <div className="w-3 h-3 rounded-full bg-red-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Rejected</p>
+                        <p className="text-lg font-semibold text-card-foreground">{taskStats.rejected}</p>
                       </div>
                     </div>
                   </div>

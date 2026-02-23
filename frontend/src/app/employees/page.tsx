@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { fetchEmployees, type User } from "@/lib/api";
-import { Search, Plus, Mail, UserCircle, Loader2, Github, Linkedin, Calendar } from "lucide-react";
+import { fetchEmployees, deleteUser, type User } from "@/lib/api";
+import { Search, Plus, Mail, UserCircle, Loader2, Github, Linkedin, Calendar, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 const statusStyle: Record<string, string> = {
   Active: "bg-green-500/10 text-green-500",
@@ -52,6 +53,26 @@ export default function EmployeesPage() {
 
   const handleEmployeeClick = (empId: number) => {
     router.push(`/admin/users/${empId}`);
+  };
+
+  const handleDeleteEmployee = async (empId: number, empName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!confirm(`Are you sure you want to permanently delete ${empName}? This action cannot be undone and will remove all associated data (tasks, attendance records, etc.).`)) {
+      return;
+    }
+
+    const result = await deleteUser(empId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success(`${empName} has been permanently deleted`);
+      // Reload employees list
+      const refreshResult = await fetchEmployees();
+      if (refreshResult.data) {
+        setEmployees(refreshResult.data);
+      }
+    }
   };
 
   return (
@@ -121,6 +142,15 @@ export default function EmployeesPage() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 capitalize">{emp.role}</p>
                     </div>
+                    {emp.is_active && (
+                      <button
+                        onClick={(e) => handleDeleteEmployee(emp.id, emp.name, e)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10 p-2 rounded-lg transition-all duration-200"
+                        title="Deactivate employee"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                   <div className="mt-4 space-y-1.5">
                     <p className="flex items-center gap-2 text-xs text-muted-foreground truncate">

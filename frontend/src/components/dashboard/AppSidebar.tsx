@@ -67,7 +67,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
 
   return (
     <aside
-      className={`sidebar-gradient flex flex-col border-r border-sidebar-border transition-all duration-300 ${
+      className={`glass-sidebar flex flex-col transition-all duration-300 ${
         collapsed ? "w-[72px]" : "w-[240px]"
       } min-h-screen`}
     >

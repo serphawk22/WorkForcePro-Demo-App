@@ -40,8 +40,8 @@ export function HowItWorksSection() {
 
       <div className="container mx-auto px-6 relative z-10">
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/25
-                          bg-primary/8 text-primary text-xs font-semibold uppercase tracking-widest mb-5">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-card glow-sm
+                          text-primary text-xs font-semibold uppercase tracking-widest mb-5">
             Workflow
           </div>
           <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5">
@@ -59,7 +59,7 @@ export function HowItWorksSection() {
           <div className="hidden lg:block absolute top-10 left-[12.5%] right-[12.5%] h-0.5 bg-gradient-to-r from-primary/20 via-primary/50 to-primary/20 z-0" />
 
           {steps.map(({ number, icon: Icon, title, description }, i) => (
-            <div key={title} className="relative z-10 flex flex-col items-center text-center group">
+            <div key={title} className="relative z-10 flex flex-col items-center text-center group glass-card glass-card-hover p-6 rounded-2xl">
               {/* Circle */}
               <div className="h-20 w-20 rounded-2xl gradient-primary flex items-center justify-center
                                shadow-primary group-hover:shadow-glow group-hover:scale-110

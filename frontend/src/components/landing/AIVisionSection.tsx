@@ -37,9 +37,9 @@ export function AIVisionSection() {
 
       <div className="relative z-10 container mx-auto px-6">
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary-foreground/25
-                          bg-primary-foreground/10 text-primary-foreground text-xs font-semibold uppercase tracking-widest mb-6">
-            <Sparkles size={12} /> AI-Powered Future
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-dark glow-sm
+                          text-primary-foreground text-xs font-semibold uppercase tracking-widest mb-6">
+            <Sparkles size={12} className="animate-pulse" /> AI-Powered Future
           </div>
           <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-primary-foreground mb-5">
             The Future of Workforce
@@ -57,13 +57,12 @@ export function AIVisionSection() {
           {aiFeatures.map(({ icon: Icon, title, description }) => (
             <div
               key={title}
-              className="p-6 rounded-2xl bg-primary-foreground/10 border border-primary-foreground/20
-                         backdrop-blur-sm hover:bg-primary-foreground/15 hover:-translate-y-1
+              className="p-6 rounded-2xl glass-dark glow-sm hover:-translate-y-1
                          transition-all duration-300 group"
             >
               <div className="flex items-start gap-4">
-                <div className="h-11 w-11 rounded-xl bg-primary-foreground/15 flex items-center justify-center
-                                flex-shrink-0 group-hover:bg-primary-foreground/25 transition-colors">
+                <div className="h-11 w-11 rounded-xl glass-light flex items-center justify-center
+                                flex-shrink-0 group-hover:scale-110 transition-transform">
                   <Icon size={20} className="text-primary-foreground" />
                 </div>
                 <div>

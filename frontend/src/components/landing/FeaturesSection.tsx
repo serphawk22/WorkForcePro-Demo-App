@@ -49,12 +49,16 @@ const features = [
 
 export function FeaturesSection() {
   return (
-    <section id="features" className="py-28 bg-secondary dark:bg-background-soft">
-      <div className="container mx-auto px-6">
+    <section id="features" className="py-28 bg-secondary dark:bg-background-soft relative overflow-hidden">
+      {/* Ambient orbs */}
+      <div className="absolute top-20 left-10 w-64 h-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-20 right-10 w-48 h-48 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
+      
+      <div className="container mx-auto px-6 relative z-10">
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/25
-                          bg-primary/8 text-primary text-xs font-semibold uppercase tracking-widest mb-5">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-card glow-sm
+                          text-primary text-xs font-semibold uppercase tracking-widest mb-5">
             Platform Features
           </div>
           <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5">
@@ -71,20 +75,23 @@ export function FeaturesSection() {
           {features.map(({ icon: Icon, title, description, color }, i) => (
             <div
               key={title}
-              className="group p-7 rounded-2xl bg-card border border-border shadow-card
-                         hover:shadow-primary hover:-translate-y-2 transition-all duration-400
+              className="group relative p-7 rounded-2xl glass-card glass-card-hover overflow-hidden
+                         hover:-translate-y-2 transition-all duration-400
                          cursor-default"
               style={{ animationDelay: `${i * 0.08}s` }}
             >
-              <div className={`h-12 w-12 rounded-xl flex items-center justify-center mb-5 ${color}
-                               group-hover:scale-110 transition-transform duration-300`}>
+              {/* Gradient overlay on hover */}
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              
+              <div className={`relative h-12 w-12 rounded-xl glass-light flex items-center justify-center mb-5 ${color}
+                               group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
                 <Icon size={22} />
               </div>
-              <h3 className="text-lg font-bold text-foreground mb-2">{title}</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
+              <h3 className="relative text-lg font-bold text-foreground mb-2">{title}</h3>
+              <p className="relative text-muted-foreground text-sm leading-relaxed">{description}</p>
 
               {/* Accent line */}
-              <div className="mt-5 h-0.5 w-8 rounded-full bg-primary/40 group-hover:w-16
+              <div className="relative mt-5 h-0.5 w-8 rounded-full bg-gradient-to-r from-primary to-accent group-hover:w-16
                                transition-all duration-400" />
             </div>
           ))}

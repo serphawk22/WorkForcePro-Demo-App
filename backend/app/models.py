@@ -14,9 +14,12 @@ class UserRole(str, Enum):
 
 
 class TaskStatus(str, Enum):
-    todo = "todo"
-    in_progress = "in_progress"
-    done = "done"
+    todo = "todo"  # Employee view: "To Do"
+    in_progress = "in_progress"  # Employee view: "In Progress"
+    submitted = "submitted"  # When employee marks "Done" - goes to admin for review
+    reviewing = "reviewing"  # Admin is reviewing the submission
+    approved = "approved"  # Admin approved
+    rejected = "rejected"  # Admin rejected - needs changes
 
 
 class LeaveStatus(str, Enum):
@@ -29,6 +32,33 @@ class TaskPriority(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
+
+
+class SubtaskStatus(str, Enum):
+    """Subtask status values."""
+    # Employee statuses
+    todo = "todo"
+    in_progress = "in_progress"
+    completed = "completed"
+    # Admin review statuses
+    reviewing = "reviewing"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class NotificationType(str, Enum):
+    """Notification types for different events."""
+    TASK_ASSIGNED = "task_assigned"
+    TASK_SUBMITTED = "task_submitted"
+    TASK_APPROVED = "task_approved"
+    TASK_REJECTED = "task_rejected"
+    TASK_COMMENT = "task_comment"
+    SUBTASK_ASSIGNED = "subtask_assigned"
+    SUBTASK_REVIEWING = "subtask_reviewing"
+    SUBTASK_APPROVED = "subtask_approved"
+    SUBTASK_REJECTED = "subtask_rejected"
+    LEAVE_APPROVED = "leave_approved"
+    LEAVE_REJECTED = "leave_rejected"
 
 
 # ==================== USER MODELS ====================
@@ -148,23 +178,25 @@ class TaskBase(SQLModel):
 
 
 class Task(TaskBase, table=True):
-    """Task database model with hierarchical structure."""
+    """Task database model - flat structure with deliverable tracking."""
     __tablename__ = "tasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    task_code: Optional[str] = Field(default=None, index=True)  # e.g., "1", "1.1", "1.1.1"
-    parent_id: Optional[int] = Field(default=None, foreign_key="tasks.id")  # Reference to parent task
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
-    created_by: int = Field(foreign_key="users.id")
+    assigned_by: int = Field(foreign_key="users.id")  # Admin who created/assigned the task
     status: TaskStatus = Field(default=TaskStatus.todo)
+    done_by_employee: bool = Field(default=False)  # True when employee marks task as done
+    github_link: Optional[str] = Field(default=None, max_length=500)  # GitHub repository link
+    deployed_link: Optional[str] = Field(default=None, max_length=500)  # Deployed application link
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class TaskCreate(TaskBase):
     """Schema for creating task."""
-    parent_id: Optional[int] = None  # ID of parent task for hierarchy
     assigned_to: Optional[int] = None
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
 
 
 class TaskUpdate(SQLModel):
@@ -174,27 +206,117 @@ class TaskUpdate(SQLModel):
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
-    assigned_to: Optional[int] = None
-    parent_id: Optional[int] = None
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
 
 
 class TaskRead(TaskBase):
     """Schema for reading task data."""
     id: int
-    task_code: Optional[str]  # Hierarchical code like "1.1.2"
-    parent_id: Optional[int]
     assigned_to: Optional[int]
-    created_by: int
+    assigned_by: int
     status: TaskStatus
+    done_by_employee: bool = False
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
 
 class TaskWithAssignee(TaskRead):
-    """Task with assignee info and hierarchy."""
+    """Task with assignee and assigner info."""
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
-    parent_task_code: Optional[str] = None  # Code of parent task
+    assigned_by_name: Optional[str] = None
+
+
+# ==================== TASK COMMENT MODELS ====================
+
+class TaskComment(SQLModel, table=True):
+    """Task comment database model."""
+    __tablename__ = "task_comments"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="tasks.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    comment: str = Field(min_length=1, max_length=2000)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TaskCommentCreate(SQLModel):
+    """Schema for creating a task comment."""
+    task_id: int
+    comment: str = Field(min_length=1, max_length=2000)
+
+
+class TaskCommentRead(SQLModel):
+    """Schema for reading task comment data."""
+    id: int
+    task_id: int
+    user_id: int
+    comment: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskCommentWithUser(TaskCommentRead):
+    """Task comment with user info."""
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_role: Optional[UserRole] = None
+
+
+# ==================== SUBTASK MODELS ====================
+
+class Subtask(SQLModel, table=True):
+    """Subtask database model for task delegation."""
+    __tablename__ = "subtasks"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    parent_task_id: int = Field(foreign_key="tasks.id", index=True)
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    assigned_by: int = Field(foreign_key="users.id", index=True)
+    status: SubtaskStatus = Field(default=SubtaskStatus.todo)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SubtaskCreate(SQLModel):
+    """Schema for creating a subtask."""
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    assigned_to: Optional[int] = None
+
+
+class SubtaskUpdate(SQLModel):
+    """Schema for updating a subtask."""
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    status: Optional[SubtaskStatus] = None
+    assigned_to: Optional[int] = None
+
+
+class SubtaskRead(SQLModel):
+    """Schema for reading subtask data."""
+    id: int
+    parent_task_id: int
+    title: str
+    description: Optional[str]
+    assigned_to: Optional[int]
+    assigned_by: int
+    status: SubtaskStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubtaskWithAssignee(SubtaskRead):
+    """Subtask with assignee info."""
+    assignee_name: Optional[str] = None
+    assignee_email: Optional[str] = None
+    assigned_by_name: Optional[str] = None
 
 
 # ==================== LEAVE REQUEST MODELS ====================
@@ -246,6 +368,40 @@ class LeaveRequestWithUser(LeaveRequestRead):
     """Leave request with user info."""
     user_name: Optional[str] = None
     user_email: Optional[str] = None
+
+
+# ==================== NOTIFICATION MODELS ====================
+
+class Notification(SQLModel, table=True):
+    """Notification model for task assignments and updates."""
+    __tablename__ = "notifications"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    type: NotificationType = Field(default=NotificationType.TASK_ASSIGNED)
+    message: str = Field(max_length=500)
+    task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")
+    is_read: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NotificationRead(SQLModel):
+    """Schema for reading notification data."""
+    id: int
+    user_id: int
+    type: NotificationType
+    message: str
+    task_id: Optional[int]
+    is_read: bool
+    created_at: datetime
+
+
+class NotificationCreate(SQLModel):
+    """Schema for creating notification."""
+    user_id: int
+    type: NotificationType
+    message: str
+    task_id: Optional[int] = None
 
 
 # ==================== DASHBOARD STATS ====================

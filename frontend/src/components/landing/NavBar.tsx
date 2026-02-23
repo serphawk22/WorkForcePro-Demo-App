@@ -9,7 +9,7 @@ export function NavBar() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-background/90 dark:bg-background/95 border-b border-border/50 shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-50 glass-nav">
       <div className="container mx-auto px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
@@ -62,7 +62,7 @@ export function NavBar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden bg-card border-t border-border px-6 py-4 space-y-3">
+        <div className="md:hidden glass-panel px-6 py-4 space-y-3">
           {["#features", "#how-it-works", "#ai-vision"].map((href) => (
             <a
               key={href}

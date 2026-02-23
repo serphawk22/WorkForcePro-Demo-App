@@ -43,10 +43,10 @@ async def get_admin_dashboard(
         )
     ).one()
     
-    #Pending tasks
+    #Pending tasks (tasks submitted for review)
     pending_tasks = session.exec(
         select(func.count(Task.id)).where(
-            Task.status != TaskStatus.done
+            Task.status == TaskStatus.submitted
         )
     ).one()
     
@@ -172,20 +172,20 @@ async def get_employee_dashboard(
                 "hours_worked": completed_session_record.total_hours or 0
             }
     
-    # Tasks due today
+    # Tasks due today (not yet approved)
     tasks_due_today = session.exec(
         select(func.count(Task.id)).where(
             Task.assigned_to == current_user.id,
             Task.due_date == today,
-            Task.status != TaskStatus.done
+            Task.status != TaskStatus.approved
         )
     ).one()
     
-    # Tasks completed
+    # Tasks completed (approved by admin)
     tasks_completed = session.exec(
         select(func.count(Task.id)).where(
             Task.assigned_to == current_user.id,
-            Task.status == TaskStatus.done
+            Task.status == TaskStatus.approved
         )
     ).one()
     

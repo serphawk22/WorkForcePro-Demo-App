@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks
 
 load_dotenv()
 
@@ -101,8 +101,11 @@ app.include_router(users.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)
+app.include_router(subtasks.router)
 app.include_router(leave.router)
 app.include_router(dashboard.router)
+app.include_router(notifications.router)
+app.include_router(comments.router)
 
 
 @app.get("/")

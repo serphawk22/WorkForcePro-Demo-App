@@ -2,11 +2,12 @@
 User profile management routes.
 """
 import base64
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import User
+from app.models import User, UserRole
 from app.schemas import UserRead, UserUpdate
 from app.auth import get_current_user
 
@@ -32,6 +33,25 @@ async def get_my_profile(
         )
     
     return user
+
+
+@router.get("/employees", response_model=List[UserRead])
+async def get_all_employees(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get all active employees (accessible to both admin and employee).
+    Used for assigning tasks and subtasks.
+    """
+    # Get all active employees
+    statement = select(User).where(
+        User.role == UserRole.employee,
+        User.is_active == True
+    )
+    employees = session.exec(statement).all()
+    
+    return employees
 
 
 @router.put("/me", response_model=UserRead)

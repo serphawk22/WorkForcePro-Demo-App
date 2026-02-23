@@ -23,8 +23,8 @@ export function HeroSection() {
       <div className="relative z-10 container mx-auto px-6 py-24">
         <div className="max-w-3xl mx-auto text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30
-                          bg-primary/10 text-primary text-xs font-semibold uppercase tracking-widest mb-8
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-card glow-sm
+                          text-primary text-xs font-semibold uppercase tracking-widest mb-8
                           animate-fade-in">
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
             Workforce Intelligence Platform
@@ -50,7 +50,7 @@ export function HeroSection() {
             <Link
               href="/login"
               className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-bold
-                         text-primary-foreground gradient-primary shadow-primary
+                         text-primary-foreground gradient-primary shadow-primary glow-primary
                          hover:shadow-glow hover:scale-105 active:scale-95 transition-all duration-300"
             >
               Get Started Free <ArrowRight size={18} />
@@ -58,8 +58,8 @@ export function HeroSection() {
             <a
               href="#how-it-works"
               className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-bold
-                         text-primary border-2 border-primary/30 bg-primary/5
-                         hover:bg-primary/15 hover:border-primary/50 transition-all duration-300"
+                         text-primary glass-card glass-card-hover
+                         transition-all duration-300"
             >
               <PlayCircle size={18} /> See How It Works
             </a>
@@ -69,14 +69,16 @@ export function HeroSection() {
           <div className="grid grid-cols-3 gap-4 animate-fade-in-up" style={{ animationDelay: "0.45s" }}>
             {stats.map(({ icon: Icon, label, value }) => (
               <div key={label}
-                   className="p-5 rounded-2xl bg-card/80 backdrop-blur-sm border border-border/60
-                              shadow-card flex flex-col items-center gap-2 hover:shadow-primary/10
-                              hover:-translate-y-1 transition-all duration-300">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                   className="group relative p-5 rounded-2xl glass-card glass-card-hover overflow-hidden
+                              flex flex-col items-center gap-2
+                              transition-all duration-300">
+                {/* Gradient glow on hover */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative h-10 w-10 rounded-xl glass-light flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                   <Icon size={18} className="text-primary" />
                 </div>
-                <p className="text-2xl font-extrabold text-foreground">{value}</p>
-                <p className="text-xs text-muted-foreground font-medium text-center">{label}</p>
+                <p className="relative text-2xl font-extrabold text-foreground">{value}</p>
+                <p className="relative text-xs text-muted-foreground font-medium text-center">{label}</p>
               </div>
             ))}
           </div>
@@ -86,7 +88,7 @@ export function HeroSection() {
       {/* Wave divider */}
       <div className="absolute bottom-0 left-0 right-0 z-10">
         <svg viewBox="0 0 1440 60" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"
-             className="w-full fill-background-soft" style={{ height: "60px" }}>
+             className="w-full fill-secondary dark:fill-background-soft" style={{ height: "60px" }}>
           <path d="M0,30 C360,60 1080,0 1440,30 L1440,60 L0,60 Z" />
         </svg>
       </div>

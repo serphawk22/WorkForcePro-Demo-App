@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { NotificationDropdown } from "@/components/NotificationDropdown";
 
 export default function TopBar() {
   const { theme, setTheme } = useTheme();
@@ -44,7 +45,7 @@ export default function TopBar() {
   };
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
+    <header className="flex items-center justify-between glass-nav px-6 py-3">
       {/* Time & Date */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-1.5">
@@ -58,18 +59,15 @@ export default function TopBar() {
         {mounted && (
           <button
             onClick={() => setTheme(isDark ? "light" : "dark")}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            className="rounded-lg p-2 text-muted-foreground glass-light hover:text-foreground transition-colors"
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         )}
-        <button className="relative rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-          <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
-        </button>
+        <NotificationDropdown />
         <button 
           onClick={() => router.push("/profile")}
-          className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          className="rounded-lg p-1.5 text-muted-foreground glass-light hover:text-foreground transition-colors"
           title="Profile"
         >
           {getProfilePictureUrl() ? (
@@ -86,7 +84,7 @@ export default function TopBar() {
         </button>
         <button 
           onClick={logout}
-          className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          className="rounded-lg p-2 text-muted-foreground glass-light hover:bg-destructive/10 hover:text-destructive transition-colors"
           title="Logout"
         >
           <LogOut size={18} />

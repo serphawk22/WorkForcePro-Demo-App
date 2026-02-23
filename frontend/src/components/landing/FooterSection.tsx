@@ -14,8 +14,12 @@ const anchorLinks = [
 
 export function FooterSection() {
   return (
-    <footer className="bg-background-soft border-t border-border py-16">
-      <div className="container mx-auto px-6">
+    <footer className="bg-background-soft border-t border-border/50 py-16 relative overflow-hidden">
+      {/* Ambient orbs */}
+      <div className="absolute top-10 right-20 w-48 h-48 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 left-20 w-32 h-32 rounded-full bg-accent/5 blur-3xl pointer-events-none" />
+      
+      <div className="container mx-auto px-6 relative z-10">
         <div className="flex flex-col md:flex-row items-start justify-between gap-10">
           {/* Brand */}
           <div className="max-w-xs">
@@ -71,8 +75,8 @@ export function FooterSection() {
                 <a
                   key={i}
                   href="#"
-                  className="h-10 w-10 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20
-                             flex items-center justify-center text-primary hover:scale-110
+                  className="h-10 w-10 rounded-xl glass-card glass-card-hover
+                             flex items-center justify-center text-primary
                              transition-all duration-200"
                 >
                   <Icon size={16} />

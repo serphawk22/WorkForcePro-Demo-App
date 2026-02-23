@@ -104,20 +104,20 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-card">
+        <div className="rounded-2xl glass-card glow-sm p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-card-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground mt-1">Sign in to your account to continue</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
               {error}
             </div>
           )}
 
           {/* Default credentials hint */}
-          <div className="mb-6 p-3 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-sm">
+          <div className="mb-6 p-3 rounded-xl glass-light bg-blue-50/50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-sm">
             <div className="font-semibold mb-1">Default Admin Credentials:</div>
             <div className="flex flex-col gap-0.5 text-xs">
               <div><strong>Email:</strong> admin@gmail.com</div>
@@ -137,7 +137,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>
@@ -153,7 +153,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-border bg-input py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
                 />
               </div>
             </div>

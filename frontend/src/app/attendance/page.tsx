@@ -177,7 +177,7 @@ export default function AttendancePage() {
           ) : (
             <>
               {/* Punch In/Out Card */}
-              <div className="rounded-xl border border-border bg-card p-6 card-shadow">
+              <div className="rounded-xl glass-card glow-sm p-6">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="text-center md:text-left">
                     <h2 className="text-lg font-semibold text-card-foreground mb-2">Today&apos;s Session</h2>
@@ -209,7 +209,7 @@ export default function AttendancePage() {
                       <button
                         onClick={handlePunchIn}
                         disabled={isPunching}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl glass-button bg-green-600 hover:bg-green-700 text-white font-medium transition-colors disabled:opacity-50"
                       >
                         {isPunching ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                         Punch In
@@ -220,7 +220,7 @@ export default function AttendancePage() {
                       <button
                         onClick={handlePunchOut}
                         disabled={isPunching}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl glass-button bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50"
                       >
                         {isPunching ? <Loader2 className="h-5 w-5 animate-spin" /> : <Square className="h-5 w-5" />}
                         Punch Out
@@ -228,7 +228,7 @@ export default function AttendancePage() {
                     )}
                     
                     {status?.status === "completed" && (
-                      <div className="px-6 py-3 rounded-xl bg-secondary text-muted-foreground font-medium">
+                      <div className="px-6 py-3 rounded-xl glass-light text-muted-foreground font-medium">
                         Session Complete - {status.total_hours?.toFixed(2)}h
                       </div>
                     )}
