@@ -70,8 +70,8 @@ export default function AdminDashboard() {
   const activeTasks = stats?.pending_tasks || 0;
 
   // Task completion rate
-  const totalTasks = (taskStats?.done || 0) + (taskStats?.in_progress || 0) + (taskStats?.todo || 0);
-  const completionRate = totalTasks > 0 ? Math.round(((taskStats?.done || 0) / totalTasks) * 100) : 0;
+  const totalTasks = (taskStats?.approved || 0) + (taskStats?.in_progress || 0) + (taskStats?.todo || 0);
+  const completionRate = totalTasks > 0 ? Math.round(((taskStats?.approved || 0) / totalTasks) * 100) : 0;
 
   // Department performance mock data
   const deptPerformance = [
