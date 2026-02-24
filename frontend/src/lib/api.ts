@@ -92,6 +92,7 @@ export interface AttendanceRecord {
   punch_in: string | null;
   punch_out: string | null;
   total_hours: number | null;
+  is_active?: boolean;  // Added for UI state synchronization
   user_name?: string;
   user_email?: string;
 }
@@ -101,6 +102,7 @@ export interface AttendanceStatus {
   punch_in: string | null;
   punch_out: string | null;
   elapsed_seconds: number;
+  is_active: boolean;  // Added for UI state synchronization
   total_hours: number | null;
 }
 

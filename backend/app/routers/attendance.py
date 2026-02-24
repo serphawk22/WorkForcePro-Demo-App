@@ -66,7 +66,16 @@ async def punch_in(
     session.commit()
     session.refresh(attendance)
     
-    return attendance
+    # Return response with is_active flag for UI synchronization
+    return {
+        "id": attendance.id,
+        "user_id": attendance.user_id,
+        "date": attendance.date,
+        "punch_in": attendance.punch_in,
+        "punch_out": attendance.punch_out,
+        "total_hours": attendance.total_hours,
+        "is_active": True  # Just punched in, session is active
+    }
 
 
 @router.post("/punch-out", response_model=AttendanceRead)
@@ -112,7 +121,16 @@ async def punch_out(
     session.commit()
     session.refresh(attendance)
     
-    return attendance
+    # Return response with is_active flag for UI synchronization
+    return {
+        "id": attendance.id,
+        "user_id": attendance.user_id,
+        "date": attendance.date,
+        "punch_in": attendance.punch_in,
+        "punch_out": attendance.punch_out,
+        "total_hours": attendance.total_hours,
+        "is_active": False  # Just punched out, session is complete
+    }
 
 
 @router.get("/me", response_model=List[AttendanceRead])
@@ -166,7 +184,9 @@ async def get_attendance_status(
             "status": "not_started",
             "punch_in": None,
             "punch_out": None,
-            "elapsed_seconds": 0
+            "elapsed_seconds": 0,
+            "is_active": False,
+            "total_hours": None
         }
     
     elapsed = 0
@@ -176,16 +196,20 @@ async def get_attendance_status(
         elapsed = (attendance.punch_out - attendance.punch_in).total_seconds()
     
     status = "not_started"
+    is_active = False
     if attendance.punch_in and not attendance.punch_out:
         status = "working"
+        is_active = True
     elif attendance.punch_out:
         status = "completed"
+        is_active = False
     
     return {
         "status": status,
         "punch_in": attendance.punch_in.isoformat() if attendance.punch_in else None,
         "punch_out": attendance.punch_out.isoformat() if attendance.punch_out else None,
         "elapsed_seconds": int(elapsed),
+        "is_active": is_active,
         "total_hours": attendance.total_hours
     }
 
