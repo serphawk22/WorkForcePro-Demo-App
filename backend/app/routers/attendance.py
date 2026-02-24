@@ -1,7 +1,7 @@
 """
 Attendance management routes.
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -37,7 +37,7 @@ async def punch_in(
     
     if active_session:
         # Auto-close the previous session
-        active_session.punch_out = datetime.utcnow()
+        active_session.punch_out = datetime.now(timezone.utc)
         if active_session.punch_in:
             delta = active_session.punch_out - active_session.punch_in
             active_session.total_hours = round(delta.total_seconds() / 3600, 2)
@@ -60,7 +60,7 @@ async def punch_in(
     attendance = Attendance(
         user_id=current_user.id,
         date=today,
-        punch_in=datetime.utcnow()
+        punch_in=datetime.now(timezone.utc)
     )
     session.add(attendance)
     session.commit()
@@ -101,7 +101,7 @@ async def punch_out(
         )
     
     # Update with punch out time
-    attendance.punch_out = datetime.utcnow()
+    attendance.punch_out = datetime.now(timezone.utc)
     
     # Calculate total hours
     if attendance.punch_in:
@@ -171,7 +171,7 @@ async def get_attendance_status(
     
     elapsed = 0
     if attendance.punch_in and not attendance.punch_out:
-        elapsed = (datetime.utcnow() - attendance.punch_in).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - attendance.punch_in).total_seconds()
     elif attendance.punch_in and attendance.punch_out:
         elapsed = (attendance.punch_out - attendance.punch_in).total_seconds()
     

@@ -1,7 +1,7 @@
 """
 Database models using SQLModel.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from datetime import date as DateType
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
@@ -82,7 +82,7 @@ class User(UserBase, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UserCreate(SQLModel):
@@ -143,7 +143,7 @@ class Attendance(SQLModel, table=True):
     punch_in: Optional[datetime] = None
     punch_out: Optional[datetime] = None
     total_hours: Optional[float] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AttendanceCreate(SQLModel):
@@ -188,8 +188,8 @@ class Task(TaskBase, table=True):
     done_by_employee: bool = Field(default=False)  # True when employee marks task as done
     github_link: Optional[str] = Field(default=None, max_length=500)  # GitHub repository link
     deployed_link: Optional[str] = Field(default=None, max_length=500)  # Deployed application link
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TaskCreate(TaskBase):
@@ -240,8 +240,8 @@ class TaskComment(SQLModel, table=True):
     task_id: int = Field(foreign_key="tasks.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     comment: str = Field(min_length=1, max_length=2000)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TaskCommentCreate(SQLModel):
@@ -280,8 +280,8 @@ class Subtask(SQLModel, table=True):
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id", index=True)
     status: SubtaskStatus = Field(default=SubtaskStatus.todo)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SubtaskCreate(SQLModel):
@@ -338,7 +338,7 @@ class LeaveRequest(LeaveRequestBase, table=True):
     status: LeaveStatus = Field(default=LeaveStatus.pending)
     admin_comment: Optional[str] = None
     reviewed_by: Optional[int] = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reviewed_at: Optional[datetime] = None
 
 
@@ -382,7 +382,7 @@ class Notification(SQLModel, table=True):
     message: str = Field(max_length=500)
     task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")
     is_read: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class NotificationRead(SQLModel):

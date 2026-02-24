@@ -1,7 +1,7 @@
 """
 Subtask management routes for task delegation.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -213,7 +213,7 @@ async def update_subtask_status(
             )
     
     subtask.status = new_status
-    subtask.updated_at = datetime.utcnow()
+    subtask.updated_at = datetime.now(timezone.utc)
     session.add(subtask)
     session.commit()
     session.refresh(subtask)
@@ -268,7 +268,7 @@ async def update_subtask(
     for key, value in update_data.items():
         setattr(subtask, key, value)
     
-    subtask.updated_at = datetime.utcnow()
+    subtask.updated_at = datetime.now(timezone.utc)
     session.add(subtask)
     session.commit()
     session.refresh(subtask)

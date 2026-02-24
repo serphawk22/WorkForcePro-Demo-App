@@ -27,7 +27,11 @@ function formatTime(seconds: number): string {
 function formatDateTime(isoString: string | null): string {
   if (!isoString) return "--";
   const date = new Date(isoString);
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString("en-IN", { 
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit", 
+    minute: "2-digit" 
+  });
 }
 
 export default function AttendancePage() {

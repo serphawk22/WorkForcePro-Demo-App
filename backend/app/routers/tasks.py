@@ -1,7 +1,7 @@
 """
 Task management routes with flat structure and deliverable tracking.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -163,7 +163,7 @@ async def update_task_status(
                 )
     
     task.status = new_status
-    task.updated_at = datetime.utcnow()
+    task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()
     session.refresh(task)
@@ -357,7 +357,7 @@ async def update_task(
     for key, value in update_data.items():
         setattr(task, key, value)
     
-    task.updated_at = datetime.utcnow()
+    task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()
     session.refresh(task)

@@ -3,7 +3,7 @@ Dashboard endpoints for admins and employees.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from app.database import get_session
 from app.models import User, Task, Attendance, LeaveRequest, TaskStatus, LeaveStatus
 from app.auth import get_current_user, get_current_admin_user
@@ -145,7 +145,7 @@ async def get_employee_dashboard(
         # Active session - calculate hours from punch_in to now
         hours_worked = 0
         if current_session_record.punch_in:
-            delta = datetime.utcnow() - current_session_record.punch_in
+            delta = datetime.now(timezone.utc) - current_session_record.punch_in
             hours_worked = round(delta.total_seconds() / 3600, 2)
         
         current_session = {

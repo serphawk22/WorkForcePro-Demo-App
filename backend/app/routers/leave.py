@@ -1,7 +1,7 @@
 """
 Leave request management routes.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -206,7 +206,7 @@ async def review_leave_request(
     leave_request.status = review_data.status
     leave_request.admin_comment = review_data.admin_comment
     leave_request.reviewed_by = admin.id
-    leave_request.reviewed_at = datetime.utcnow()
+    leave_request.reviewed_at = datetime.now(timezone.utc)
     
     session.add(leave_request)
     session.commit()
