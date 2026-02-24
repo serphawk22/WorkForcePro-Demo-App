@@ -231,7 +231,7 @@ export interface Subtask {
   description: string | null;
   assigned_to: number | null;
   assigned_by: number;
-  status: "todo" | "in_progress" | "completed";
+  status: "todo" | "in_progress" | "completed" | "reviewing" | "approved" | "rejected";
   created_at: string;
   updated_at: string;
   assignee_name?: string;
