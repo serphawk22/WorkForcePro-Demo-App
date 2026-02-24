@@ -80,7 +80,7 @@ export default function EmployeeDashboard() {
       return;
     }
 
-    // Backend sends UTC time but SQLite strips timezone info from the ISO string
+    // Backend stores in UTC, ensure proper timezone parsing for accurate timer
     // If no 'Z' or timezone offset, append 'Z' to treat as UTC
     let punchInString = dashboardStats.current_session.punch_in;
     if (!punchInString.endsWith('Z') && !punchInString.match(/[+-]\d{2}:\d{2}$/)) {

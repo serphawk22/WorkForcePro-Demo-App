@@ -15,8 +15,8 @@ class Settings:
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False") == "True"
     
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./workforce.db")
+    # Database - PostgreSQL required
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://localhost/workforcepro")
     
     # JWT Authentication
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")

@@ -8,13 +8,13 @@ from typing import Generator
 
 load_dotenv()
 
-# Use SQLite for local development, PostgreSQL for production
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./workforce.db")
+# Use PostgreSQL for all environments
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# SQLite specific configuration
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set. Please configure PostgreSQL.")
 
-engine = create_engine(DATABASE_URL, echo=True, connect_args=connect_args)
+engine = create_engine(DATABASE_URL, echo=True)
 
 
 def create_db_and_tables():

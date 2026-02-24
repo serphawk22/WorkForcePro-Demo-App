@@ -27,7 +27,7 @@ function formatTime(seconds: number): string {
 function formatDateTime(isoString: string | null): string {
   if (!isoString) return "--";
   
-  // Backend sends UTC time but SQLite strips timezone info from the ISO string
+  // Backend stores in UTC, but datetime serialization may not include 'Z' marker
   // If no 'Z' or timezone offset, append 'Z' to treat as UTC
   let dateString = isoString;
   if (!dateString.endsWith('Z') && !dateString.includes('+') && !dateString.includes('T')) {
@@ -49,7 +49,7 @@ function formatDateTime(isoString: string | null): string {
 }
 
 function formatDate(dateString: string): string {
-  // Backend sends UTC time but SQLite strips timezone info
+  // Backend stores in UTC, ensure proper timezone parsing
   let processedDateString = dateString;
   if (!dateString.endsWith('Z') && !dateString.includes('+') && !dateString.includes('T')) {
     // Just a date, add time and UTC marker
@@ -256,8 +256,8 @@ export default function AttendancePage() {
                     )}
                     
                     {status?.status === "completed" && (
-                      <div className="px-6 py-3 rounded-xl glass-light text-muted-foreground font-medium">
-                        Session Complete - {status.total_hours?.toFixed(2)}h
+                      <div className="px-6 py-3 rounded-xl glass-light text-green-600 font-medium">
+                        Today&apos;s Work Hours: {status.total_hours?.toFixed(2)}h
                       </div>
                     )}
                   </div>
