@@ -12,11 +12,19 @@ Vercel automatically detects Next.js and configures:
 Set in Vercel project settings:
 
 ### Required
-- `NEXT_PUBLIC_API_URL` - Your Railway backend URL (e.g., `https://your-app.railway.app`)
+- `NEXT_PUBLIC_API_URL` - Your Railway backend URL (e.g., `https://workforcepro-production.up.railway.app`)
+
+**CRITICAL - HTTPS Required:**
+- ⚠️ **MUST use HTTPS** (not HTTP) to avoid Mixed Content errors
+- Railway provides HTTPS automatically
+- Frontend (HTTPS) cannot call backend (HTTP) - browser blocks it
+- Correct: `https://workforcepro-production.up.railway.app`
+- Wrong: `http://workforcepro-production.up.railway.app`
 
 **Important:** 
 - Environment variables prefixed with `NEXT_PUBLIC_` are exposed to the browser
 - Other variables are only available during build time
+- After changing env vars in Vercel, **redeploy** to apply changes
 
 ## Automatic Deployments
 
