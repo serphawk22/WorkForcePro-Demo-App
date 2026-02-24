@@ -577,7 +577,7 @@ export default function TasksPage() {
                               </div>
                             ) : (
                               <div className="text-center text-muted-foreground text-xs py-4">
-                                No subtasks yet. Click "Subtask" to create one.
+                                No subtasks yet. Click &quot;Subtask&quot; to create one.
                               </div>
                             )}
                           </div>

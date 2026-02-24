@@ -118,7 +118,7 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-foreground">Workforce Snapshot</h2>
-                    <p className="text-xs text-muted-foreground">Today's attendance and activity</p>
+                    <p className="text-xs text-muted-foreground">Today&apos;s attendance and activity</p>
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground">
