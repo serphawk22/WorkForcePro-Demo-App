@@ -203,9 +203,20 @@ async def get_attendance_status(
     
     elapsed = 0
     if attendance.punch_in and not attendance.punch_out:
-        elapsed = (datetime.now(timezone.utc) - attendance.punch_in).total_seconds()
+        # Ensure punch_in is timezone-aware (convert if naive)
+        punch_in_aware = attendance.punch_in
+        if punch_in_aware.tzinfo is None:
+            punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+        elapsed = (datetime.now(timezone.utc) - punch_in_aware).total_seconds()
     elif attendance.punch_in and attendance.punch_out:
-        elapsed = (attendance.punch_out - attendance.punch_in).total_seconds()
+        # Ensure both are timezone-aware (convert if naive)
+        punch_in_aware = attendance.punch_in
+        punch_out_aware = attendance.punch_out
+        if punch_in_aware.tzinfo is None:
+            punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+        if punch_out_aware.tzinfo is None:
+            punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
+        elapsed = (punch_out_aware - punch_in_aware).total_seconds()
     
     status = "not_started"
     is_active = False

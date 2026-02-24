@@ -152,7 +152,12 @@ async def get_employee_dashboard(
         hours_worked = 0
         elapsed_seconds = 0
         if current_session_record.punch_in:
-            delta = datetime.now(timezone.utc) - current_session_record.punch_in
+            # Ensure punch_in is timezone-aware (convert if naive)
+            punch_in_aware = current_session_record.punch_in
+            if punch_in_aware.tzinfo is None:
+                punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+            
+            delta = datetime.now(timezone.utc) - punch_in_aware
             hours_worked = round(delta.total_seconds() / 3600, 2)
             elapsed_seconds = int(delta.total_seconds())
         
@@ -177,7 +182,15 @@ async def get_employee_dashboard(
             # Show today's completed session
             elapsed_seconds = 0
             if completed_session_record.punch_in and completed_session_record.punch_out:
-                delta = completed_session_record.punch_out - completed_session_record.punch_in
+                # Ensure datetimes are timezone-aware (convert if naive)
+                punch_in_aware = completed_session_record.punch_in
+                punch_out_aware = completed_session_record.punch_out
+                if punch_in_aware.tzinfo is None:
+                    punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+                if punch_out_aware.tzinfo is None:
+                    punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
+                
+                delta = punch_out_aware - punch_in_aware
                 elapsed_seconds = int(delta.total_seconds())
             
             current_session = {
