@@ -373,7 +373,7 @@ export default function TasksPage() {
                             {taskSubtasks[task.id] && taskSubtasks[task.id].length > 0 && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
                                 <ListTree size={10} />
-                                {taskSubtasks[task.id].filter(s => s.status === "completed" || s.status === "approved").length}/{taskSubtasks[task.id].length}
+                                {taskSubtasks[task.id].filter(s => s.status === "completed").length}/{taskSubtasks[task.id].length}
                               </span>
                             )}
                           </div>
