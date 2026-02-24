@@ -268,7 +268,7 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                      <span>{taskStats?.done || 0} completed</span>
+                      <span>{taskStats?.approved || 0} completed</span>
                       <span>{totalTasks} total tasks</span>
                     </div>
                   </div>
