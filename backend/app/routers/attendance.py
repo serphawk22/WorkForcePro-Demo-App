@@ -39,7 +39,14 @@ async def punch_in(
         # Auto-close the previous session
         active_session.punch_out = datetime.now(timezone.utc)
         if active_session.punch_in:
-            delta = active_session.punch_out - active_session.punch_in
+            punch_in_aware = active_session.punch_in
+            punch_out_aware = active_session.punch_out
+            if punch_in_aware.tzinfo is None:
+                punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+            if punch_out_aware.tzinfo is None:
+                punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
+            
+            delta = punch_out_aware - punch_in_aware
             active_session.total_hours = round(delta.total_seconds() / 3600, 2)
         session.add(active_session)
     
@@ -88,33 +95,33 @@ async def punch_out(
     Punch out for the current day.
     Updates the attendance record with punch_out time and calculates total hours.
     """
-    today = date.today()
-    
-    # Find today's attendance
+    # Find active session (timezone-safe) - don't use date field
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
-        Attendance.date == today
-    )
+        Attendance.punch_out == None  # Find active session
+    ).order_by(Attendance.punch_in.desc())  # Get most recent
+    
     attendance = session.exec(statement).first()
     
     if not attendance:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No punch-in record found for today. Please punch in first."
-        )
-    
-    if attendance.punch_out:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Already punched out for today."
+            detail="No active punch-in session found. Please punch in first."
         )
     
     # Update with punch out time
     attendance.punch_out = datetime.now(timezone.utc)
     
-    # Calculate total hours
+    # Calculate total hours (handle timezone-naive datetimes)
     if attendance.punch_in:
-        delta = attendance.punch_out - attendance.punch_in
+        punch_in_aware = attendance.punch_in
+        punch_out_aware = attendance.punch_out
+        if punch_in_aware.tzinfo is None:
+            punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
+        if punch_out_aware.tzinfo is None:
+            punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
+        
+        delta = punch_out_aware - punch_in_aware
         attendance.total_hours = round(delta.total_seconds() / 3600, 2)
     
     session.add(attendance)

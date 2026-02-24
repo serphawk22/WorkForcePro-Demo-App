@@ -136,9 +136,7 @@ export default function EmployeeDashboard() {
     try {
       await punchOut();
       toast.success("Punched out successfully!");
-      // Stop the live timer
-      setIsActive(false);
-      // Fetch updated data to get completed session total
+      // Reload data - backend will return completed session
       await fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to punch out";
