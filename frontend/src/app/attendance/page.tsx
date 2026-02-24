@@ -27,10 +27,23 @@ function formatTime(seconds: number): string {
 function formatDateTime(isoString: string | null): string {
   if (!isoString) return "--";
   const date = new Date(isoString);
+  // Display time in IST (Kolkata timezone)
   return date.toLocaleTimeString("en-IN", { 
     timeZone: "Asia/Kolkata",
     hour: "2-digit", 
-    minute: "2-digit" 
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  // Display date in IST (Kolkata timezone)
+  return date.toLocaleDateString("en-IN", { 
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "numeric"
   });
 }
 
@@ -289,7 +302,7 @@ export default function AttendancePage() {
                             </div>
                           </td>
                         )}
-                        <td className="py-3.5 pl-5 text-card-foreground">{new Date(record.date).toLocaleDateString()}</td>
+                        <td className="py-3.5 pl-5 text-card-foreground">{formatDate(record.date)}</td>
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_in)}</td>
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_out)}</td>
                         <td className="py-3.5 text-card-foreground font-medium">
