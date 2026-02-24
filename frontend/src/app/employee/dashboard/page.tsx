@@ -80,7 +80,13 @@ export default function EmployeeDashboard() {
       return;
     }
 
-    const punchInTime = new Date(dashboardStats.current_session.punch_in).getTime();
+    // Backend sends UTC time but SQLite strips timezone info from the ISO string
+    // If no 'Z' or timezone offset, append 'Z' to treat as UTC
+    let punchInString = dashboardStats.current_session.punch_in;
+    if (!punchInString.endsWith('Z') && !punchInString.match(/[+-]\d{2}:\d{2}$/)) {
+      punchInString = punchInString + 'Z';
+    }
+    const punchInTime = new Date(punchInString).getTime();
     
     const updateElapsed = () => {
       const now = Date.now();

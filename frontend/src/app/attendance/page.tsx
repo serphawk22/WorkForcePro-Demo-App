@@ -26,7 +26,19 @@ function formatTime(seconds: number): string {
 
 function formatDateTime(isoString: string | null): string {
   if (!isoString) return "--";
-  const date = new Date(isoString);
+  
+  // Backend sends UTC time but SQLite strips timezone info from the ISO string
+  // If no 'Z' or timezone offset, append 'Z' to treat as UTC
+  let dateString = isoString;
+  if (!dateString.endsWith('Z') && !dateString.includes('+') && !dateString.includes('T')) {
+    // Has no time component, just date
+    dateString = dateString + 'T00:00:00Z';
+  } else if (!dateString.endsWith('Z') && !dateString.match(/[+-]\d{2}:\d{2}$/)) {
+    // Has time but no timezone marker - append Z for UTC
+    dateString = dateString + 'Z';
+  }
+  
+  const date = new Date(dateString);
   // Display time in IST (Kolkata timezone)
   return date.toLocaleTimeString("en-IN", { 
     timeZone: "Asia/Kolkata",
@@ -37,7 +49,17 @@ function formatDateTime(isoString: string | null): string {
 }
 
 function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+  // Backend sends UTC time but SQLite strips timezone info
+  let processedDateString = dateString;
+  if (!dateString.endsWith('Z') && !dateString.includes('+') && !dateString.includes('T')) {
+    // Just a date, add time and UTC marker
+    processedDateString = dateString + 'T00:00:00Z';
+  } else if (!dateString.endsWith('Z') && !dateString.match(/[+-]\d{2}:\d{2}$/)) {
+    // Has time but no timezone marker
+    processedDateString = dateString + 'Z';
+  }
+  
+  const date = new Date(processedDateString);
   // Display date in IST (Kolkata timezone)
   return date.toLocaleDateString("en-IN", { 
     timeZone: "Asia/Kolkata",
