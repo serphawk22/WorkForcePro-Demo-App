@@ -121,14 +121,8 @@ export default function EmployeeDashboard() {
     try {
       await punchIn();
       toast.success("Punched in successfully!");
-      // HARD RESET TIMER - start from 00:00:00
-      setSeconds(0);
-      setIsActive(true);
-      // Update dashboard stats only (don't recalculate timer)
-      const statsResponse = await fetchEmployeeDashboard();
-      if (statsResponse.data) {
-        setDashboardStats(statsResponse.data);
-      }
+      // Fetch fresh data to update dashboard and timer
+      await fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Failed to punch in";
       toast.error(errorMessage);

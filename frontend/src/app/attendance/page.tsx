@@ -130,14 +130,8 @@ export default function AttendancePage() {
       setIsPunching(false);
     } else  {
       toast.success("Punched in successfully!");
-      // HARD RESET TIMER - start from 00:00:00
-      setSeconds(0);
-      setIsActive(true);
-      // Update status without recalculating timer
-      const statusResult = await getAttendanceStatus();
-      if (statusResult.data) {
-        setStatus(statusResult.data);
-      }
+      // Reload all data to refresh timer and status
+      await loadData();
       setIsPunching(false);
     }
   };
@@ -150,9 +144,7 @@ export default function AttendancePage() {
       setIsPunching(false);
     } else {
       toast.success("Punched out successfully!");
-      // Stop the timer
-      setIsActive(false);
-      // Reload data to get final total
+      // Reload all data to get final total and update status
       await loadData();
       setIsPunching(false);
     }
