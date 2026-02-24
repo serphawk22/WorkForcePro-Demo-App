@@ -144,14 +144,17 @@ async def get_employee_dashboard(
     if current_session_record:
         # Active session - calculate hours from punch_in to now
         hours_worked = 0
+        elapsed_seconds = 0
         if current_session_record.punch_in:
             delta = datetime.now(timezone.utc) - current_session_record.punch_in
             hours_worked = round(delta.total_seconds() / 3600, 2)
+            elapsed_seconds = int(delta.total_seconds())
         
         current_session = {
             "clocked_in": True,
             "punch_in": current_session_record.punch_in.isoformat() if current_session_record.punch_in else None,
-            "hours_worked": hours_worked
+            "hours_worked": hours_worked,
+            "elapsed_seconds": elapsed_seconds
         }
     else:
         # No active session - check for today's completed session
@@ -165,11 +168,17 @@ async def get_employee_dashboard(
         
         if completed_session_record:
             # Show today's completed session
+            elapsed_seconds = 0
+            if completed_session_record.punch_in and completed_session_record.punch_out:
+                delta = completed_session_record.punch_out - completed_session_record.punch_in
+                elapsed_seconds = int(delta.total_seconds())
+            
             current_session = {
                 "clocked_in": False,
                 "punch_in": completed_session_record.punch_in.isoformat() if completed_session_record.punch_in else None,
                 "punch_out": completed_session_record.punch_out.isoformat() if completed_session_record.punch_out else None,
-                "hours_worked": completed_session_record.total_hours or 0
+                "hours_worked": completed_session_record.total_hours or 0,
+                "elapsed_seconds": elapsed_seconds
             }
     
     # Tasks due today (not yet approved)

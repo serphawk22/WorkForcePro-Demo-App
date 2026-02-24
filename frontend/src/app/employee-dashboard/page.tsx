@@ -60,19 +60,15 @@ export default function EmployeeDashboard() {
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
         
-        // Initialize timer if actively working
+        // Initialize timer using server-provided elapsed_seconds (handles timezone correctly)
         const isWorking = statsResponse.data.current_session?.clocked_in || false;
-        if (isWorking && statsResponse.data.current_session?.punch_in) {
-          const punchInTime = new Date(statsResponse.data.current_session.punch_in).getTime();
-          const now = Date.now();
-          const elapsedSeconds = Math.floor((now - punchInTime) / 1000);
-          setSeconds(elapsedSeconds);
+        if (isWorking && statsResponse.data.current_session) {
+          // Use server-calculated elapsed time to avoid timezone issues
+          setSeconds(statsResponse.data.current_session.elapsed_seconds || 0);
           setIsActive(true);
         } else if (statsResponse.data.current_session && !isWorking) {
-          // Completed session for today - show total hours
-          const totalHours = statsResponse.data.current_session.hours_worked || 0;
-          const totalSeconds = Math.floor(totalHours * 3600);
-          setSeconds(totalSeconds);
+          // Completed session for today - use server-provided elapsed_seconds
+          setSeconds(statsResponse.data.current_session.elapsed_seconds || 0);
           setIsActive(false);
         } else {
           setSeconds(0);

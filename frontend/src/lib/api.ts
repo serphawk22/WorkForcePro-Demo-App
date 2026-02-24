@@ -169,7 +169,9 @@ export interface EmployeeDashboardStats {
   current_session: {
     clocked_in: boolean;
     punch_in: string | null;
+    punch_out?: string | null;
     hours_worked: number;
+    elapsed_seconds: number;
   } | null;
   tasks_due_today: number;
   tasks_completed: number;

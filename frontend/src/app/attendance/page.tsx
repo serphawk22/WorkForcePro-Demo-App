@@ -57,13 +57,10 @@ export default function AttendancePage() {
     if (statusResult.data) {
       setStatus(statusResult.data);
       
-      // Initialize timer based on current session
-      if (statusResult.data.status === "working" && statusResult.data.punch_in) {
-        // Calculate elapsed time from punch_in to now
-        const punchInTime = new Date(statusResult.data.punch_in).getTime();
-        const now = Date.now();
-        const elapsedSeconds = Math.floor((now - punchInTime) / 1000);
-        setSeconds(elapsedSeconds);
+      // Initialize timer using server-provided elapsed_seconds (handles timezone correctly)
+      if (statusResult.data.status === "working") {
+        // Use server-calculated elapsed time to avoid timezone issues
+        setSeconds(statusResult.data.elapsed_seconds || 0);
         setIsActive(true);
       } else if (statusResult.data.status === "completed") {
         // Show total elapsed time for completed session
