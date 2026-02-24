@@ -131,11 +131,17 @@ async def get_employee_dashboard(
     """
     today = date.today()
     
-    # Current session - check for active session first
+    # Calculate today's UTC time range for timezone-safe queries
+    now = datetime.now(timezone.utc)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    # Current session - check for active session first (timezone-safe)
     current_session_record = session.exec(
         select(Attendance).where(
             Attendance.user_id == current_user.id,
-            Attendance.date == today,
+            Attendance.punch_in >= start_of_day,
+            Attendance.punch_in < end_of_day,
             Attendance.punch_out.is_(None)
         )
     ).first()
@@ -157,11 +163,12 @@ async def get_employee_dashboard(
             "elapsed_seconds": elapsed_seconds
         }
     else:
-        # No active session - check for today's completed session
+        # No active session - check for today's completed session (timezone-safe)
         completed_session_record = session.exec(
             select(Attendance).where(
                 Attendance.user_id == current_user.id,
-                Attendance.date == today,
+                Attendance.punch_in >= start_of_day,
+                Attendance.punch_in < end_of_day,
                 Attendance.punch_out.isnot(None)
             )
         ).first()

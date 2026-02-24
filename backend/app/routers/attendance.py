@@ -1,7 +1,7 @@
 """
 Attendance management routes.
 """
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -155,11 +155,17 @@ async def get_today_attendance(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user's attendance for today."""
-    today = date.today()
+    """Get current user's attendance for today (timezone-safe)."""
+    # Calculate today's UTC time range (start and end of day)
+    now = datetime.now(timezone.utc)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    # Query by punch_in timestamp range instead of date field (timezone-safe)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
-        Attendance.date == today
+        Attendance.punch_in >= start_of_day,
+        Attendance.punch_in < end_of_day
     )
     attendance = session.exec(statement).first()
     return attendance
@@ -171,11 +177,17 @@ async def get_attendance_status(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user's attendance status for today."""
-    today = date.today()
+    """Get current user's attendance status for today (timezone-safe)."""
+    # Calculate today's UTC time range (start and end of day)
+    now = datetime.now(timezone.utc)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    # Query by punch_in timestamp range instead of date field (timezone-safe)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
-        Attendance.date == today
+        Attendance.punch_in >= start_of_day,
+        Attendance.punch_in < end_of_day
     )
     attendance = session.exec(statement).first()
     
