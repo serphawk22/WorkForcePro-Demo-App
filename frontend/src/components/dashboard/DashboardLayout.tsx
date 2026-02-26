@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import AppSidebar from "./AppSidebar";
 import TopBar from "./TopBar";
+import AIAssistantLauncher from "../AIAssistantLauncher";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -23,6 +24,9 @@ export default function DashboardLayout({ children, role = "admin", userName, us
           {children}
         </main>
       </div>
+
+      {/* AI Assistant Launcher - Floating Button */}
+      <AIAssistantLauncher />
     </div>
   );
 }

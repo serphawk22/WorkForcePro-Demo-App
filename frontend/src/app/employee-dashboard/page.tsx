@@ -5,7 +5,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar } from "lucide-react";
+import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy } from "lucide-react";
 import { fetchEmployeeDashboard, punchIn, punchOut, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -156,14 +156,14 @@ export default function EmployeeDashboard() {
       
       // Show appropriate toast message
       if (selectedStatus === "done") {
-        toast.success("Task submitted for review!");
+        toast.success("Project submitted for review!");
       } else {
-        toast.success("Task status updated!");
+        toast.success("Project status updated!");
       }
       
       fetchData();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to update task";
+      const errorMessage = error instanceof Error ? error.message : "Failed to update project";
       toast.error(errorMessage);
     }
   };
@@ -252,7 +252,7 @@ export default function EmployeeDashboard() {
               icon={AlertCircle}
               label="Due Today"
               value={tasksDueToday}
-              subtitle="Tasks due today"
+              subtitle="Projects due today"
               trend={tasksDueToday > 0 ? "Attention" : "Good"}
               trendType={tasksDueToday > 0 ? "down" : "up"}
             />
@@ -294,13 +294,13 @@ export default function EmployeeDashboard() {
             />
           </div>
 
-          {/* Active Assignments */}
+          {/* Active Projects */}
           <div className="rounded-xl border border-border bg-card p-6 card-shadow">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-card-foreground flex items-center gap-2">
-                <Building2 size={18} className="text-accent" /> Active Assignments
+                <Building2 size={18} className="text-accent" /> Active Projects
               </h3>
-              <Link href="/tasks" className="text-sm font-medium text-accent hover:underline">View All</Link>
+              <Link href="/project-management" className="text-sm font-medium text-accent hover:underline">View All</Link>
             </div>
 
             {/* Table */}
@@ -308,13 +308,13 @@ export default function EmployeeDashboard() {
               {activeTasks.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle size={32} className="mx-auto mb-2 text-green-500" />
-                  <p>No active tasks! Great job!</p>
+                  <p>No active projects! Great job!</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
-                      <th className="pb-3 text-left font-semibold">Task</th>
+                      <th className="pb-3 text-left font-semibold">Project</th>
                       <th className="pb-3 text-left font-semibold">Priority</th>
                       <th className="pb-3 text-left font-semibold">Status</th>
                       <th className="pb-3 text-left font-semibold">Due Date</th>
@@ -329,7 +329,15 @@ export default function EmployeeDashboard() {
                             <span className="h-2 w-2 rounded-full bg-accent" />
                             <div>
                               <p className="font-medium text-card-foreground">{task.title}</p>
-                              <p className="text-xs text-muted-foreground">TSK-{task.id.toString().padStart(4, "0")}</p>
+                              {task.public_id && (
+                                <button
+                                  onClick={() => { navigator.clipboard.writeText(task.public_id!); toast.success("Ref ID copied!"); }}
+                                  className="inline-flex items-center gap-1 mt-0.5 rounded px-1.5 py-0.5 text-xs font-mono font-semibold bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 transition-colors"
+                                >
+                                  {task.public_id}
+                                  <Copy size={10} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </td>

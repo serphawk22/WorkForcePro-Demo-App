@@ -108,9 +108,11 @@ export interface AttendanceStatus {
 
 export interface Task {
   id: number;
+  public_id: string;
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high";
+  start_date: string;  // Auto-recorded start date
   due_date: string | null;
   assigned_to: number | null;
   assigned_by: number;
@@ -123,6 +125,7 @@ export interface Task {
   assignee_name?: string;
   assignee_email?: string;
   assigned_by_name?: string;
+  progress?: number;  // Task completion progress (0-100)
 }
 
 export interface TaskCreate {
@@ -165,6 +168,20 @@ export interface AdminDashboardStats {
   avg_daily_hours: number;
   recent_activities: any[];
   leave_requests_pending: number;
+  // Real-time extended fields
+  employees_on_leave_today: number;
+  late_checkins_today: number;
+  active_tasks_count: number;
+  total_tasks_count: number;
+  upcoming_tasks: {
+    id: number;
+    public_id: string;
+    title: string;
+    due_date: string | null;
+    priority: 'low' | 'medium' | 'high';
+    status: string;
+    assignee_name: string | null;
+  }[];
 }
 
 export interface EmployeeDashboardStats {
@@ -193,12 +210,41 @@ export interface DashboardStats {
 
 export interface TaskStats {
   total: number;
-  todo: number;
+  completed: number;  // Approved tasks
   in_progress: number;
+  overdue: number;  // Tasks past due date and not approved
+  completion_percent: number;  // Overall completion percentage
+  // Legacy fields for backward compatibility
+  todo: number;
   submitted: number;
   reviewing: number;
   approved: number;
   rejected: number;
+}
+
+export interface EmployeePerformance {
+  period: string;
+  score: number;
+  department?: string;
+}
+
+export interface AttendanceStats {
+  present: number;
+  absent: number;
+  on_leave: number;
+  total: number;
+}
+
+export interface EmployeeListItem {
+  id: number;
+  name: string;
+  email: string;
+  role?: string;
+  contract_type?: string;
+  team?: string;
+  workspace?: string;
+  is_active: boolean;
+  attendance_rate?: number;
 }
 
 export interface Notification {
@@ -221,6 +267,7 @@ export interface TaskComment {
   user_name?: string;
   user_email?: string;
   user_role?: "admin" | "employee";
+  user_profile_picture?: string | null;
 }
 
 export interface TaskCommentCreate {
@@ -228,9 +275,25 @@ export interface TaskCommentCreate {
   comment: string;
 }
 
+export interface SubtaskTree extends Subtask {
+  children: SubtaskTree[];
+}
+
+export interface TaskDetailData extends Task {
+  assignee_profile_picture?: string | null;
+}
+
+export interface ProjectDetails {
+  task: TaskDetailData;
+  subtasks: SubtaskTree[];
+  comments: TaskComment[];
+}
+
 export interface Subtask {
   id: number;
+  public_id: string;
   parent_task_id: number;
+  parent_subtask_id?: number | null;  // For nested subtasks
   title: string;
   description: string | null;
   assigned_to: number | null;
@@ -241,12 +304,14 @@ export interface Subtask {
   assignee_name?: string;
   assignee_email?: string;
   assigned_by_name?: string;
+  children?: Subtask[];  // For hierarchical structure
 }
 
 export interface SubtaskCreate {
   title: string;
   description?: string;
   assigned_to?: number;
+  parent_subtask_id?: number;  // For creating nested subtasks
 }
 
 // ==================== AUTH HELPERS ====================
@@ -548,6 +613,57 @@ export async function fetchEmployees(): Promise<ApiResponse<User[]>> {
 }
 
 /**
+ * Get employee performance data (admin only).
+ */
+export async function getEmployeePerformance(): Promise<ApiResponse<EmployeePerformance[]>> {
+  const cacheKey = 'employee-performance';
+  const cached = getCached<EmployeePerformance[]>(cacheKey);
+  if (cached) {
+    return { data: cached };
+  }
+
+  const result = await apiFetch<EmployeePerformance[]>("/admin/employee-performance");
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
+}
+
+/**
+ * Get attendance statistics (admin only).
+ */
+export async function getAttendanceStats(): Promise<ApiResponse<AttendanceStats>> {
+  const cacheKey = 'attendance-stats';
+  const cached = getCached<AttendanceStats>(cacheKey);
+  if (cached) {
+    return { data: cached };
+  }
+
+  const result = await apiFetch<AttendanceStats>("/admin/attendance-stats");
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
+}
+
+/**
+ * Get employees list with performance data (admin only).
+ */
+export async function getEmployeesList(): Promise<ApiResponse<EmployeeListItem[]>> {
+  const cacheKey = 'employees-list';
+  const cached = getCached<EmployeeListItem[]>(cacheKey);
+  if (cached) {
+    return { data: cached };
+  }
+
+  const result = await apiFetch<EmployeeListItem[]>("/admin/employees-list");
+  if (result.data) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
+}
+
+/**
  * Deactivate a user (admin only).
  */
 export async function deactivateUser(
@@ -717,6 +833,32 @@ export async function updateTask(
     method: "PUT",
     body: JSON.stringify(taskData),
   });
+}
+
+/**
+ * Update task links (GitHub and deployed) - employee or admin.
+ */
+export async function updateTaskLinks(
+  taskId: number,
+  github_link?: string | null,
+  deployed_link?: string | null
+): Promise<ApiResponse<Task>> {
+  const params = new URLSearchParams();
+  if (github_link !== undefined) params.append("github_link", github_link || "");
+  if (deployed_link !== undefined) params.append("deployed_link", deployed_link || "");
+  
+  return apiFetch<Task>(`/tasks/${taskId}/links?${params.toString()}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Get full project details including task, subtasks tree, and comments.
+ */
+export async function getProjectDetails(
+  taskId: number
+): Promise<ApiResponse<ProjectDetails>> {
+  return apiFetch<ProjectDetails>(`/tasks/${taskId}/details`);
 }
 
 /**
@@ -1040,4 +1182,28 @@ export async function deleteSubtask(subtaskId: number): Promise<ApiResponse<{ me
   });
 }
 
+/**
+ * Create a comment on a task.
+ */
+export async function createComment(
+  commentData: TaskCommentCreate
+): Promise<ApiResponse<TaskComment>> {
+  return apiFetch<TaskComment>(`/comments/`, {
+    method: "POST",
+    body: JSON.stringify(commentData),
+  });
+}
+
 export type { ApiResponse, LoginResponse, RegisterResponse };
+
+export interface PublicIdSearchResult {
+  type: 'task' | 'subtask';
+  task_id: number;
+  subtask_id: number | null;
+  public_id: string;
+}
+
+export async function searchByPublicId(query: string): Promise<ApiResponse<PublicIdSearchResult>> {
+  return apiFetch<PublicIdSearchResult>(`/tasks/search/by-ref?query=${encodeURIComponent(query)}`);
+}
+

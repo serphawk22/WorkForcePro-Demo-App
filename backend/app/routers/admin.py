@@ -9,7 +9,8 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models import (
     User, UserRead, UserRole, Attendance, Task, LeaveRequest,
-    TaskStatus, LeaveStatus, DashboardStats, Notification, TaskComment, Subtask
+    TaskStatus, LeaveStatus, DashboardStats, Notification, TaskComment, Subtask,
+    EmployeePerformance, AttendanceStats, EmployeeListItem
 )
 from app.auth import get_current_admin_user
 
@@ -246,3 +247,104 @@ async def delete_user(
     session.commit()
     
     return {"message": f"User {user_email} has been permanently deleted along with all associated data"}
+
+
+@router.get("/employee-performance", response_model=List[EmployeePerformance])
+async def get_employee_performance(
+    request: Request,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Get employee performance data for charts (admin only)."""
+    # Mock performance data - replace with actual calculations
+    performance_data = [
+        EmployeePerformance(period="Jan", score=75, department="Engineering"),
+        EmployeePerformance(period="Feb", score=82, department="Engineering"),
+        EmployeePerformance(period="Mar", score=68, department="Engineering"),
+        EmployeePerformance(period="Apr", score=91, department="Engineering"),
+        EmployeePerformance(period="May", score=78, department="Engineering"),
+        EmployeePerformance(period="Jun", score=87, department="Engineering"),
+    ]
+    return performance_data
+
+
+@router.get("/attendance-stats", response_model=AttendanceStats)
+async def get_attendance_stats(
+    request: Request,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Get attendance statistics for dashboard (admin only)."""
+    # Get today's attendance data
+    today = date.today()
+    
+    # Count employees with attendance records today
+    present_count = len(session.exec(
+        select(Attendance).where(
+            Attendance.date == today,
+            Attendance.punch_in != None
+        )
+    ).all())
+    
+    # Get total employees
+    total_employees = len(session.exec(
+        select(User).where(User.role == UserRole.employee, User.is_active == True)
+    ).all())
+    
+    # Count employees on leave today (simplified - using pending leaves as proxy)
+    on_leave_count = len(session.exec(
+        select(LeaveRequest).where(
+            LeaveRequest.status == LeaveStatus.approved,
+            LeaveRequest.start_date <= today,
+            LeaveRequest.end_date >= today
+        )
+    ).all())
+    
+    # Calculate absent (total - present - on_leave)
+    absent_count = max(0, total_employees - present_count - on_leave_count)
+    
+    return AttendanceStats(
+        present=present_count,
+        absent=absent_count,
+        on_leave=on_leave_count,
+        total=total_employees
+    )
+
+
+@router.get("/employees-list", response_model=List[EmployeeListItem])
+async def get_employees_list(
+    request: Request,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user)
+):
+    """Get employees list with performance data (admin only)."""
+    # Get all employees
+    employees = session.exec(
+        select(User).where(User.role == UserRole.employee)
+    ).all()
+    
+    employees_list = []
+    for emp in employees:
+        # Calculate attendance rate (simplified - mock data)
+        # In a real app, this would calculate actual attendance percentage
+        attendance_rate = min(95, max(70, hash(emp.email) % 30 + 70))  # Mock: 70-95%
+        
+        # Determine role, team, etc. (mock data)
+        roles = ["UX Engineer", "Senior Manager", "Product Manager", "Developer", "Designer"]
+        teams = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+        workspaces = ["Remote", "On-site", "Hybrid"]
+        
+        employee_item = EmployeeListItem(
+            id=emp.id,
+            name=emp.name,
+            email=emp.email,
+            role=roles[emp.id % len(roles)],
+            contract_type="Full Time",
+            team=teams[emp.id % len(teams)],
+            workspace=workspaces[emp.id % len(workspaces)],
+            is_active=emp.is_active,
+            attendance_rate=attendance_rate
+        )
+        employees_list.append(employee_item)
+    
+    return employees_list

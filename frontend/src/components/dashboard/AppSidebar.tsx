@@ -8,7 +8,7 @@ import {
   CalendarCheck,
   BarChart3,
   DollarSign,
-  ListTodo,
+  FolderKanban,
   MessageSquare,
   Users,
   LogOut,
@@ -22,14 +22,14 @@ const adminLinks = [
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Reports", icon: BarChart3, path: "/reports" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
-  { label: "Tasks", icon: ListTodo, path: "/tasks" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
-  { label: "My Tasks", icon: ListTodo, path: "/tasks" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
 ];
 

@@ -6,6 +6,7 @@ from datetime import date as DateType
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
+from pydantic import BaseModel
 
 
 class UserRole(str, Enum):
@@ -182,12 +183,14 @@ class Task(TaskBase, table=True):
     __tablename__ = "tasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id")  # Admin who created/assigned the task
     status: TaskStatus = Field(default=TaskStatus.todo)
     done_by_employee: bool = Field(default=False)  # True when employee marks task as done
     github_link: Optional[str] = Field(default=None, max_length=500)  # GitHub repository link
     deployed_link: Optional[str] = Field(default=None, max_length=500)  # Deployed application link
+    start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))  # Auto-recorded start date
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -213,12 +216,14 @@ class TaskUpdate(SQLModel):
 class TaskRead(TaskBase):
     """Schema for reading task data."""
     id: int
+    public_id: Optional[str] = None
     assigned_to: Optional[int]
     assigned_by: int
     status: TaskStatus
     done_by_employee: bool = False
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
+    start_date: datetime
     created_at: datetime
     updated_at: datetime
 
@@ -228,6 +233,7 @@ class TaskWithAssignee(TaskRead):
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
+    progress: Optional[int] = None  # Task completion progress (0-100)
 
 
 # ==================== TASK COMMENT MODELS ====================
@@ -270,11 +276,13 @@ class TaskCommentWithUser(TaskCommentRead):
 # ==================== SUBTASK MODELS ====================
 
 class Subtask(SQLModel, table=True):
-    """Subtask database model for task delegation."""
+    """Subtask database model for task delegation with nested hierarchy support."""
     __tablename__ = "subtasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
     parent_task_id: int = Field(foreign_key="tasks.id", index=True)
+    parent_subtask_id: Optional[int] = Field(default=None, foreign_key="subtasks.id", index=True)  # For nested subtasks
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
@@ -289,6 +297,7 @@ class SubtaskCreate(SQLModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: Optional[int] = None
+    parent_subtask_id: Optional[int] = None  # For creating nested subtasks
 
 
 class SubtaskUpdate(SQLModel):
@@ -302,7 +311,9 @@ class SubtaskUpdate(SQLModel):
 class SubtaskRead(SQLModel):
     """Schema for reading subtask data."""
     id: int
+    public_id: Optional[str] = None
     parent_task_id: int
+    parent_subtask_id: Optional[int]
     title: str
     description: Optional[str]
     assigned_to: Optional[int]
@@ -317,6 +328,7 @@ class SubtaskWithAssignee(SubtaskRead):
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
+    children: List["SubtaskWithAssignee"] = []  # For hierarchical structure
 
 
 # ==================== LEAVE REQUEST MODELS ====================
@@ -413,3 +425,31 @@ class DashboardStats(SQLModel):
     pending_tasks: int
     pending_leaves: int
     avg_daily_hours: float
+
+
+class EmployeePerformance(BaseModel):
+    """Employee performance data for charts."""
+    period: str  # e.g., "Week 1", "Jan 2024", etc.
+    score: int   # Performance score (0-100)
+    department: Optional[str] = None
+
+
+class AttendanceStats(BaseModel):
+    """Attendance statistics for dashboard."""
+    present: int
+    absent: int
+    on_leave: int
+    total: int
+
+
+class EmployeeListItem(BaseModel):
+    """Employee data for list/table view."""
+    id: int
+    name: str
+    email: str
+    role: Optional[str] = None
+    contract_type: Optional[str] = None
+    team: Optional[str] = None
+    workspace: Optional[str] = None
+    is_active: bool
+    attendance_rate: Optional[int] = None  # Percentage

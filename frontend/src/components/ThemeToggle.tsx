@@ -5,7 +5,7 @@ import { Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -14,32 +14,27 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20" />
+      <button
+        aria-label="Toggle theme"
+        className="h-9 w-9 rounded-xl flex items-center justify-center
+                   bg-primary/10 border border-primary/20 text-primary"
+      >
+        <Sun size={16} />
+      </button>
     );
   }
 
-  const isDark = theme === "dark";
+  const isDark = resolvedTheme === "dark";
 
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      aria-label="Toggle theme"
-      className="relative h-9 w-9 rounded-xl flex items-center justify-center
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className="h-9 w-9 rounded-xl flex items-center justify-center
                  bg-primary/10 hover:bg-primary/20 border border-primary/20
-                 text-primary transition-all duration-300 hover:scale-110 active:scale-95"
+                 text-primary transition-all duration-200 hover:scale-110 active:scale-95"
     >
-      <span
-        className="absolute transition-all duration-300"
-        style={{ opacity: isDark ? 0 : 1, transform: isDark ? "rotate(90deg) scale(0)" : "rotate(0deg) scale(1)" }}
-      >
-        <Sun size={16} />
-      </span>
-      <span
-        className="absolute transition-all duration-300"
-        style={{ opacity: isDark ? 1 : 0, transform: isDark ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0)" }}
-      >
-        <Moon size={16} />
-      </span>
+      {isDark ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   );
 }

@@ -78,6 +78,12 @@ class AdminDashboardStats(BaseModel):
     avg_daily_hours: float
     recent_activities: list
     leave_requests_pending: int
+    # Extended real-time fields
+    employees_on_leave_today: int = 0
+    late_checkins_today: int = 0
+    active_tasks_count: int = 0
+    total_tasks_count: int = 0
+    upcoming_tasks: list = []
 
 
 class EmployeeDashboardStats(BaseModel):

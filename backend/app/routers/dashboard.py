@@ -3,9 +3,9 @@ Dashboard endpoints for admins and employees.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date, timezone, time
 from app.database import get_session
-from app.models import User, Task, Attendance, LeaveRequest, TaskStatus, LeaveStatus
+from app.models import User, Task, Attendance, LeaveRequest, TaskStatus, LeaveStatus, TaskPriority
 from app.auth import get_current_user, get_current_admin_user
 from app.schemas import AdminDashboardStats, EmployeeDashboardStats
 
@@ -49,6 +49,60 @@ async def get_admin_dashboard(
             Task.status == TaskStatus.submitted
         )
     ).one()
+    
+    # Active tasks (any status except approved/rejected)
+    active_tasks_count = session.exec(
+        select(func.count(Task.id)).where(
+            Task.status.notin_([TaskStatus.approved, TaskStatus.rejected])
+        )
+    ).one()
+
+    # Total tasks
+    total_tasks_count = session.exec(select(func.count(Task.id))).one()
+
+    # Employees on leave today (approved leave covering today)
+    employees_on_leave_today = session.exec(
+        select(func.count(LeaveRequest.id)).where(
+            LeaveRequest.status == LeaveStatus.approved,
+            LeaveRequest.start_date <= today,
+            LeaveRequest.end_date >= today
+        )
+    ).one()
+
+    # Late check-ins today (punch_in after 09:30 local — stored as UTC datetime)
+    # We use a simple hour-based heuristic: punch_in hour (UTC) > 4 as proxy for late
+    today_start = datetime.combine(today, time(0, 0, 0))
+    today_late_threshold = datetime.combine(today, time(4, 0, 0))  # ~9:30 IST in UTC
+    late_checkins_today = session.exec(
+        select(func.count(Attendance.id)).where(
+            Attendance.date == today,
+            Attendance.punch_in.isnot(None),
+            Attendance.punch_in > today_late_threshold
+        )
+    ).one()
+
+    # Upcoming tasks (nearest due dates, non-approved, with public_id)
+    upcoming_tasks_records = session.exec(
+        select(Task, User).join(User, Task.assigned_to == User.id, isouter=True)
+        .where(
+            Task.status.notin_([TaskStatus.approved, TaskStatus.rejected]),
+            Task.due_date.isnot(None)
+        )
+        .order_by(Task.due_date.asc())
+        .limit(6)
+    ).all()
+
+    upcoming_tasks = []
+    for task, assignee in upcoming_tasks_records:
+        upcoming_tasks.append({
+            "id": task.id,
+            "public_id": task.public_id or "",
+            "title": task.title,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "priority": task.priority,
+            "status": task.status,
+            "assignee_name": assignee.name if assignee else None,
+        })
     
     # Average daily hours (last 30 days)
     thirty_days_ago = today - timedelta(days=30)
@@ -108,7 +162,12 @@ async def get_admin_dashboard(
         pending_tasks=pending_tasks,
         avg_daily_hours=avg_daily_hours,
         recent_activities=recent_activities,
-        leave_requests_pending=leave_requests_pending
+        leave_requests_pending=leave_requests_pending,
+        employees_on_leave_today=employees_on_leave_today,
+        late_checkins_today=late_checkins_today,
+        active_tasks_count=active_tasks_count,
+        total_tasks_count=total_tasks_count,
+        upcoming_tasks=upcoming_tasks
     )
 
 
@@ -160,6 +219,9 @@ async def get_employee_dashboard(
             delta = datetime.now(timezone.utc) - punch_in_aware
             hours_worked = round(delta.total_seconds() / 3600, 2)
             elapsed_seconds = int(delta.total_seconds())
+            # Prevent negative elapsed time (clock sync issues)
+            elapsed_seconds = max(0, elapsed_seconds)
+            hours_worked = max(0.0, hours_worked)
         
         current_session = {
             "clocked_in": True,
@@ -192,6 +254,8 @@ async def get_employee_dashboard(
                 
                 delta = punch_out_aware - punch_in_aware
                 elapsed_seconds = int(delta.total_seconds())
+                # Prevent negative elapsed time
+                elapsed_seconds = max(0, elapsed_seconds)
             
             current_session = {
                 "clocked_in": False,
@@ -238,9 +302,10 @@ async def get_employee_dashboard(
     
     # Leave balance (simplified - assuming 20 days per year)
     total_leave_days = 20
+    # Use PostgreSQL date arithmetic instead of julianday
     used_leave_days = session.exec(
         select(func.sum(
-            func.julianday(LeaveRequest.end_date) - func.julianday(LeaveRequest.start_date) + 1
+            (LeaveRequest.end_date - LeaveRequest.start_date) + 1
         )).where(
             LeaveRequest.user_id == current_user.id,
             LeaveRequest.status == LeaveStatus.approved

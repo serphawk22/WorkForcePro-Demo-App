@@ -18,9 +18,11 @@ import {
 import { toast } from "sonner";
 
 function formatTime(seconds: number): string {
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
+  // Ensure non-negative time
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
   return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
@@ -39,12 +41,13 @@ function formatDateTime(isoString: string | null): string {
   }
   
   const date = new Date(dateString);
-  // Display time in IST (Kolkata timezone)
+  // Display time in IST (Kolkata timezone) using 24-hour format
   return date.toLocaleTimeString("en-IN", { 
     timeZone: "Asia/Kolkata",
     hour: "2-digit", 
     minute: "2-digit",
-    second: "2-digit"
+    second: "2-digit",
+    hour12: false  // Use 24-hour format for clarity
   });
 }
 
@@ -94,12 +97,14 @@ export default function AttendancePage() {
       
       // Initialize timer using server-provided elapsed_seconds (handles timezone correctly)
       if (statusResult.data.status === "working") {
-        // Use server-calculated elapsed time to avoid timezone issues
-        setSeconds(statusResult.data.elapsed_seconds || 0);
+        // Use server-calculated elapsed time, ensure non-negative
+        const elapsedSeconds = Math.max(0, statusResult.data.elapsed_seconds || 0);
+        setSeconds(elapsedSeconds);
         setIsActive(true);
       } else if (statusResult.data.status === "completed") {
         // Show total elapsed time for completed session
-        setSeconds(statusResult.data.elapsed_seconds || 0);
+        const elapsedSeconds = Math.max(0, statusResult.data.elapsed_seconds || 0);
+        setSeconds(elapsedSeconds);
         setIsActive(false);
       } else {
         setSeconds(0);

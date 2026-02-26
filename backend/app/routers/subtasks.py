@@ -77,6 +77,7 @@ async def create_subtask(
     # Create subtask
     subtask = Subtask(
         parent_task_id=task_id,
+        parent_subtask_id=subtask_data.parent_subtask_id,  # Support nested subtasks
         title=subtask_data.title,
         description=subtask_data.description,
         assigned_to=subtask_data.assigned_to,
@@ -148,7 +149,9 @@ async def get_task_subtasks(
         
         result.append(SubtaskWithAssignee(
             id=subtask.id,
+            public_id=subtask.public_id,
             parent_task_id=subtask.parent_task_id,
+            parent_subtask_id=subtask.parent_subtask_id,
             title=subtask.title,
             description=subtask.description,
             assigned_to=subtask.assigned_to,
@@ -158,10 +161,87 @@ async def get_task_subtasks(
             updated_at=subtask.updated_at,
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
-            assigned_by_name=assigner.name if assigner else None
+            assigned_by_name=assigner.name if assigner else None,
+            children=[]
         ))
     
     return result
+
+
+@router.get("/{task_id}/subtasks/hierarchy", response_model=List[SubtaskWithAssignee])
+async def get_task_subtasks_hierarchy(
+    task_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get subtasks for a task in hierarchical structure.
+    
+    Returns subtasks organized in a tree structure with nested children.
+    """
+    # Verify task exists
+    task_stmt = select(Task).where(Task.id == task_id)
+    task = session.exec(task_stmt).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+    
+    # Get all subtasks for the task
+    subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task_id).order_by(Subtask.created_at.asc())
+    subtasks = session.exec(subtasks_stmt).all()
+    
+    # Build subtask dictionary with user info
+    subtask_dict = {}
+    for subtask in subtasks:
+        # Check permission
+        if current_user.role != UserRole.admin:
+            if task.assigned_to != current_user.id and subtask.assigned_to != current_user.id:
+                continue
+        
+        assignee = None
+        if subtask.assigned_to:
+            assignee_stmt = select(User).where(User.id == subtask.assigned_to)
+            assignee = session.exec(assignee_stmt).first()
+        
+        assigner = None
+        if subtask.assigned_by:
+            assigner_stmt = select(User).where(User.id == subtask.assigned_by)
+            assigner = session.exec(assigner_stmt).first()
+        
+        subtask_dict[subtask.id] = SubtaskWithAssignee(
+            id=subtask.id,
+            public_id=subtask.public_id,
+            parent_task_id=subtask.parent_task_id,
+            parent_subtask_id=subtask.parent_subtask_id,
+            title=subtask.title,
+            description=subtask.description,
+            assigned_to=subtask.assigned_to,
+            assigned_by=subtask.assigned_by,
+            status=subtask.status,
+            created_at=subtask.created_at,
+            updated_at=subtask.updated_at,
+            assignee_name=assignee.name if assignee else None,
+            assignee_email=assignee.email if assignee else None,
+            assigned_by_name=assigner.name if assigner else None,
+            children=[]
+        )
+    
+    # Build hierarchical structure
+    root_subtasks = []
+    for subtask_id, subtask_data in subtask_dict.items():
+        if subtask_data.parent_subtask_id:
+            # This is a nested subtask - add to parent's children
+            parent_id = subtask_data.parent_subtask_id
+            if parent_id in subtask_dict:
+                subtask_dict[parent_id].children.append(subtask_data)
+        else:
+            # This is a root-level subtask
+            root_subtasks.append(subtask_data)
+    
+    return root_subtasks
 
 
 @router.patch("/subtasks/{subtask_id}/status", response_model=SubtaskRead)
@@ -318,6 +398,13 @@ async def delete_subtask(
                 detail="You can only delete subtasks on your tasks"
             )
     
+    # Delete nested child subtasks first (if any) to avoid foreign key constraint violations
+    child_subtasks_stmt = select(Subtask).where(Subtask.parent_subtask_id == subtask_id)
+    child_subtasks = session.exec(child_subtasks_stmt).all()
+    for child in child_subtasks:
+        session.delete(child)
+    
+    # Now delete the subtask itself
     session.delete(subtask)
     session.commit()
     

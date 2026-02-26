@@ -5,18 +5,9 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Users, Wifi, Clock, ListTodo, TrendingUp, CalendarOff, Loader2, Activity } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Users, Wifi, Clock, ListTodo, CalendarOff, Loader2, Activity } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { fetchAdminDashboard, getTaskStats, AdminDashboardStats, TaskStats } from "@/lib/api";
-
-const velocityData = [
-  { week: "W1", tasks: 10 },
-  { week: "W2", tasks: 8 },
-  { week: "W3", tasks: 12 },
-  { week: "W4", tasks: 7 },
-  { week: "W5", tasks: 15 },
-  { week: "W6", tasks: 11 },
-];
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -50,13 +41,13 @@ export default function AdminDashboard() {
   }, [loadData]);
 
   const distributionData = taskStats ? [
-    { name: "Approved", value: taskStats.approved, color: "hsl(142 71% 45%)" },
-    { name: "Reviewing", value: taskStats.reviewing, color: "hsl(271 91% 65%)" },
-    { name: "Submitted", value: taskStats.submitted, color: "hsl(38 92% 50%)" },
-    { name: "In Progress", value: taskStats.in_progress, color: "hsl(217 91% 60%)" },
-    { name: "To Do", value: taskStats.todo, color: "hsl(215 16% 47%)" },
-    { name: "Rejected", value: taskStats.rejected, color: "hsl(0 84% 60%)" },
-  ] : [];
+    { name: "Approved", value: taskStats.approved, color: "#10b981" },
+    { name: "In Progress", value: taskStats.in_progress, color: "#3b82f6" },
+    { name: "Reviewing", value: taskStats.reviewing, color: "#8b5cf6" },
+    { name: "To Do", value: taskStats.todo, color: "#6b7280" },
+    { name: "Submitted", value: taskStats.submitted, color: "#f59e0b" },
+    { name: "Rejected", value: taskStats.rejected, color: "#ef4444" },
+  ].filter(item => item.value > 0) : [];
   
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
@@ -122,62 +113,38 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Sprint Velocity */}
-                <div className="rounded-xl border border-border bg-card p-6 card-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-card-foreground">Sprint Velocity</h3>
-                      <p className="text-xs text-muted-foreground">Task completion rate over time</p>
-                    </div>
-                    <TrendingUp size={18} className="text-muted-foreground" />
+              {/* Task Distribution Chart */}
+              <div className="rounded-xl border border-border bg-card p-6 card-shadow">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-card-foreground">Task Distribution</h3>
+                    <p className="text-sm text-muted-foreground">Current project status breakdown</p>
                   </div>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={velocityData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(22 30% 90%)" />
-                      <XAxis dataKey="week" tick={{ fontSize: 12 }} stroke="hsl(289 20% 40%)" />
-                      <YAxis tick={{ fontSize: 12 }} stroke="hsl(289 20% 40%)" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(0 0% 100%)",
-                          border: "1px solid hsl(22 30% 90%)",
-                          borderRadius: "8px",
-                          fontSize: "12px",
-                        }}
-                      />
-                      <Line type="monotone" dataKey="tasks" stroke="hsl(266 62% 18%)" strokeWidth={2.5} dot={{ fill: "hsl(266 62% 18%)", r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Activity size={20} className="text-muted-foreground" />
                 </div>
-
-                {/* Task Distribution */}
-                <div className="rounded-xl border border-border bg-card p-6 card-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-card-foreground">Task Distribution</h3>
-                      <p className="text-xs text-muted-foreground">Current task status breakdown</p>
-                    </div>
-                    <Activity size={18} className="text-muted-foreground" />
-                  </div>
-                  {taskStats && (taskStats.approved + taskStats.reviewing + taskStats.submitted + taskStats.in_progress + taskStats.todo + taskStats.rejected) > 0 ? (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie
-                          data={distributionData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={2}
-                          dataKey="value"
-                          label={({ name, value }) => `${name}: ${value}`}
-                          labelLine={{ stroke: "hsl(289 20% 50%)", strokeWidth: 1 }}
-                        >
-                          {distributionData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
+                {taskStats && distributionData.length > 0 ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={distributionData}
+                        margin={{
+                          top: 20,
+                          right: 30,
+                          left: 20,
+                          bottom: 60,
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(22 30% 90%)" />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fontSize: 12, fill: 'hsl(289 20% 40%)' }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 12, fill: 'hsl(289 20% 40%)' }}
+                        />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: "hsl(0 0% 100%)",
@@ -186,87 +153,20 @@ export default function AdminDashboard() {
                             fontSize: "12px",
                           }}
                         />
-                      </PieChart>
+                        <Bar 
+                          dataKey="value" 
+                          fill="#8b5cf6"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[220px]">
-                      <p className="text-sm text-muted-foreground">No task data available</p>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-80">
+                    <p className="text-sm text-muted-foreground">No project data available</p>
+                  </div>
+                )}
               </div>
-
-              {/* Task Summary */}
-              {taskStats && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-500/10">
-                        <div className="w-3 h-3 rounded-full bg-green-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Approved</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.approved}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-500/10">
-                        <div className="w-3 h-3 rounded-full bg-purple-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Reviewing</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.reviewing}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-yellow-500/10">
-                        <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Submitted</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.submitted}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500/10">
-                        <div className="w-3 h-3 rounded-full bg-blue-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">In Progress</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.in_progress}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-500/10">
-                        <div className="w-3 h-3 rounded-full bg-gray-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">To Do</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.todo}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-4 card-shadow">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/10">
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Rejected</p>
-                        <p className="text-lg font-semibold text-card-foreground">{taskStats.rejected}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

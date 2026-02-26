@@ -50,7 +50,7 @@ async def punch_in(
             active_session.total_hours = round(delta.total_seconds() / 3600, 2)
         session.add(active_session)
     
-    # Check if already completed attendance for today
+    # Check if already completed attendance for today (by date field)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
         Attendance.date == today
@@ -58,17 +58,23 @@ async def punch_in(
     existing = session.exec(statement).first()
     
     if existing and existing.punch_out:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Already completed attendance for today."
-        )
+        # If already completed today, delete the old record and create fresh one
+        # This allows employees to punch in again if needed
+        session.delete(existing)
+        session.commit()
     
-    # Create new attendance record
-    attendance = Attendance(
-        user_id=current_user.id,
-        date=today,
-        punch_in=datetime.now(timezone.utc)
-    )
+    # Create new attendance record (or re-use if not completed)
+    if not existing or existing.punch_out:
+        attendance = Attendance(
+            user_id=current_user.id,
+            date=today,
+            punch_in=datetime.now(timezone.utc)
+        )
+    else:
+        # Existing record without punch_out - shouldn't happen but handle it
+        attendance = existing
+        attendance.punch_in = datetime.now(timezone.utc)
+    
     session.add(attendance)
     session.commit()
     session.refresh(attendance)
@@ -215,6 +221,8 @@ async def get_attendance_status(
         if punch_in_aware.tzinfo is None:
             punch_in_aware = punch_in_aware.replace(tzinfo=timezone.utc)
         elapsed = (datetime.now(timezone.utc) - punch_in_aware).total_seconds()
+        # Prevent negative elapsed time (clock sync issues)
+        elapsed = max(0, elapsed)
     elif attendance.punch_in and attendance.punch_out:
         # Ensure both are timezone-aware (convert if naive)
         punch_in_aware = attendance.punch_in
@@ -224,6 +232,8 @@ async def get_attendance_status(
         if punch_out_aware.tzinfo is None:
             punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
         elapsed = (punch_out_aware - punch_in_aware).total_seconds()
+        # Prevent negative elapsed time
+        elapsed = max(0, elapsed)
     
     status = "not_started"
     is_active = False

@@ -41,6 +41,7 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [punchLoading, setPunchLoading] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -57,6 +58,24 @@ export default function EmployeeDashboard() {
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
+        
+        // Initialize timer using server-provided elapsed_seconds
+        const currentSession = statsResponse.data.current_session;
+        if (currentSession?.clocked_in) {
+          // Active session - use server elapsed time and start live timer
+          const elapsedSeconds = Math.max(0, currentSession.elapsed_seconds || 0);
+          setElapsedTime(elapsedSeconds);
+          setIsTimerActive(true);
+        } else if (currentSession && !currentSession.clocked_in) {
+          // Completed session - show final time
+          const elapsedSeconds = Math.max(0, currentSession.elapsed_seconds || 0);
+          setElapsedTime(elapsedSeconds);
+          setIsTimerActive(false);
+        } else {
+          // No session
+          setElapsedTime(0);
+          setIsTimerActive(false);
+        }
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
@@ -72,36 +91,22 @@ export default function EmployeeDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Timer for current session - use data from dashboard stats
+  // Timer for current session - increments every second when active
   useEffect(() => {
-    const isWorking = dashboardStats?.current_session?.clocked_in || false;
-    if (!isWorking || !dashboardStats?.current_session?.punch_in) {
-      setElapsedTime(0);
-      return;
+    if (isTimerActive) {
+      const interval = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(interval);
     }
-
-    // Backend stores in UTC, ensure proper timezone parsing for accurate timer
-    // If no 'Z' or timezone offset, append 'Z' to treat as UTC
-    let punchInString = dashboardStats.current_session.punch_in;
-    if (!punchInString.endsWith('Z') && !punchInString.match(/[+-]\d{2}:\d{2}$/)) {
-      punchInString = punchInString + 'Z';
-    }
-    const punchInTime = new Date(punchInString).getTime();
-    
-    const updateElapsed = () => {
-      const now = Date.now();
-      setElapsedTime(Math.floor((now - punchInTime) / 1000));
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [dashboardStats?.current_session]);
+  }, [isTimerActive]);
 
   const formatDuration = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    // Ensure non-negative time
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
     return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
