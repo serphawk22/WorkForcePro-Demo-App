@@ -85,12 +85,12 @@ export default function ProjectDetailPage() {
         });
       } else {
         toast.error(response.error || "Failed to load project details");
-        router.push("/project-management");
+        router.push("/project-management/projects");
       }
     } catch (error) {
       console.error("Error loading project:", error);
       toast.error("Failed to load project details");
-      router.push("/project-management");
+      router.push("/project-management/projects");
     } finally {
       setIsLoading(false);
     }
@@ -329,7 +329,7 @@ export default function ProjectDetailPage() {
           {/* Header with Back Button */}
           <div className="flex items-center gap-4">
             <button
-              onClick={() => router.push("/project-management")}
+              onClick={() => router.push("/project-management/projects")}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft size={20} />

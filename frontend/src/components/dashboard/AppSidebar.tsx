@@ -22,14 +22,14 @@ const adminLinks = [
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Reports", icon: BarChart3, path: "/reports" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
-  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
-  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
 ];
 
@@ -95,7 +95,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       {/* Nav links */}
       <nav className="flex-1 flex flex-col gap-1 px-3 py-2">
         {links.map((link) => {
-          const isActive = pathname === link.path;
+          const isActive = link.path === "/project-management/summary"
+            ? pathname.startsWith("/project-management")
+            : pathname === link.path;
           return (
             <Link
               key={link.path}
