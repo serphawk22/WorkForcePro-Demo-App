@@ -39,10 +39,10 @@ export default function SignupPage() {
     const result = await register(name, email, password, role);
 
     if (result.success) {
-      setSuccess("Account created successfully! Redirecting to login...");
+      setSuccess("Registration successful! Your account is awaiting admin approval. You will be able to log in once approved.");
       setTimeout(() => {
         router.push("/login");
-      }, 2000);
+      }, 3000);
     } else {
       setError(result.error || "Registration failed");
     }

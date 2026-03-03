@@ -48,7 +48,7 @@ export function HeroSection() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16 animate-fade-in-up"
                style={{ animationDelay: "0.3s" }}>
             <Link
-              href="/login"
+              href="/signup"
               className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-bold
                          text-primary-foreground gradient-primary shadow-primary glow-primary
                          hover:shadow-glow hover:scale-105 active:scale-95 transition-all duration-300"

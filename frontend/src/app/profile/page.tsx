@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Github, Linkedin, Mail, User as UserIcon, Upload, Camera } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getMyProfile, updateMyProfile, uploadProfilePicture, UserProfile } from "@/lib/api";
+import { getMyProfile, updateMyProfile, uploadProfilePicture, getMyPayroll, UserProfile, PayrollRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { DollarSign, Briefcase } from "lucide-react";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [payroll, setPayroll] = useState<PayrollRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -29,6 +31,11 @@ export default function ProfilePage() {
     github_url: "",
     linkedin_url: "",
   });
+
+  // Invalidate Next.js route cache on every mount so payroll data is always fresh
+  useEffect(() => {
+    router.refresh();
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -51,6 +58,11 @@ export default function ProfilePage() {
         github_url: response.data.github_url || "",
         linkedin_url: response.data.linkedin_url || "",
       });
+      // Fetch latest payroll for this user
+      if (response.data.id) {
+        const payRes = await getMyPayroll();
+        if (payRes.data) setPayroll(payRes.data);
+      }
     } else if (response.error) {
       setMessage({ type: "error", text: response.error });
     }
@@ -386,6 +398,66 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Salary & Department Card — read-only, set by admin */}
+        {(profile?.base_salary || profile?.department || payroll) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Salary &amp; Department
+              </CardTitle>
+              <CardDescription>Set by your administrator</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Base Salary</label>
+                  <p className="mt-1 text-sm font-semibold text-card-foreground">
+                    {profile?.base_salary
+                      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(profile.base_salary)
+                      : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Department</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">{profile?.department || "—"}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Last Payment Date</label>
+                  <p className="mt-1 text-sm font-medium">
+                    {payroll?.pay_date
+                      ? new Date(payroll.pay_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Payment Status</label>
+                  <p className="mt-1">
+                    {payroll ? (
+                      <span
+                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          payroll.status === "Paid"
+                            ? "bg-green-500/10 text-green-500"
+                            : payroll.status === "Pending"
+                            ? "bg-yellow-500/10 text-yellow-500"
+                            : "bg-blue-500/10 text-blue-500"
+                        }`}
+                      >
+                        {payroll.status}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

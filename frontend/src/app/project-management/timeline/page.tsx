@@ -10,7 +10,7 @@ import { Loader2, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react"
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const PRIORITY_COLOR: Record<string, string> = {
-  high: "#991b1b", medium: "#854F6C", low: "#166534",
+  high: "#f87171", medium: "#facc15", low: "#4ade80",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -85,26 +85,26 @@ export default function TimelinePage() {
     <ProjectShell>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#522B5B" }} />
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
         </div>
       ) : (
         <div className="rounded-2xl glass-card p-5 card-shadow overflow-x-auto">
           {/* ── Month navigator ── */}
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setOffset(o => o - 1)} className="p-2 rounded-xl hover:bg-secondary/40" style={{ color: "#522B5B" }}>
+            <button onClick={() => setOffset(o => o - 1)} className="p-2 rounded-xl hover:bg-purple-500/10 text-purple-400">
               <ChevronLeft size={18} />
             </button>
             <div className="flex gap-2">
-              <span className="text-sm font-bold" style={{ color: "#2B124C" }}>
+              <span className="text-sm font-bold text-foreground drop-shadow-sm">
                 {MONTHS[months[0].month]} {months[0].year} — {MONTHS[months[VISIBLE-1].month]} {months[VISIBLE-1].year}
               </span>
               {offset !== 0 && (
-                <button onClick={() => setOffset(0)} className="text-xs px-2 py-1 rounded-lg" style={{ color: "#854F6C", background: "#854F6C18" }}>
+                <button onClick={() => setOffset(0)} className="text-xs px-2.5 py-1 rounded-lg font-semibold bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:scale-105 transition-all">
                   Today
                 </button>
               )}
             </div>
-            <button onClick={() => setOffset(o => o + 1)} className="p-2 rounded-xl hover:bg-secondary/40" style={{ color: "#522B5B" }}>
+            <button onClick={() => setOffset(o => o + 1)} className="p-2 rounded-xl hover:bg-purple-500/10 text-purple-400">
               <ChevronRight size={18} />
             </button>
           </div>
@@ -112,13 +112,13 @@ export default function TimelinePage() {
           {/* ── Gantt area ── */}
           <div className="min-w-[600px]">
             {/* Month labels + grid background */}
-            <div className="flex mb-3 border-b" style={{ borderColor: "#DFB6B250" }}>
+            <div className="flex mb-3 border-b border-border/50">
               {/* Row label column */}
               <div className="w-52 shrink-0" />
               {/* Month columns */}
               <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${VISIBLE}, 1fr)` }}>
                 {months.map(({ year, month }) => (
-                  <div key={`${year}-${month}`} className="text-center text-xs font-bold pb-2" style={{ color: "#854F6C" }}>
+                  <div key={`${year}-${month}`} className="text-center text-xs font-bold pb-2 text-purple-400">
                     {MONTHS[month]} {year}
                   </div>
                 ))}
@@ -126,7 +126,7 @@ export default function TimelinePage() {
             </div>
 
             {visibleTasks.length === 0 ? (
-              <div className="text-center py-12 text-sm" style={{ color: "#854F6C" }}>
+              <div className="text-center py-12 text-sm text-muted-foreground">
                 No tasks with due dates in this period.
               </div>
             ) : (
@@ -139,22 +139,21 @@ export default function TimelinePage() {
                       {/* Label */}
                       <div className="w-52 shrink-0 pr-3 flex flex-col min-w-0">
                         <span
-                          className="text-xs font-semibold truncate cursor-pointer hover:underline"
-                          style={{ color: "#190019" }}
+                          className="text-xs font-semibold truncate cursor-pointer hover:underline text-foreground"
                           onClick={() => router.push(`/project-management/${task.id}`)}
                         >
                           {task.title}
                         </span>
-                        <span className="text-[10px] mt-0.5" style={{ color: "#854F6C" }}>
+                        <span className="text-[10px] mt-0.5 text-muted-foreground">
                           {STATUS_LABEL[task.status] ?? task.status}
                         </span>
                       </div>
 
                       {/* Bar track */}
-                      <div className="flex-1 relative h-8 rounded-lg" style={{ background: "#DFB6B220" }}>
+                      <div className="flex-1 relative h-8 rounded-lg bg-muted/20">
                         {/* Today line */}
                         {todayInView && (
-                          <div className="absolute top-0 bottom-0 w-px z-10 opacity-70" style={{ left: `${todayLeft.toFixed(2)}%`, background: "#991b1b" }} />
+                          <div className="absolute top-0 bottom-0 w-0.5 z-10 bg-red-400 shadow-lg" style={{ left: `${todayLeft.toFixed(2)}%`, boxShadow: "0 0 8px rgba(248, 113, 113, 0.6)" }} />
                         )}
                         {/* Month dividers */}
                         {months.slice(1).map(({ year, month }, i) => {
@@ -166,12 +165,12 @@ export default function TimelinePage() {
                         })}
                         {/* Task bar */}
                         <div
-                          className="absolute top-1 bottom-1 rounded-md flex items-center px-2 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
-                          style={{ left: bp.left, width: bp.width, background: pColor + "CC", minWidth: 4 }}
+                          className="absolute top-1 bottom-1 rounded-md flex items-center px-2 cursor-pointer hover:scale-105 hover:shadow-lg transition-all overflow-hidden border"
+                          style={{ left: bp.left, width: bp.width, background: pColor, minWidth: 4, borderColor: pColor, boxShadow: `0 2px 8px ${pColor}40` }}
                           onClick={() => router.push(`/project-management/${task.id}`)}
                           title={`${task.title} (${task.priority})`}
                         >
-                          <span className="text-[9px] font-bold text-white truncate">{task.title}</span>
+                          <span className="text-[9px] font-bold text-white drop-shadow-sm truncate">{task.title}</span>
                         </div>
                       </div>
                     </div>
@@ -182,16 +181,16 @@ export default function TimelinePage() {
           </div>
 
           {/* ── Legend ── */}
-          <div className="flex items-center gap-5 mt-5 pt-4 flex-wrap" style={{ borderTop: "1px solid #DFB6B250" }}>
+          <div className="flex items-center gap-5 mt-5 pt-4 flex-wrap border-t border-border/50">
             {Object.entries(PRIORITY_COLOR).map(([k, c]) => (
-              <div key={k} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#854F6C" }}>
-                <span className="h-3 w-6 rounded" style={{ background: c + "CC" }} />
+              <div key={k} className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <span className="h-3 w-6 rounded shadow-sm" style={{ background: c, boxShadow: `0 0 6px ${c}40` }} />
                 {k.charAt(0).toUpperCase() + k.slice(1)}
               </div>
             ))}
             {todayInView && (
-              <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#991b1b" }}>
-                <span className="h-3 w-px inline-block" style={{ background: "#991b1b" }} />
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-red-400">
+                <span className="h-3 w-0.5 inline-block bg-red-400 shadow-sm" style={{ boxShadow: "0 0 6px rgba(248, 113, 113, 0.6)" }} />
                 Today
               </div>
             )}

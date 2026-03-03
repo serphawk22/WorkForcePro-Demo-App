@@ -6,25 +6,26 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   CalendarCheck,
-  BarChart3,
   DollarSign,
   FolderKanban,
   MessageSquare,
   Users,
+  UserCheck,
   LogOut,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { getUnreadNotificationCount } from "@/lib/api";
 
 const adminLinks = [
-  { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
-  { label: "Reports", icon: BarChart3, path: "/reports" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
+  { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
 ];
 
 const employeeLinks = [
@@ -44,12 +45,28 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const [collapsed, setCollapsed] = useState(false);
   const { user, logout } = useAuth();
   const links = role === "admin" ? adminLinks : employeeLinks;
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Debug: Log when user changes
   useEffect(() => {
     console.log('[AppSidebar] User state changed:', user?.email || 'null');
     console.log('[AppSidebar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
   }, [user]);
+
+  // Fetch pending registration count for admin badge
+  useEffect(() => {
+    if (role !== "admin") return;
+    const fetchPending = async () => {
+      try {
+        const { getPendingUsers } = await import("@/lib/api");
+        const result = await getPendingUsers();
+        if (result.data) setPendingCount(result.data.length);
+      } catch {}
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 60000);
+    return () => clearInterval(interval);
+  }, [role]);
 
   // Use data from AuthContext if available
   const displayName = user?.name || userName;
@@ -98,6 +115,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
           const isActive = link.path === "/project-management/summary"
             ? pathname.startsWith("/project-management")
             : pathname === link.path;
+          const showBadge = (link as any).badgeKey === "pending" && pendingCount > 0;
           return (
             <Link
               key={link.path}
@@ -109,7 +127,17 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
               }`}
             >
               <link.icon size={18} className="shrink-0" />
-              {!collapsed && <span>{link.label}</span>}
+              {!collapsed && <span className="flex-1">{link.label}</span>}
+              {!collapsed && showBadge && (
+                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                  {pendingCount}
+                </span>
+              )}
+              {collapsed && showBadge && (
+                <span className="absolute left-8 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                  {pendingCount}
+                </span>
+              )}
             </Link>
           );
         })}

@@ -429,7 +429,7 @@ async function apiFetch<T>(
         return { error: "Session expired. Please login again." };
       }
       if (response.status === 403) {
-        return { error: "Access forbidden. Insufficient permissions." };
+        return { error: data.detail || "Access forbidden. Insufficient permissions." };
       }
       return { error: data.detail || "Request failed" };
     }
@@ -450,7 +450,7 @@ async function apiFetch<T>(
         error: error.message
       });
       return { 
-        error: "Cannot connect to server. Please check:\n1. Backend is running\n2. CORS is configured\n3. API URL is correct: " + API_BASE_URL 
+        error: "Cannot connect to server. Please ensure the backend is running." 
       };
     }
     
@@ -696,6 +696,21 @@ export async function deleteUser(
   });
 }
 
+/**
+ * Create a new employee directly (admin only). Account is auto-approved.
+ */
+export async function createEmployee(data: {
+  name: string;
+  email: string;
+  password: string;
+  role: "employee" | "admin";
+}): Promise<ApiResponse<User>> {
+  return apiFetch<User>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ==================== ATTENDANCE ====================
 
 /**
@@ -744,9 +759,33 @@ export async function getMyAttendance(
  * Get all attendance records (admin only).
  */
 export async function getAllAttendance(
-  dateFilter?: string
+  filters?: {
+    dateFilter?: string;
+    startDate?: string;
+    endDate?: string;
+    sort?: "asc" | "desc";
+    limit?: number;
+  }
 ): Promise<ApiResponse<AttendanceRecord[]>> {
-  const query = dateFilter ? `?date_filter=${dateFilter}` : "";
+  const params = new URLSearchParams();
+  
+  if (filters?.dateFilter) {
+    params.append("date_filter", filters.dateFilter);
+  }
+  if (filters?.startDate) {
+    params.append("start_date", filters.startDate);
+  }
+  if (filters?.endDate) {
+    params.append("end_date", filters.endDate);
+  }
+  if (filters?.sort) {
+    params.append("sort", filters.sort);
+  }
+  if (filters?.limit) {
+    params.append("limit", filters.limit.toString());
+  }
+  
+  const query = params.toString() ? `?${params.toString()}` : "";
   return apiFetch<AttendanceRecord[]>(`/attendance/all${query}`);
 }
 
@@ -964,12 +1003,29 @@ export interface UserProfile {
   email: string;
   role: "admin" | "employee";
   is_active: boolean;
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  approved_at?: string;
+  approved_by?: number;
   created_at: string;
   age?: number;
   date_joined?: string;
   github_url?: string;
   linkedin_url?: string;
   profile_picture?: string;
+  department?: string;
+  base_salary?: number;
+}
+
+export interface PayrollRecord {
+  id: number;
+  employee_id: number;
+  name: string;
+  department: string | null;
+  month: number;
+  year: number;
+  salary: number;
+  status: "Pending" | "Paid" | "Processing";
+  pay_date: string | null;
 }
 
 export interface ProfileUpdate {
@@ -1080,6 +1136,22 @@ export async function getUserById(userId: number): Promise<ApiResponse<UserProfi
  */
 export async function getAllUsers(): Promise<ApiResponse<UserProfile[]>> {
   return apiFetch<UserProfile[]>("/admin/users");
+}
+
+export async function getPendingUsers(): Promise<ApiResponse<UserProfile[]>> {
+  return apiFetch<UserProfile[]>("/admin/users?status=PENDING");
+}
+
+export async function approveUser(userId: number): Promise<ApiResponse<{ message: string; status: string }>> {
+  return apiFetch<{ message: string; status: string }>(`/admin/users/${userId}/approve`, {
+    method: "PUT",
+  });
+}
+
+export async function rejectUser(userId: number): Promise<ApiResponse<{ message: string; status: string }>> {
+  return apiFetch<{ message: string; status: string }>(`/admin/users/${userId}/reject`, {
+    method: "PUT",
+  });
 }
 
 // ==================== NOTIFICATION API ====================
@@ -1205,5 +1277,69 @@ export interface PublicIdSearchResult {
 
 export async function searchByPublicId(query: string): Promise<ApiResponse<PublicIdSearchResult>> {
   return apiFetch<PublicIdSearchResult>(`/tasks/search/by-ref?query=${encodeURIComponent(query)}`);
+}
+
+// ==================== PAYROLL ====================
+
+/**
+ * Get all employee payroll records for a specific month/year.
+ */
+export async function getPayroll(month?: number, year?: number): Promise<ApiResponse<PayrollRecord[]>> {
+  const params = new URLSearchParams();
+  if (month !== undefined) params.set("month", String(month));
+  if (year !== undefined) params.set("year", String(year));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<PayrollRecord[]>(`/payroll/${query}`);
+}
+
+/**
+ * Mark a payroll record as paid.
+ */
+export async function markPayrollPaid(payrollId: number): Promise<ApiResponse<PayrollRecord>> {
+  return apiFetch<PayrollRecord>(`/payroll/${payrollId}/mark-paid`, { method: "PUT" });
+}
+
+/**
+ * Get the current employee's own latest payroll record (no admin needed).
+ */
+export async function getMyPayroll(): Promise<ApiResponse<PayrollRecord>> {
+  return apiFetch<PayrollRecord>(`/payroll/me?_t=${Date.now()}`);
+}
+
+/**
+ * Get the latest payroll record for a specific employee (for profile page).
+ */
+export async function getLatestPayroll(employeeId: number): Promise<ApiResponse<PayrollRecord>> {
+  return apiFetch<PayrollRecord>(`/payroll/latest/${employeeId}?_t=${Date.now()}`);
+}
+
+/**
+ * Update an employee's base salary and optionally their department.
+ */
+export async function updateEmployeeBaseSalary(
+  employeeId: number,
+  baseSalary: number,
+  department?: string
+): Promise<ApiResponse<UserProfile>> {
+  const params = new URLSearchParams();
+  params.set("base_salary", String(baseSalary));
+  if (department !== undefined) params.set("department", department);
+  return apiFetch<UserProfile>(`/payroll/employee/${employeeId}/base-salary?${params.toString()}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Update an employee's date of joining (admin only).
+ */
+export async function updateEmployeeDateJoined(
+  employeeId: number,
+  dateJoined: string | null
+): Promise<ApiResponse<{ message: string; date_joined: string | null }>> {
+  const params = dateJoined ? `?date_joined=${encodeURIComponent(dateJoined)}` : "";
+  return apiFetch<{ message: string; date_joined: string | null }>(
+    `/admin/users/${employeeId}/date-joined${params}`,
+    { method: "PATCH" }
+  );
 }
 

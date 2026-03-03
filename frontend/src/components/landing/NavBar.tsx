@@ -39,7 +39,7 @@ export function NavBar() {
             Log In
           </Link>
           <Link
-            href="/login"
+            href="/signup"
             className="px-4 py-2 text-sm font-semibold rounded-xl text-primary-foreground
                        gradient-primary shadow-primary hover:shadow-glow
                        transition-all duration-200 hover:scale-105 active:scale-95"
@@ -75,7 +75,7 @@ export function NavBar() {
           ))}
           <div className="pt-2 flex flex-col gap-2">
             <Link href="/login" className="w-full text-center py-2.5 text-sm font-semibold rounded-xl border border-primary/30 text-primary">Log In</Link>
-            <Link href="/login" className="w-full text-center py-2.5 text-sm font-semibold rounded-xl text-primary-foreground gradient-primary">Get Started</Link>
+            <Link href="/signup" className="w-full text-center py-2.5 text-sm font-semibold rounded-xl text-primary-foreground gradient-primary">Get Started</Link>
           </div>
         </div>
       )}

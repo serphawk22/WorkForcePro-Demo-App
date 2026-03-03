@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -11,17 +11,17 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 const priorityStyles: Record<string, string> = {
-  high: "bg-red-500/10 text-red-500",
-  medium: "bg-yellow-500/10 text-yellow-500",
-  low: "bg-green-500/10 text-green-500",
+  high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
+  medium: "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-yellow-400 border border-yellow-500/30 shadow-lg shadow-yellow-500/20",
+  low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30 shadow-lg shadow-green-500/20",
 };
 
 const statusStyles: Record<string, string> = {
-  in_progress: "text-blue-500",
-  todo: "text-muted-foreground",
-  submitted: "text-green-500",  // Employee sees "Done" as green
-  approved: "text-green-600",
-  rejected: "text-red-500",
+  in_progress: "text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.6)]",
+  todo: "text-gray-400 drop-shadow-[0_0_4px_rgba(156,163,175,0.3)]",
+  submitted: "text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.6)]",  // Employee sees "Done" as green
+  approved: "text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]",
+  rejected: "text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.6)]",
 };
 
 const statusLabels: Record<string, string> = {
@@ -42,6 +42,7 @@ export default function EmployeeDashboard() {
   const [punchLoading, setPunchLoading] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -87,9 +88,60 @@ export default function EmployeeDashboard() {
     }
   }, []);
 
+  // Sync with server periodically to prevent drift
+  const syncWithServer = useCallback(async () => {
+    if (!isTimerActive) return;
+    
+    try {
+      const statsResponse = await fetchEmployeeDashboard();
+      if (statsResponse.data?.current_session?.clocked_in) {
+        const serverElapsedSeconds = Math.max(0, statsResponse.data.current_session.elapsed_seconds || 0);
+        setElapsedTime(serverElapsedSeconds);
+      }
+    } catch (error) {
+      console.error("Error syncing with server:", error);
+    }
+  }, [isTimerActive]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Set up periodic server sync every 30 seconds when timer is active
+  useEffect(() => {
+    if (isTimerActive) {
+      syncIntervalRef.current = setInterval(() => {
+        syncWithServer();
+      }, 30000); // Sync every 30 seconds
+    } else {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [isTimerActive, syncWithServer]);
+
+  // Sync when page becomes visible (user returns to tab or navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isTimerActive) {
+        // Page became visible - sync with server immediately
+        syncWithServer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isTimerActive, syncWithServer]);
 
   // Timer for current session - increments every second when active
   useEffect(() => {
@@ -315,7 +367,7 @@ export default function EmployeeDashboard() {
                             <span className="h-2 w-2 rounded-full bg-accent group-hover:animate-pulse" />
                             <div>
                               <p className="font-medium text-card-foreground">{task.title}</p>
-                              <p className="text-xs text-muted-foreground">TSK-{task.id.toString().padStart(4, "0")}</p>
+                              <p className="text-xs text-muted-foreground">{task.public_id || `TSK-${task.id.toString().padStart(4, "0")}`}</p>
                             </div>
                           </div>
                         </td>

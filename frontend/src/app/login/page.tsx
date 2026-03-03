@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [pendingMessage, setPendingMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
@@ -34,6 +35,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setPendingMessage("");
     setIsSubmitting(true);
 
     try {
@@ -52,6 +54,11 @@ export default function LoginPage() {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: "Unknown error" }));
         console.error("Login failed:", errorData);
+        if (res.status === 403) {
+          setPendingMessage(errorData.detail || "Your account is pending admin approval.");
+          setIsSubmitting(false);
+          return;
+        }
         throw new Error(errorData.detail || "Invalid credentials");
       }
 
@@ -113,6 +120,17 @@ export default function LoginPage() {
           {error && (
             <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
               {error}
+            </div>
+          )}
+
+          {pendingMessage && (
+            <div className="mb-6 p-4 rounded-xl border-2 border-purple-400/60 bg-amber-50/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-sm">
+              <div className="flex items-center gap-2 font-semibold mb-1">
+                <span className="text-lg">⏳</span>
+                Account Pending Approval
+              </div>
+              <p>{pendingMessage}</p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Please wait until an administrator approves your request.</p>
             </div>
           )}
 

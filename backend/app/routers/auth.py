@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import User, UserCreate, UserRead, UserLogin, Token, UserRole
+from app.models import User, UserCreate, UserRead, UserLogin, Token, UserRole, UserStatus, Notification, NotificationType
 from app.auth import (
     get_password_hash,
     verify_password,
@@ -51,14 +51,26 @@ async def register(
         name=user_data.name,
         email=user_data.email,
         hashed_password=hashed_password,
-        role=user_data.role
+        role=user_data.role,
+        status=UserStatus.PENDING
     )
     
     session.add(user)
     session.commit()
     session.refresh(user)
+
+    # Notify all admins about the new pending registration
+    admins = session.exec(select(User).where(User.role == UserRole.admin)).all()
+    for admin in admins:
+        notification = Notification(
+            user_id=admin.id,
+            type=NotificationType.NEW_REGISTRATION,
+            message=f"New registration pending approval: {user.name} ({user.email})"
+        )
+        session.add(notification)
+    session.commit()
     
-    return {"message": "User registered successfully", "user_id": user.id}
+    return {"message": "Account created. Awaiting admin approval.", "user_id": user.id}
 
 
 @router.post("/login", response_model=Token)
@@ -83,6 +95,18 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    if user.status == UserStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is pending admin approval."
+        )
+
+    if user.status == UserStatus.REJECTED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account registration has been rejected. Please contact your administrator."
+        )
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -133,7 +157,19 @@ async def login_json(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    if user.status == UserStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is pending admin approval."
+        )
+
+    if user.status == UserStatus.REJECTED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account registration has been rejected. Please contact your administrator."
+        )
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

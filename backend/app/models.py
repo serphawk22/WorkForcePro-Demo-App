@@ -47,6 +47,13 @@ class SubtaskStatus(str, Enum):
     rejected = "rejected"
 
 
+class UserStatus(str, Enum):
+    """Account approval status."""
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class NotificationType(str, Enum):
     """Notification types for different events."""
     TASK_ASSIGNED = "task_assigned"
@@ -60,6 +67,10 @@ class NotificationType(str, Enum):
     SUBTASK_REJECTED = "subtask_rejected"
     LEAVE_APPROVED = "leave_approved"
     LEAVE_REJECTED = "leave_rejected"
+    SALARY_PAID = "salary_paid"
+    NEW_REGISTRATION = "new_registration"
+    USER_APPROVED = "user_approved"
+    USER_REJECTED = "user_rejected"
 
 
 # ==================== USER MODELS ====================
@@ -75,6 +86,8 @@ class UserBase(SQLModel):
     github_url: Optional[str] = Field(default=None, max_length=255)
     linkedin_url: Optional[str] = Field(default=None, max_length=255)
     profile_picture: Optional[str] = Field(default=None)  # No max_length for base64 images
+    department: Optional[str] = Field(default=None, max_length=100)
+    base_salary: Optional[float] = Field(default=None)
 
 
 class User(UserBase, table=True):
@@ -83,6 +96,9 @@ class User(UserBase, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
+    status: str = Field(default="PENDING")
+    approved_at: Optional[datetime] = Field(default=None)
+    approved_by: Optional[int] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -101,13 +117,17 @@ class UserRead(SQLModel):
     email: str
     role: UserRole
     is_active: bool
+    status: str = "PENDING"
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = None
     created_at: datetime
     age: Optional[int] = None
     date_joined: Optional[DateType] = None
     github_url: Optional[str] = None
     linkedin_url: Optional[str] = None
     profile_picture: Optional[str] = None
-
+    department: Optional[str] = None
+    base_salary: Optional[float] = None
 
 class UserLogin(SQLModel):
     """Schema for user login."""
@@ -425,6 +445,7 @@ class DashboardStats(SQLModel):
     pending_tasks: int
     pending_leaves: int
     avg_daily_hours: float
+    pending_registrations: int = 0
 
 
 class EmployeePerformance(BaseModel):
@@ -440,6 +461,41 @@ class AttendanceStats(BaseModel):
     absent: int
     on_leave: int
     total: int
+
+
+# ==================== PAYROLL MODELS ====================
+
+class PayrollStatus(str, Enum):
+    pending = "Pending"
+    paid = "Paid"
+    processing = "Processing"
+
+
+class Payroll(SQLModel, table=True):
+    """Payroll record per employee per month."""
+    __tablename__ = "payrolls"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    employee_id: int = Field(foreign_key="users.id", index=True)
+    month: int  # 1-12
+    year: int
+    salary: float
+    status: str = Field(default="Pending")  # Pending | Paid | Processing
+    pay_date: Optional[DateType] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PayrollRead(SQLModel):
+    """Schema for reading payroll data."""
+    id: int
+    employee_id: int
+    name: str
+    department: Optional[str]
+    month: int
+    year: int
+    salary: float
+    status: str
+    pay_date: Optional[DateType]
 
 
 class EmployeeListItem(BaseModel):

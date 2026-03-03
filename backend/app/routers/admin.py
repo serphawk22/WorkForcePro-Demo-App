@@ -1,18 +1,18 @@
 """
 Admin routes: protected endpoints for admin users only.
 """
-from datetime import date
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import date, datetime, timezone
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import (
-    User, UserRead, UserRole, Attendance, Task, LeaveRequest,
+    User, UserCreate, UserRead, UserRole, UserStatus, Attendance, Task, LeaveRequest,
     TaskStatus, LeaveStatus, DashboardStats, Notification, TaskComment, Subtask,
-    EmployeePerformance, AttendanceStats, EmployeeListItem
+    EmployeePerformance, AttendanceStats, EmployeeListItem, NotificationType
 )
-from app.auth import get_current_admin_user
+from app.auth import get_current_admin_user, get_password_hash
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -66,7 +66,10 @@ async def get_dashboard_stats(
         active_sessions=active_sessions,
         pending_tasks=pending_tasks,
         pending_leaves=pending_leaves,
-        avg_daily_hours=round(avg_hours, 1)
+        avg_daily_hours=round(avg_hours, 1),
+        pending_registrations=len(session.exec(
+            select(User).where(User.status == "PENDING")
+        ).all())
     )
 
 
@@ -89,16 +92,16 @@ async def get_all_employees(
 
 @router.get("/users", response_model=List[UserRead])
 async def get_all_users(
+    status_filter: Optional[str] = Query(None, alias="status"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Get all users (admin only).
-    
-    Returns a list of all users regardless of role.
-    Requires admin authentication.
+    Get all users (admin only). Optionally filter by status=PENDING|APPROVED|REJECTED.
     """
     statement = select(User)
+    if status_filter:
+        statement = statement.where(User.status == status_filter.upper())
     users = session.exec(statement).all()
     return users
 
@@ -122,6 +125,110 @@ async def get_user_by_id(
         )
     
     return user
+
+
+@router.put("/users/{user_id}/approve")
+async def approve_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Approve a pending user registration (admin only)."""
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.status = UserStatus.APPROVED
+    user.approved_at = datetime.now(timezone.utc)
+    user.approved_by = current_user.id
+    session.add(user)
+
+    # Notify admins that approval happened / mark related new_registration notifications as read
+    notification = Notification(
+        user_id=current_user.id,
+        type=NotificationType.USER_APPROVED,
+        message=f"You approved {user.name} ({user.email})"
+    )
+    session.add(notification)
+    session.commit()
+    return {"message": f"User {user.email} has been approved.", "status": "APPROVED"}
+
+
+@router.put("/users/{user_id}/reject")
+async def reject_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Reject a pending user registration (admin only)."""
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.status = UserStatus.REJECTED
+    session.add(user)
+    session.commit()
+    return {"message": f"User {user.email} has been rejected.", "status": "REJECTED"}
+
+
+@router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+async def create_employee(
+    user_data: UserCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Create a new employee directly (admin only). Account is auto-approved."""
+    existing = session.exec(select(User).where(User.email == user_data.email)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
+    hashed_password = get_password_hash(user_data.password)
+    user = User(
+        name=user_data.name,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        role=user_data.role,
+        status=UserStatus.APPROVED,
+        approved_at=datetime.now(timezone.utc),
+        approved_by=current_user.id,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/date-joined")
+async def update_date_joined(
+    user_id: int,
+    date_joined: str = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Set or update an employee's date of joining (admin only).
+    Pass date_joined as query param in YYYY-MM-DD format, or omit to clear it.
+    """
+    from datetime import date as DateType
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if date_joined:
+        try:
+            user.date_joined = DateType.fromisoformat(date_joined)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        user.date_joined = None
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {"message": "Date of joining updated", "date_joined": str(user.date_joined) if user.date_joined else None}
 
 
 @router.patch("/users/{user_id}/deactivate")

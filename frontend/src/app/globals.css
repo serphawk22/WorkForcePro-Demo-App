@@ -88,65 +88,65 @@
   }
 
   .dark {
-    /* ── Dark Mode ── */
-    --background:          300 100% 5%;     /* #190019 - Deep Dark Purple */
-    --background-soft:     266 62% 18%;     /* #2B124C - Primary Dark Purple */
-    --foreground:          22 85% 91%;      /* #FBE4D8 - Lightest Beige */
+    /* ── Dark Mode ── ENHANCED WITH BRIGHTER COLORS */
+    --background:          266 65% 12%;     /* Lighter purple background */
+    --background-soft:     266 60% 18%;     /* Softened card background */
+    --foreground:          22 85% 92%;      /* Bright beige text */
 
-    --card:                266 62% 18%;     /* #2B124C - Primary Dark Purple */
-    --card-foreground:     22 85% 91%;      /* #FBE4D8 */
+    --card:                266 55% 20%;     /* Brighter purple cards */
+    --card-foreground:     22 90% 94%;      /* Very bright beige text */
 
-    --popover:             266 62% 18%;     /* #2B124C */
-    --popover-foreground:  22 85% 91%;      /* #FBE4D8 */
+    --popover:             266 55% 20%;     /* Brighter popover */
+    --popover-foreground:  22 90% 94%;      /* Bright text */
 
-    --primary:             328 26% 42%;     /* #854F6C - Light Purple */
-    --primary-foreground:  22 85% 91%;      /* #FBE4D8 */
+    --primary:             328 45% 55%;     /* MUCH BRIGHTER purple-pink */
+    --primary-foreground:  0 0% 100%;       /* Pure white */
 
-    --primary-light:       289 36% 26%;     /* #522B5B - hover */
-    --primary-glow:        328 26% 52%;     /* Light Purple glow */
+    --primary-light:       328 50% 65%;     /* Very bright hover */
+    --primary-glow:        328 60% 70%;     /* Glowing bright purple */
 
-    --secondary:           266 62% 18%;     /* #2B124C */
-    --secondary-foreground: 22 85% 91%;     /* #FBE4D8 */
+    --secondary:           266 50% 25%;     /* Lighter secondary */
+    --secondary-foreground: 22 90% 94%;     /* Bright text */
 
-    --muted:               266 62% 18%;     /* #2B124C */
-    --muted-foreground:    5 38% 79%;       /* #DFB6B2 - Beige Soft */
+    --muted:               266 45% 25%;     /* Lighter muted */
+    --muted-foreground:    22 70% 85%;      /* Brighter muted text */
 
-    --accent:              289 36% 26%;     /* #522B5B - Mid Purple */
-    --accent-foreground:   22 85% 91%;      /* #FBE4D8 */
+    --accent:              328 50% 60%;     /* BRIGHT accent purple */
+    --accent-foreground:   0 0% 100%;       /* Pure white */
 
-    --destructive:         0 62% 45%;
+    --destructive:         0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border:              289 36% 26%;     /* #522B5B */
-    --input:               289 36% 26%;     /* #522B5B */
-    --ring:                328 26% 42%;     /* #854F6C */
+    --border:              328 30% 35%;     /* Lighter, more visible borders */
+    --input:               266 45% 25%;     /* Lighter input background */
+    --ring:                328 60% 60%;     /* Bright ring color */
 
-    /* Status colors - dark */
-    --success:             142 71% 45%;
+    /* Status colors - VIBRANT */
+    --success:             142 80% 50%;     /* Brighter green */
     --success-foreground:  0 0% 100%;
-    --warning:             38 92% 50%;
+    --warning:             38 100% 55%;     /* Brighter yellow */
     --warning-foreground:  0 0% 100%;
-    --info:                328 26% 42%;
-    --info-foreground:     22 85% 91%;
+    --info:                200 90% 55%;     /* Bright blue */
+    --info-foreground:     0 0% 100%;
 
-    /* Gradient tokens — dark */
-    --gradient-hero:        linear-gradient(135deg, hsl(300 100% 5%), hsl(266 62% 18%), hsl(289 36% 26%));
-    --gradient-primary:     linear-gradient(135deg, hsl(328 26% 42%), hsl(289 36% 26%));
-    --gradient-primary-btn: linear-gradient(135deg, hsl(328 26% 42%), hsl(289 36% 26%));
-    --gradient-card:        linear-gradient(145deg, hsl(266 62% 20%), hsl(266 62% 16%));
-    --shadow-card:          0 4px 24px -4px hsl(300 100% 5% / 0.6), 0 1px 4px hsl(300 100% 5% / 0.3);
-    --shadow-primary:       0 8px 32px -8px hsl(328 26% 42% / 0.5);
-    --shadow-glow:          0 0 60px hsl(328 26% 42% / 0.4);
+    /* Gradient tokens — ENHANCED BRIGHTNESS */
+    --gradient-hero:        linear-gradient(135deg, hsl(266 65% 15%), hsl(289 50% 25%), hsl(328 45% 35%));
+    --gradient-primary:     linear-gradient(135deg, hsl(328 50% 60%), hsl(289 45% 45%));
+    --gradient-primary-btn: linear-gradient(135deg, hsl(328 55% 60%), hsl(289 50% 50%));
+    --gradient-card:        linear-gradient(145deg, hsl(266 50% 24%), hsl(266 55% 20%));
+    --shadow-card:          0 8px 32px -4px hsl(328 60% 40% / 0.4), 0 4px 16px hsl(328 50% 50% / 0.2);
+    --shadow-primary:       0 12px 48px -8px hsl(328 60% 50% / 0.6);
+    --shadow-glow:          0 0 80px hsl(328 70% 60% / 0.5), 0 0 40px hsl(328 60% 55% / 0.3);
 
-    /* Sidebar - Navbar */
-    --sidebar-background:  266 62% 18%;     /* #2B124C */
-    --sidebar-foreground:  22 85% 91%;      /* #FBE4D8 */
-    --sidebar-primary:     328 26% 42%;     /* #854F6C */
-    --sidebar-primary-foreground: 22 85% 91%;
-    --sidebar-accent:      289 36% 26%;     /* #522B5B */
-    --sidebar-accent-foreground: 22 85% 91%;
-    --sidebar-border:      289 36% 26%;     /* #522B5B */
-    --sidebar-ring:        328 26% 42%;     /* #854F6C */
+    /* Sidebar - Navbar BRIGHTER */
+    --sidebar-background:  266 55% 20%;     /* Lighter sidebar */
+    --sidebar-foreground:  22 90% 94%;      /* Bright text */
+    --sidebar-primary:     328 50% 60%;     /* Bright primary */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:      266 45% 30%;     /* Lighter accent */
+    --sidebar-accent-foreground: 22 90% 94%;
+    --sidebar-border:      328 30% 35%;     /* Brighter border */
+    --sidebar-ring:        328 60% 60%;     /* Bright ring */
   }
 }
 
@@ -203,14 +203,16 @@
   }
   
   .glass-card {
-    background: linear-gradient(135deg, hsl(var(--card) / 0.9), hsl(var(--card) / 0.7));
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid hsl(var(--border) / 0.2);
+    background: linear-gradient(135deg, hsl(var(--card) / 0.95), hsl(var(--card) / 0.85));
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid hsl(var(--primary) / 0.3);
     box-shadow: 
-      0 4px 24px -4px hsl(var(--primary) / 0.1),
-      0 8px 48px -8px hsl(var(--primary) / 0.05),
-      inset 0 1px 0 hsl(0 0% 100% / 0.3);
+      0 8px 32px -4px hsl(var(--primary) / 0.25),
+      0 12px 64px -8px hsl(var(--primary) / 0.15),
+      inset 0 2px 4px hsl(0 0% 100% / 0.15),
+      inset 0 -2px 4px hsl(var(--primary) / 0.1),
+      0 0 0 1px hsl(var(--primary) / 0.1) inset;
   }
   
   .glass-card-hover:hover {
@@ -300,21 +302,25 @@
     box-shadow: 0 4px 16px hsl(var(--primary) / 0.15);
   }
 
-  /* Premium Glow Effects */
+  /* Premium Glow Effects - ENHANCED */
   .glow-sm {
-    box-shadow: 0 0 15px hsl(var(--primary) / 0.2);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.4), 0 0 10px hsl(var(--primary) / 0.2);
   }
   
   .glow-md {
-    box-shadow: 0 0 30px hsl(var(--primary) / 0.25);
+    box-shadow: 0 0 40px hsl(var(--primary) / 0.5), 0 0 20px hsl(var(--primary) / 0.3);
   }
   
   .glow-lg {
-    box-shadow: 0 0 45px hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 60px hsl(var(--primary) / 0.6), 0 0 30px hsl(var(--primary) / 0.4);
   }
   
   .glow-primary {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.4), 0 0 40px hsl(var(--primary) / 0.2);
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.6), 0 0 60px hsl(var(--primary) / 0.3), 0 0 90px hsl(var(--primary) / 0.15);
+  }
+  
+  .glow-icon {
+    filter: drop-shadow(0 0 8px hsl(var(--primary) / 0.6)) drop-shadow(0 0 4px hsl(var(--primary) / 0.4));
   }
 
   /* Premium Shimmer Effect */

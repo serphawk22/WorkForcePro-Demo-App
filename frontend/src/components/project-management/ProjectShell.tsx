@@ -40,10 +40,10 @@ export default function ProjectShell({ children, headerAction }: ProjectShellPro
           {/* ── Page header ── */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold" style={{ color: "#2B124C" }}>
+              <h1 className="text-2xl font-bold text-foreground drop-shadow-sm">
                 Project Management
               </h1>
-              <p className="text-sm mt-0.5" style={{ color: "#854F6C" }}>
+              <p className="text-sm mt-0.5 text-muted-foreground">
                 {isAdmin
                   ? "Manage workspace, track progress, and coordinate your team"
                   : "Track your projects and collaborate with your team"}
@@ -54,8 +54,7 @@ export default function ProjectShell({ children, headerAction }: ProjectShellPro
 
           {/* ── Tab bar ── */}
           <div
-            className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto"
-            style={{ background: "hsl(5 38% 79% / 0.35)" }}
+            className="flex items-center gap-1.5 p-1.5 rounded-xl overflow-x-auto glass-card card-shadow"
           >
             {tabs.map((tab) => {
               const isActive =
@@ -66,16 +65,11 @@ export default function ProjectShell({ children, headerAction }: ProjectShellPro
                 <Link
                   key={tab.path}
                   href={tab.path}
-                  className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                     isActive
-                      ? "text-white shadow-md"
-                      : "hover:bg-white/50"
+                      ? "text-white shadow-lg shadow-purple-500/40 scale-105 bg-gradient-to-r from-purple-600 to-pink-600"
+                      : "text-primary hover:bg-gradient-to-r hover:from-purple-500/10 hover:to-pink-500/10 hover:scale-[1.02] dark:text-purple-300"
                   }`}
-                  style={
-                    isActive
-                      ? { background: "#522B5B" }
-                      : { color: "#522B5B" }
-                  }
                 >
                   {tab.label}
                 </Link>

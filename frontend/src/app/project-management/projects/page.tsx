@@ -17,14 +17,14 @@ import {
 import { toast } from "sonner";
 
 const priorityColors: Record<string, string> = {
-  high: "bg-red-500/10 text-red-500",
-  medium: "bg-yellow-500/10 text-yellow-500",
-  low: "bg-green-500/10 text-green-500",
+  high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30",
+  medium: "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-yellow-400 border border-yellow-500/30",
+  low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30",
 };
 const statusColors: Record<string, string> = {
-  todo: "text-muted-foreground", in_progress: "text-blue-500",
-  submitted: "text-yellow-500", reviewing: "text-purple-500",
-  approved: "text-green-500", rejected: "text-red-500",
+  todo: "text-purple-400", in_progress: "text-blue-400",
+  submitted: "text-yellow-400", reviewing: "text-amber-400",
+  approved: "text-green-400", rejected: "text-red-400",
 };
 
 export default function ProjectsPage() {
@@ -237,13 +237,13 @@ export default function ProjectsPage() {
 
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#522B5B" }} />
+            <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
           </div>
         ) : (
           <div className="rounded-xl glass-card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-xs uppercase tracking-wider" style={{ borderColor: "#DFB6B2", background: "hsl(5 38% 79% / 0.2)", color: "#854F6C" }}>
+                <tr className="border-b text-xs uppercase tracking-wider bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-400 font-semibold">
                   <th className="py-3 pl-4 text-left font-semibold"></th>
                   <th className="py-3 text-left font-semibold">Ref ID</th>
                   <th className="py-3 text-left font-semibold">Task</th>
@@ -273,10 +273,10 @@ export default function ProjectsPage() {
                       <td className="py-3.5">
                         {task.public_id ? (
                           <div className="flex items-center gap-1">
-                            <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md tracking-wider select-all" style={{ background: "hsl(289 36% 26% / 0.1)", color: "#522B5B" }}>
+                            <span className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
                               {task.public_id}
                             </span>
-                            <button onClick={(e) => handleCopyRefId(e, task.public_id)} className="text-muted-foreground hover:text-purple-500 transition-colors p-0.5">
+                            <button onClick={(e) => handleCopyRefId(e, task.public_id)} className="text-muted-foreground hover:text-purple-400 transition-colors p-0.5">
                               <Copy size={11} />
                             </button>
                           </div>
@@ -287,7 +287,7 @@ export default function ProjectsPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-card-foreground">{task.title}</span>
                             {!isAdmin && task.assigned_to === user?.id && (
-                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "hsl(289 36% 26% / 0.1)", color: "#522B5B" }}>
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
                                 Assigned to You
                               </span>
                             )}
@@ -430,7 +430,7 @@ export default function ProjectsPage() {
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-center text-muted-foreground text-xs py-4">No subtasks yet. Click "Subtask" to create one.</p>
+                              <p className="text-center text-muted-foreground text-xs py-4">No subtasks yet. Click &ldquo;Subtask&rdquo; to create one.</p>
                             )}
                           </div>
                         </td>
@@ -456,7 +456,9 @@ export default function ProjectsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold" style={{ color: "#2B124C" }}>Create New Project</h2>
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                Create New Project
+              </h2>
               <button onClick={() => setShowCreateModal(false)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateTask} className="space-y-4">
@@ -464,7 +466,7 @@ export default function ProjectsPage() {
                 { label: "Title *", name: "title", type: "text", placeholder: "Project title", required: true },
               ].map(f => (
                 <div key={f.name}>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>{f.label}</label>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">{f.label}</label>
                   <input type={f.type} value={(newTask as any)[f.name] || ""} onChange={e => setNewTask({ ...newTask, [f.name]: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2", focusRingColor: "#522B5B" } as any} placeholder={f.placeholder} required={f.required} />
                 </div>
               ))}
@@ -474,7 +476,7 @@ export default function ProjectsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Priority</label>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
                   <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value as any })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -482,13 +484,13 @@ export default function ProjectsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Due Date</label>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Due Date</label>
                   <input type="date" value={newTask.due_date || ""} onChange={e => setNewTask({ ...newTask, due_date: e.target.value || undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} />
                 </div>
               </div>
               {isAdmin && (
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Assign To</label>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Assign To</label>
                   <select value={newTask.assigned_to || ""} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
                     <option value="">Unassigned</option>
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -511,20 +513,22 @@ export default function ProjectsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold flex items-center gap-2" style={{ color: "#2B124C" }}><ListTree size={20} style={{ color: "#522B5B" }} /> Create Subtask</h2>
+              <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
+                <ListTree size={20} className="text-purple-400" /> Create Subtask
+              </h2>
               <button onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateSubtask} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Title *</label>
+                <label className="block text-sm font-semibold mb-1 text-foreground">Title *</label>
                 <input type="text" value={newSubtask.title} onChange={e => setNewSubtask({ ...newSubtask, title: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="Subtask title" required />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Description</label>
+                <label className="block text-sm font-semibold mb-1 text-foreground">Description</label>
                 <textarea value={newSubtask.description || ""} onChange={e => setNewSubtask({ ...newSubtask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} rows={3} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Assign To *</label>
+                <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
                 <select value={newSubtask.assigned_to || ""} onChange={e => setNewSubtask({ ...newSubtask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} required>
                   <option value="">Select employee</option>
                   {employees.filter(e => e.id !== user?.id).map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -554,11 +558,15 @@ export default function ProjectsPage() {
             </div>
             <form onSubmit={handleUpdateLinks} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1 flex items-center gap-1" style={{ color: "#522B5B" }}><Github size={14} /> GitHub Link</label>
+                <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
+                  <Github size={14} /> GitHub Link
+                </label>
                 <input type="url" value={editingLinks.github_link} onChange={e => setEditingLinks({ ...editingLinks, github_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="https://github.com/user/repo" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1 flex items-center gap-1" style={{ color: "#522B5B" }}><ExternalLink size={14} /> Deployed Link</label>
+                <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
+                  <ExternalLink size={14} /> Deployed Link
+                </label>
                 <input type="url" value={editingLinks.deployed_link} onChange={e => setEditingLinks({ ...editingLinks, deployed_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="https://app.vercel.app" />
               </div>
               <div className="flex justify-end gap-3 pt-2">

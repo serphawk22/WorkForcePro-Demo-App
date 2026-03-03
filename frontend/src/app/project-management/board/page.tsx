@@ -9,16 +9,44 @@ import { Loader2, CalendarDays, User } from "lucide-react";
 import { toast } from "sonner";
 
 const COLUMNS = [
-  { key: "todo",        label: "To Do",       accent: "#854F6C", bg: "#854F6C12" },
-  { key: "in_progress", label: "In Progress", accent: "#2B124C", bg: "#2B124C12" },
-  { key: "reviewing",   label: "Reviewing",   accent: "#522B5B", bg: "#522B5B12" },
-  { key: "approved",    label: "Done",        accent: "#166534", bg: "#16653412" },
+  { 
+    key: "todo", 
+    label: "To Do", 
+    accent: "#a78bfa", 
+    bg: "rgba(167, 139, 250, 0.15)",
+    gradient: "from-purple-500/20 to-purple-600/20",
+    shadow: "purple-500/30"
+  },
+  { 
+    key: "in_progress", 
+    label: "In Progress", 
+    accent: "#60a5fa", 
+    bg: "rgba(96, 165, 250, 0.15)",
+    gradient: "from-blue-500/20 to-blue-600/20",
+    shadow: "blue-500/30"
+  },
+  { 
+    key: "reviewing", 
+    label: "Reviewing", 
+    accent: "#facc15", 
+    bg: "rgba(250, 204, 21, 0.15)",
+    gradient: "from-yellow-500/20 to-yellow-600/20",
+    shadow: "yellow-500/30"
+  },
+  { 
+    key: "approved", 
+    label: "Done", 
+    accent: "#4ade80", 
+    bg: "rgba(74, 222, 128, 0.15)",
+    gradient: "from-green-500/20 to-green-600/20",
+    shadow: "green-500/30"
+  },
 ];
 
 const PRIORITY_COLORS: Record<string, string> = {
-  high:   "#991b1b",
-  medium: "#854F6C",
-  low:    "#166534",
+  high:   "#f87171",
+  medium: "#facc15",
+  low:    "#4ade80",
 };
 
 export default function BoardPage() {
@@ -91,7 +119,7 @@ export default function BoardPage() {
     <ProjectShell>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#522B5B" }} />
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[600px]">
@@ -112,12 +140,12 @@ export default function BoardPage() {
                 }}
               >
                 {/* Column header */}
-                <div className="flex items-center justify-between px-4 py-3 rounded-t-2xl" style={{ background: col.bg, borderBottom: `1.5px solid ${col.accent}20` }}>
+                <div className={`flex items-center justify-between px-4 py-3 rounded-t-2xl bg-gradient-to-r ${col.gradient} border-b-2`} style={{ borderColor: col.accent + "30" }}>
                   <div className="flex items-center gap-2">
-                    <div className="h-2.5 w-2.5 rounded-full" style={{ background: col.accent }} />
-                    <span className="font-bold text-sm" style={{ color: col.accent }}>{col.label}</span>
+                    <div className="h-3 w-3 rounded-full shadow-lg" style={{ background: col.accent, boxShadow: `0 0 8px ${col.accent}` }} />
+                    <span className="font-bold text-sm drop-shadow-sm" style={{ color: col.accent }}>{col.label}</span>
                   </div>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: col.accent + "22", color: col.accent }}>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full border drop-shadow-sm" style={{ background: col.bg, color: col.accent, borderColor: col.accent + "40" }}>
                     {colTasks.length}
                   </span>
                 </div>
@@ -136,23 +164,22 @@ export default function BoardPage() {
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
                       onClick={() => router.push(`/project-management/${task.id}`)}
-                      className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`}
-                      style={{ background: "rgba(255,255,255,0.75)", border: "1px solid #DFB6B240", boxShadow: "0 2px 8px #2B124C10" }}
+                      className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none glass-card border border-border/30 ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/20 hover:border-purple-500/30"}`}
                     >
                       {/* Ref ID + priority */}
                       <div className="flex items-center justify-between mb-2">
                         {task.public_id ? (
-                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wider" style={{ background: "#522B5B12", color: "#522B5B" }}>
+                          <span className="font-mono text-[10px] font-bold px-2 py-1 rounded tracking-wider bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 drop-shadow-sm">
                             {task.public_id}
                           </span>
                         ) : <span />}
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full capitalize" style={{ background: PRIORITY_COLORS[task.priority] + "18", color: PRIORITY_COLORS[task.priority] }}>
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full capitalize border drop-shadow-sm" style={{ background: PRIORITY_COLORS[task.priority] + "20", color: PRIORITY_COLORS[task.priority], borderColor: PRIORITY_COLORS[task.priority] + "40" }}>
                           {task.priority}
                         </span>
                       </div>
 
                       {/* Title */}
-                      <p className="text-sm font-semibold line-clamp-2 mb-3" style={{ color: "#2B124C" }}>{task.title}</p>
+                      <p className="text-sm font-semibold line-clamp-2 mb-3 text-foreground">{task.title}</p>
 
                       {/* Footer */}
                       <div className="flex items-center justify-between text-[11px]" style={{ color: "#854F6C" }}>

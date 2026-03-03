@@ -11,7 +11,7 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const PRIORITY_DOT: Record<string, string> = {
-  high: "#991b1b", medium: "#854F6C", low: "#166534",
+  high: "#f87171", medium: "#facc15", low: "#4ade80",
 };
 
 function getDaysInMonth(year: number, month: number) {
@@ -65,19 +65,19 @@ export default function CalendarPage() {
     <ProjectShell>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#522B5B" }} />
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
         </div>
       ) : (
         <div className="rounded-2xl glass-card p-6 card-shadow">
           {/* ── Month navigator ── */}
           <div className="flex items-center justify-between mb-6">
-            <button onClick={prevMonth} className="p-2 rounded-xl hover:bg-secondary/40 transition-colors" style={{ color: "#522B5B" }}>
+            <button onClick={prevMonth} className="p-2 rounded-xl hover:bg-purple-500/10 transition-colors text-purple-400">
               <ChevronLeft size={18} />
             </button>
-            <h2 className="text-lg font-bold" style={{ color: "#2B124C" }}>
+            <h2 className="text-lg font-bold text-foreground drop-shadow-sm">
               {MONTHS[viewMonth]} {viewYear}
             </h2>
-            <button onClick={nextMonth} className="p-2 rounded-xl hover:bg-secondary/40 transition-colors" style={{ color: "#522B5B" }}>
+            <button onClick={nextMonth} className="p-2 rounded-xl hover:bg-purple-500/10 transition-colors text-purple-400">
               <ChevronRight size={18} />
             </button>
           </div>
@@ -85,7 +85,7 @@ export default function CalendarPage() {
           {/* ── Day headers ── */}
           <div className="grid grid-cols-7 mb-2">
             {DAYS.map(d => (
-              <div key={d} className="text-center text-xs font-bold py-2" style={{ color: "#854F6C" }}>{d}</div>
+              <div key={d} className="text-center text-xs font-bold py-2 text-purple-400">{d}</div>
             ))}
           </div>
 
@@ -100,17 +100,17 @@ export default function CalendarPage() {
               return (
                 <div
                   key={idx}
-                  className="min-h-[80px] rounded-xl p-1.5 transition-colors"
+                  className="min-h-[80px] rounded-xl p-1.5 transition-all hover:scale-[1.01]"
                   style={{
-                    background: isToday ? "#522B5B12" : isCurrentMonth ? "rgba(255,255,255,0.5)" : "transparent",
-                    border: isToday ? "1.5px solid #522B5B60" : isCurrentMonth ? "1px solid #DFB6B230" : "none",
+                    background: isToday ? "rgba(167, 139, 250, 0.15)" : isCurrentMonth ? "rgba(255,255,255,0.5)" : "transparent",
+                    border: isToday ? "2px solid #a78bfa" : isCurrentMonth ? "1px solid #DFB6B230" : "none",
+                    boxShadow: isToday ? "0 0 12px rgba(167, 139, 250, 0.3)" : "none"
                   }}
                 >
                   {isCurrentMonth && (
                     <>
                       {/* Day number */}
-                      <div className={`text-xs font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
-                        style={isToday ? { background: "#522B5B", color: "white" } : { color: "#522B5B" }}>
+                      <div className={`text-xs font-bold mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg shadow-purple-500/50" : "text-purple-400"}`}>
                         {day}
                       </div>
                       {/* Task chips */}
@@ -120,8 +120,8 @@ export default function CalendarPage() {
                             key={t.id}
                             onClick={() => router.push(`/project-management/${t.id}`)}
                             title={t.title}
-                            className="rounded px-1.5 py-0.5 text-[9px] font-semibold truncate cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-1"
-                            style={{ background: PRIORITY_DOT[t.priority] + "18", color: PRIORITY_DOT[t.priority] }}
+                            className="rounded px-1.5 py-0.5 text-[9px] font-semibold truncate cursor-pointer hover:scale-105 transition-all flex items-center gap-1 border"
+                            style={{ background: PRIORITY_DOT[t.priority] + "20", color: PRIORITY_DOT[t.priority], borderColor: PRIORITY_DOT[t.priority] + "40" }}
                           >
                             <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: PRIORITY_DOT[t.priority] }} />
                             {t.title}
@@ -141,10 +141,10 @@ export default function CalendarPage() {
           </div>
 
           {/* ── Legend ── */}
-          <div className="flex items-center gap-4 mt-4 pt-4 flex-wrap" style={{ borderTop: "1px solid #DFB6B250" }}>
+          <div className="flex items-center gap-4 mt-4 pt-4 flex-wrap border-t border-border/50">
             {Object.entries(PRIORITY_DOT).map(([k, c]) => (
-              <div key={k} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#854F6C" }}>
-                <span className="h-2 w-2 rounded-full" style={{ background: c }} />
+              <div key={k} className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ background: c, boxShadow: `0 0 6px ${c}60` }} />
                 {k.charAt(0).toUpperCase() + k.slice(1)} priority
               </div>
             ))}

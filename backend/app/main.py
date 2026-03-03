@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll
 
 load_dotenv()
 
@@ -98,6 +98,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(payroll.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)

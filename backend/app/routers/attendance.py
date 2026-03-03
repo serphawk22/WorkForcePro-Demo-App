@@ -14,6 +14,19 @@ from app.auth import get_current_user, get_current_admin_user
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
+def format_utc_datetime(dt: Optional[datetime]) -> Optional[str]:
+    """
+    Format a datetime as ISO string with 'Z' suffix for UTC.
+    Handles naive datetimes (assumes they are UTC).
+    """
+    if dt is None:
+        return None
+    # If naive datetime, assume it's UTC
+    if dt.tzinfo is None:
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # If timezone-aware, convert to UTC first then format
+    utc_dt = dt.astimezone(timezone.utc)
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 @router.post("/punch-in", response_model=AttendanceRead)
 async def punch_in(
@@ -47,7 +60,8 @@ async def punch_in(
                 punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
             
             delta = punch_out_aware - punch_in_aware
-            active_session.total_hours = round(delta.total_seconds() / 3600, 2)
+            # Ensure total_hours is never negative (handle clock sync issues)
+            active_session.total_hours = max(0, round(delta.total_seconds() / 3600, 2))
         session.add(active_session)
     
     # Check if already completed attendance for today (by date field)
@@ -84,8 +98,8 @@ async def punch_in(
         "id": attendance.id,
         "user_id": attendance.user_id,
         "date": attendance.date,
-        "punch_in": attendance.punch_in,
-        "punch_out": attendance.punch_out,
+        "punch_in": format_utc_datetime(attendance.punch_in),
+        "punch_out": format_utc_datetime(attendance.punch_out),
         "total_hours": attendance.total_hours,
         "is_active": True  # Just punched in, session is active
     }
@@ -128,7 +142,8 @@ async def punch_out(
             punch_out_aware = punch_out_aware.replace(tzinfo=timezone.utc)
         
         delta = punch_out_aware - punch_in_aware
-        attendance.total_hours = round(delta.total_seconds() / 3600, 2)
+        # Ensure total_hours is never negative (handle clock sync issues)
+        attendance.total_hours = max(0, round(delta.total_seconds() / 3600, 2))
     
     session.add(attendance)
     session.commit()
@@ -139,14 +154,14 @@ async def punch_out(
         "id": attendance.id,
         "user_id": attendance.user_id,
         "date": attendance.date,
-        "punch_in": attendance.punch_in,
-        "punch_out": attendance.punch_out,
+        "punch_in": format_utc_datetime(attendance.punch_in),
+        "punch_out": format_utc_datetime(attendance.punch_out),
         "total_hours": attendance.total_hours,
         "is_active": False  # Just punched out, session is complete
     }
 
 
-@router.get("/me", response_model=List[AttendanceRead])
+@router.get("/me")
 async def get_my_attendance(
     request: Request,
     limit: int = 30,
@@ -159,10 +174,22 @@ async def get_my_attendance(
     ).order_by(Attendance.date.desc()).limit(limit)
     
     records = session.exec(statement).all()
-    return records
+    
+    # Format datetime fields with proper UTC timezone
+    return [
+        {
+            "id": record.id,
+            "user_id": record.user_id,
+            "date": record.date,
+            "punch_in": format_utc_datetime(record.punch_in),
+            "punch_out": format_utc_datetime(record.punch_out),
+            "total_hours": record.total_hours
+        }
+        for record in records
+    ]
 
 
-@router.get("/today", response_model=Optional[AttendanceRead])
+@router.get("/today")
 async def get_today_attendance(
     request: Request,
     session: Session = Depends(get_session),
@@ -181,7 +208,18 @@ async def get_today_attendance(
         Attendance.punch_in < end_of_day
     )
     attendance = session.exec(statement).first()
-    return attendance
+    
+    if not attendance:
+        return None
+    
+    return {
+        "id": attendance.id,
+        "user_id": attendance.user_id,
+        "date": attendance.date,
+        "punch_in": format_utc_datetime(attendance.punch_in),
+        "punch_out": format_utc_datetime(attendance.punch_out),
+        "total_hours": attendance.total_hours
+    }
 
 
 @router.get("/status")
@@ -246,8 +284,8 @@ async def get_attendance_status(
     
     return {
         "status": status,
-        "punch_in": attendance.punch_in.isoformat() if attendance.punch_in else None,
-        "punch_out": attendance.punch_out.isoformat() if attendance.punch_out else None,
+        "punch_in": format_utc_datetime(attendance.punch_in),
+        "punch_out": format_utc_datetime(attendance.punch_out),
         "elapsed_seconds": int(elapsed),
         "is_active": is_active,
         "total_hours": attendance.total_hours
@@ -255,39 +293,70 @@ async def get_attendance_status(
 
 
 # Admin routes
-@router.get("/all", response_model=List[AttendanceWithUser])
+@router.get("/all")
 async def get_all_attendance(
     request: Request,
     date_filter: Optional[date] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    sort: str = "desc",
     limit: int = 100,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user)
 ):
-    """Get all attendance records (admin only)."""
+    """
+    Get all attendance records (admin only).
+    
+    Filters:
+    - date_filter: Filter by exact date
+    - start_date & end_date: Filter by date range (inclusive)
+    - sort: Sort order ('asc' or 'desc', default 'desc')
+    - limit: Maximum number of records to return
+    """
     statement = select(Attendance)
     
+    # Apply date filters
     if date_filter:
+        # Exact date match
         statement = statement.where(Attendance.date == date_filter)
+    elif start_date and end_date:
+        # Date range filter (inclusive)
+        statement = statement.where(
+            Attendance.date >= start_date,
+            Attendance.date <= end_date
+        )
+    elif start_date:
+        # Only start date provided
+        statement = statement.where(Attendance.date >= start_date)
+    elif end_date:
+        # Only end date provided
+        statement = statement.where(Attendance.date <= end_date)
     
-    statement = statement.order_by(Attendance.date.desc()).limit(limit)
+    # Apply sorting
+    if sort.lower() == "asc":
+        statement = statement.order_by(Attendance.date.asc(), Attendance.punch_in.asc())
+    else:
+        statement = statement.order_by(Attendance.date.desc(), Attendance.punch_in.desc())
+    
+    statement = statement.limit(limit)
     records = session.exec(statement).all()
     
-    # Enrich with user info
+    # Enrich with user info and format datetime fields
     result = []
     for record in records:
         user_statement = select(User).where(User.id == record.user_id)
         user = session.exec(user_statement).first()
         
-        result.append(AttendanceWithUser(
-            id=record.id,
-            user_id=record.user_id,
-            date=record.date,
-            punch_in=record.punch_in,
-            punch_out=record.punch_out,
-            total_hours=record.total_hours,
-            user_name=user.name if user else None,
-            user_email=user.email if user else None
-        ))
+        result.append({
+            "id": record.id,
+            "user_id": record.user_id,
+            "date": record.date,
+            "punch_in": format_utc_datetime(record.punch_in),
+            "punch_out": format_utc_datetime(record.punch_out),
+            "total_hours": record.total_hours,
+            "user_name": user.name if user else None,
+            "user_email": user.email if user else None
+        })
     
     return result
 

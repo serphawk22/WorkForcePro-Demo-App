@@ -8,15 +8,15 @@ import { getAllTasks, getMyTasks, getTaskStats, getAllEmployees, Task, TaskStats
 import { Loader2, TrendingUp, Users, CheckCircle2, AlertCircle } from "lucide-react";
 
 const PRIORITY_COLOR: Record<string, string> = {
-  high: "#991b1b", medium: "#854F6C", low: "#166534",
+  high: "#f87171", medium: "#facc15", low: "#4ade80",
 };
 const STATUS_LABEL: Record<string, string> = {
   todo: "To Do", in_progress: "In Progress", submitted: "Submitted",
   reviewing: "Reviewing", approved: "Done", rejected: "Rejected",
 };
 const STATUS_COLOR: Record<string, string> = {
-  todo: "#854F6C", in_progress: "#2B124C", submitted: "#854F6C55",
-  reviewing: "#522B5B", approved: "#166534", rejected: "#991b1b",
+  todo: "#a78bfa", in_progress: "#60a5fa", submitted: "#c084fc",
+  reviewing: "#facc15", approved: "#4ade80", rejected: "#f87171",
 };
 
 export default function ReportsPage() {
@@ -89,7 +89,7 @@ export default function ReportsPage() {
     <ProjectShell>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#522B5B" }} />
+          <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
         </div>
       ) : (
         <div className="space-y-6">
@@ -97,17 +97,17 @@ export default function ReportsPage() {
           {/* ── KPI row ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: "Total Projects",   value: stats?.total ?? tasks.length, icon: <TrendingUp size={18}/>, accent: "#2B124C" },
-              { label: "Completion Rate",  value: `${stats?.completion_percent ?? 0}%`, icon: <CheckCircle2 size={18}/>, accent: "#166534" },
-              { label: "On-time Rate",     value: `${onTimeRate}%`, icon: <CheckCircle2 size={18}/>, accent: "#522B5B" },
-              { label: "Overdue",          value: stats?.overdue ?? 0, icon: <AlertCircle size={18}/>, accent: "#991b1b" },
+              { label: "Total Projects",   value: stats?.total ?? tasks.length, icon: <TrendingUp size={18}/>, accent: "#a78bfa", gradient: "from-purple-500 to-purple-600" },
+              { label: "Completion Rate",  value: `${stats?.completion_percent ?? 0}%`, icon: <CheckCircle2 size={18}/>, accent: "#4ade80", gradient: "from-green-500 to-green-600" },
+              { label: "On-time Rate",     value: `${onTimeRate}%`, icon: <CheckCircle2 size={18}/>, accent: "#60a5fa", gradient: "from-blue-500 to-blue-600" },
+              { label: "Overdue",          value: stats?.overdue ?? 0, icon: <AlertCircle size={18}/>, accent: "#f87171", gradient: "from-red-500 to-red-600" },
             ].map(kpi => (
-              <div key={kpi.label} className="rounded-2xl glass-card p-5 card-shadow">
+              <div key={kpi.label} className="rounded-2xl glass-card p-5 card-shadow hover:scale-[1.02] transition-all glow-sm hover:glow-md">
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="p-2 rounded-xl" style={{ background: kpi.accent + "18", color: kpi.accent }}>{kpi.icon}</div>
-                  <span className="text-xs font-semibold" style={{ color: "#854F6C" }}>{kpi.label}</span>
+                  <div className={`p-2 rounded-xl bg-gradient-to-br ${kpi.gradient} shadow-lg`} style={{ color: "white" }}>{kpi.icon}</div>
+                  <span className="text-xs font-semibold text-muted-foreground">{kpi.label}</span>
                 </div>
-                <div className="text-3xl font-extrabold" style={{ color: kpi.accent }}>{kpi.value}</div>
+                <div className="text-3xl font-extrabold drop-shadow-sm" style={{ color: kpi.accent }}>{kpi.value}</div>
               </div>
             ))}
           </div>
@@ -115,17 +115,17 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* ── Status distribution ── */}
             <div className="rounded-2xl glass-card p-5 card-shadow">
-              <h2 className="text-sm font-bold mb-4" style={{ color: "#2B124C" }}>Status Distribution</h2>
+              <h2 className="text-sm font-bold mb-4 text-foreground">Status Distribution</h2>
               <div className="space-y-3">
                 {Object.entries(byStatus).sort((a,b) => b[1]-a[1]).map(([status, count]) => (
                   <div key={status}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: "#522B5B" }}>{STATUS_LABEL[status] ?? status}</span>
-                      <span className="font-bold" style={{ color: "#190019" }}>{count} <span className="font-normal text-[10px]" style={{ color: "#854F6C" }}>({Math.round(count/total*100)}%)</span></span>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-foreground">{STATUS_LABEL[status] ?? status}</span>
+                      <span className="font-bold drop-shadow-sm" style={{ color: STATUS_COLOR[status] }}>{count} <span className="font-normal text-[10px] text-muted-foreground">({Math.round(count/total*100)}%)</span></span>
                     </div>
-                    <div className="rounded-full h-2 w-full" style={{ background: "#DFB6B240" }}>
-                      <div className="h-2 rounded-full transition-all duration-700"
-                        style={{ width: `${Math.round(count/total*100)}%`, background: STATUS_COLOR[status] ?? "#854F6C" }} />
+                    <div className="rounded-full h-3 w-full bg-muted/30">
+                      <div className="h-3 rounded-full transition-all duration-700 shadow-sm"
+                        style={{ width: `${Math.round(count/total*100)}%`, background: STATUS_COLOR[status] ?? "#a78bfa" }} />
                     </div>
                   </div>
                 ))}
@@ -134,18 +134,18 @@ export default function ReportsPage() {
 
             {/* ── Priority breakdown ── */}
             <div className="rounded-2xl glass-card p-5 card-shadow">
-              <h2 className="text-sm font-bold mb-4" style={{ color: "#2B124C" }}>Priority Breakdown</h2>
+              <h2 className="text-sm font-bold mb-4 text-foreground">Priority Breakdown</h2>
               <div className="space-y-3">
                 {(["high","medium","low"] as const).map(p => {
                   const count = byPriority[p] ?? 0;
                   return (
                     <div key={p}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span style={{ color: PRIORITY_COLOR[p] }}>{p.charAt(0).toUpperCase()+p.slice(1)}</span>
-                        <span className="font-bold" style={{ color: "#190019" }}>{count} <span className="font-normal text-[10px]" style={{ color: "#854F6C" }}>({Math.round(count/total*100)}%)</span></span>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="font-semibold" style={{ color: PRIORITY_COLOR[p] }}>{p.charAt(0).toUpperCase()+p.slice(1)}</span>
+                        <span className="font-bold drop-shadow-sm" style={{ color: PRIORITY_COLOR[p] }}>{count} <span className="font-normal text-[10px] text-muted-foreground">({Math.round(count/total*100)}%)</span></span>
                       </div>
-                      <div className="rounded-full h-2 w-full" style={{ background: "#DFB6B240" }}>
-                        <div className="h-2 rounded-full transition-all duration-700"
+                      <div className="rounded-full h-3 w-full bg-muted/30">
+                        <div className="h-3 rounded-full transition-all duration-700 shadow-sm"
                           style={{ width: `${Math.round(count/total*100)}%`, background: PRIORITY_COLOR[p] }} />
                       </div>
                     </div>
@@ -157,20 +157,20 @@ export default function ReportsPage() {
 
           {/* ── Completion gauge ── */}
           <div className="rounded-2xl glass-card p-5 card-shadow">
-            <h2 className="text-sm font-bold mb-4" style={{ color: "#2B124C" }}>Overall Completion</h2>
+            <h2 className="text-sm font-bold mb-4 text-foreground">Overall Completion</h2>
             <div className="flex items-center gap-4">
-              <div className="flex-1 h-4 rounded-full" style={{ background: "#DFB6B240" }}>
-                <div className="h-4 rounded-full transition-all duration-700"
-                  style={{ width: `${stats?.completion_percent ?? 0}%`, background: "linear-gradient(90deg, #522B5B, #854F6C)" }} />
+              <div className="flex-1 h-5 rounded-full bg-muted/30 shadow-inner">
+                <div className="h-5 rounded-full transition-all duration-700 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-600 shadow-lg"
+                  style={{ width: `${stats?.completion_percent ?? 0}%` }} />
               </div>
-              <span className="text-xl font-extrabold w-14 text-right" style={{ color: "#522B5B" }}>
+              <span className="text-2xl font-extrabold w-14 text-right text-purple-400 drop-shadow-[0_0_8px_rgba(167,139,250,0.6)]">
                 {stats?.completion_percent ?? 0}%
               </span>
             </div>
-            <div className="flex gap-6 mt-3 text-xs" style={{ color: "#854F6C" }}>
-              <span><b style={{ color: "#190019" }}>{stats?.approved ?? 0}</b> completed</span>
-              <span><b style={{ color: "#190019" }}>{stats?.in_progress ?? 0}</b> in progress</span>
-              <span><b style={{ color: "#991b1b" }}>{stats?.overdue ?? 0}</b> overdue</span>
+            <div className="flex gap-6 mt-3 text-xs text-muted-foreground">
+              <span><b className="text-green-400">{stats?.approved ?? 0}</b> completed</span>
+              <span><b className="text-blue-400">{stats?.in_progress ?? 0}</b> in progress</span>
+              <span><b className="text-red-400">{stats?.overdue ?? 0}</b> overdue</span>
             </div>
           </div>
 

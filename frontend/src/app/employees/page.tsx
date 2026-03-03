@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { fetchEmployees, deleteUser, type User } from "@/lib/api";
-import { Search, Plus, Mail, UserCircle, Loader2, Github, Linkedin, Calendar, Trash2 } from "lucide-react";
+import { fetchEmployees, deleteUser, createEmployee, type User } from "@/lib/api";
+import { Search, Plus, Mail, UserCircle, Loader2, Github, Linkedin, Calendar, Trash2, X, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 const statusStyle: Record<string, string> = {
@@ -21,6 +21,13 @@ export default function EmployeesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Add Employee modal state
+  const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "employee" as "employee" | "admin" });
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     async function loadEmployees() {
@@ -75,6 +82,32 @@ export default function EmployeesPage() {
     }
   };
 
+  const handleAddEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
+      setFormError("All fields are required.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setFormError("Password must be at least 6 characters.");
+      return;
+    }
+    setSubmitting(true);
+    const result = await createEmployee(form);
+    setSubmitting(false);
+    if (result.error) {
+      setFormError(result.error);
+    } else {
+      toast.success(`${form.name} has been added successfully.`);
+      setShowModal(false);
+      setForm({ name: "", email: "", password: "", role: "employee" });
+      // Refresh list
+      const refresh = await fetchEmployees();
+      if (refresh.data) setEmployees(refresh.data);
+    }
+  };
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <DashboardLayout role="admin" userName={user?.name} userHandle={`@${user?.email?.split("@")[0]}`}>
@@ -84,7 +117,9 @@ export default function EmployeesPage() {
               <h1 className="text-2xl font-bold text-foreground">Employees</h1>
               <p className="text-sm text-muted-foreground mt-1">Manage your team members.</p>
             </div>
-            <button className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
+            <button
+              onClick={() => { setShowModal(true); setFormError(""); setForm({ name: "", email: "", password: "", role: "employee" }); }}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity">
               <Plus size={16} /> Add Employee
             </button>
           </div>
@@ -197,6 +232,108 @@ export default function EmployeesPage() {
           )}
         </div>
       </DashboardLayout>
+
+      {/* Add Employee Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="glass-card rounded-2xl w-full max-w-md p-6 shadow-2xl border border-border">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Add New Employee</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Account will be immediately active.</p>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-muted/40 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEmployee} className="space-y-4">
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  placeholder="Jane Smith"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="jane@company.com"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Min. 6 characters"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "employee" | "admin" }))}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="employee">Employee</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              {formError && (
+                <p className="text-xs text-destructive font-medium">{formError}</p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-muted/30 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {submitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                  {submitting ? "Adding..." : "Add Employee"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

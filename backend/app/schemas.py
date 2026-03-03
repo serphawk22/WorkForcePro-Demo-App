@@ -4,7 +4,7 @@ Pydantic schemas for request/response validation.
 from datetime import datetime, date
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
-from app.models import UserRole, LeaveStatus, TaskStatus, TaskPriority
+from app.models import UserRole, LeaveStatus, TaskStatus, TaskPriority, UserStatus
 
 
 # ==================== AUTH SCHEMAS ====================
@@ -47,14 +47,19 @@ class UserRead(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    status: str = "PENDING"
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = None
     created_at: datetime
     age: Optional[int] = None
     date_joined: Optional[date] = None
     github_url: Optional[str] = None
     linkedin_url: Optional[str] = None
     profile_picture: Optional[str] = None
+    department: Optional[str] = None
+    base_salary: Optional[float] = None
 
-    class Config:
+    class Config:   
         from_attributes = True
 
 
