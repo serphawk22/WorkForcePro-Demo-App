@@ -1343,3 +1343,140 @@ export async function updateEmployeeDateJoined(
   );
 }
 
+// ==================== MY SPACE API ====================
+
+export interface TaskSheetEntry {
+  id: number;
+  user_id: number;
+  date: string;
+  achievements: string;
+  repo_link?: string | null;
+  created_at: string;
+}
+
+export interface HappySheetEntry {
+  id: number;
+  user_id: number;
+  date: string;
+  what_made_you_happy: string;
+  what_made_others_happy: string;
+  goals_without_greed: string;
+  dreams_supported: string;
+  created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
+}
+
+export interface DreamProjectEntry {
+  id: number;
+  user_id: number;
+  description: string;
+  created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
+}
+
+export interface LearningFocusEntry {
+  id: number;
+  user_id: number;
+  focus: string;
+  created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
+}
+
+export interface PersonalProjectEntry {
+  id: number;
+  user_id: number;
+  title: string;
+  tag?: string | null;
+  created_at: string;
+}
+
+// Task Sheet
+export async function submitTaskSheet(data: {
+  achievements: string;
+  repo_link?: string;
+}): Promise<ApiResponse<TaskSheetEntry>> {
+  return apiFetch<TaskSheetEntry>("/my-space/task-sheet", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getMyTaskSheets(limit = 30): Promise<ApiResponse<TaskSheetEntry[]>> {
+  return apiFetch<TaskSheetEntry[]>(`/my-space/task-sheet/me?limit=${limit}`);
+}
+
+// Happy Sheet
+export async function submitHappySheet(data: {
+  what_made_you_happy: string;
+  what_made_others_happy: string;
+  goals_without_greed: string;
+  dreams_supported: string;
+  date?: string; // YYYY-MM-DD; defaults to today if omitted
+}): Promise<ApiResponse<HappySheetEntry>> {
+  return apiFetch<HappySheetEntry>("/my-space/happy-sheet", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getMyHappySheets(limit = 30): Promise<ApiResponse<HappySheetEntry[]>> {
+  return apiFetch<HappySheetEntry[]>(`/my-space/happy-sheet/me?limit=${limit}`);
+}
+
+export async function getAllTeamHappySheets(limit = 100): Promise<ApiResponse<HappySheetEntry[]>> {
+  return apiFetch<HappySheetEntry[]>(`/my-space/happy-sheet/team?limit=${limit}`);
+}
+
+export async function getTeamHappySheetsByDate(date: string): Promise<ApiResponse<HappySheetEntry[]>> {
+  return apiFetch<HappySheetEntry[]>(`/my-space/happy-sheet/team/by-date?date=${encodeURIComponent(date)}`);
+}
+
+// Dream Project (Visionary Canvas)
+export async function submitDreamProject(data: {
+  description: string;
+}): Promise<ApiResponse<DreamProjectEntry>> {
+  return apiFetch<DreamProjectEntry>("/my-space/dream-project", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getAllDreamProjects(limit = 50): Promise<ApiResponse<DreamProjectEntry[]>> {
+  return apiFetch<DreamProjectEntry[]>(`/my-space/dream-project/all?limit=${limit}`);
+}
+
+// Learning Focus (Learning Canvas)
+export async function submitLearningFocus(data: {
+  focus: string;
+}): Promise<ApiResponse<LearningFocusEntry>> {
+  return apiFetch<LearningFocusEntry>("/my-space/learning-focus", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getAllLearningFocuses(limit = 50): Promise<ApiResponse<LearningFocusEntry[]>> {
+  return apiFetch<LearningFocusEntry[]>(`/my-space/learning-focus/all?limit=${limit}`);
+}
+
+// Personal Projects (Learning Canvas)
+export async function submitPersonalProject(data: {
+  title: string;
+  tag?: string;
+}): Promise<ApiResponse<PersonalProjectEntry>> {
+  return apiFetch<PersonalProjectEntry>("/my-space/personal-project", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getMyPersonalProjects(limit = 30): Promise<ApiResponse<PersonalProjectEntry[]>> {
+  return apiFetch<PersonalProjectEntry[]>(`/my-space/personal-project/me?limit=${limit}`);
+}
+

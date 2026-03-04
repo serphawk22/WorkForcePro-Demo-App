@@ -1,0 +1,329 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import MySpaceShell from "@/components/my-space/MySpaceShell";
+import { useAuth } from "@/components/AuthProvider";
+import { Calendar, CheckCircle2, Sparkles, Filter, X } from "lucide-react";
+import {
+  submitHappySheet,
+  getMyHappySheets,
+  getAllTeamHappySheets,
+  getTeamHappySheetsByDate,
+  HappySheetEntry,
+} from "@/lib/api";
+
+const AVATAR_COLORS = [
+  "#522B5B", "#854F6C", "#2B124C", "#7C3D6B", "#9C4E7A",
+  "#6B3A5F", "#3D1A4A", "#A05070", "#5A2E54", "#8B4565",
+];
+const getInitials = (name?: string | null) =>
+  name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "?";
+const colorFor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+export default function HappySheetPage() {
+  const { user } = useAuth();
+
+  // ── Form state ──────────────────────────────────────────────
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [whatMadeYouHappy, setWhatMadeYouHappy] = useState("");
+  const [whatMadeOthersHappy, setWhatMadeOthersHappy] = useState("");
+  const [goalsWithoutGreed, setGoalsWithoutGreed] = useState("");
+  const [dreamsSupported, setDreamsSupported] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [isUpdate, setIsUpdate] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Joy Log state ───────────────────────────────────────────
+  const [teamHistory, setTeamHistory] = useState<HappySheetEntry[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [logFilterDate, setLogFilterDate] = useState("");
+  const [filteredTeam, setFilteredTeam] = useState<HappySheetEntry[]>([]);
+  const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
+
+  // Initial load
+  useEffect(() => {
+    loadPersonalForDate(selectedDate);
+    loadTeamHistory();
+  }, []);
+
+  // When form date changes, reload personal entry
+  useEffect(() => {
+    loadPersonalForDate(selectedDate);
+  }, [selectedDate]);
+
+  // When log filter date changes, fetch team entries for that date
+  useEffect(() => {
+    if (!logFilterDate) { setFilteredTeam([]); return; }
+    (async () => {
+      setIsLoadingFiltered(true);
+      try {
+        const res = await getTeamHappySheetsByDate(logFilterDate);
+        if (res.data) setFilteredTeam(res.data);
+        else setFilteredTeam([]);
+      } catch (err) {
+        console.error("Failed to load entries for date", err);
+        setFilteredTeam([]);
+      } finally {
+        setIsLoadingFiltered(false);
+      }
+    })();
+  }, [logFilterDate]);
+
+  const loadPersonalForDate = async (date: string) => {
+    try {
+      const res = await getMyHappySheets(365);
+      if (res.data) {
+        const entry = res.data.find((e) => e.date === date);
+        if (entry) {
+          setWhatMadeYouHappy(entry.what_made_you_happy);
+          setWhatMadeOthersHappy(entry.what_made_others_happy);
+          setGoalsWithoutGreed(entry.goals_without_greed);
+          setDreamsSupported(entry.dreams_supported);
+          setIsUpdate(true);
+        } else {
+          setWhatMadeYouHappy("");
+          setWhatMadeOthersHappy("");
+          setGoalsWithoutGreed("");
+          setDreamsSupported("");
+          setIsUpdate(false);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load entry for date", err);
+    }
+  };
+
+  const loadTeamHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const res = await getAllTeamHappySheets(100);
+      if (res.data) setTeamHistory(res.data);
+    } catch (err) {
+      console.error("Failed to load team history", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!whatMadeYouHappy.trim() || !whatMadeOthersHappy.trim() || !goalsWithoutGreed.trim() || !dreamsSupported.trim()) {
+      setError("Please fill out all reflection fields."); return;
+    }
+    setIsSubmitting(true); setError(null); setSuccess(false);
+    try {
+      const res = await submitHappySheet({
+        what_made_you_happy: whatMadeYouHappy,
+        what_made_others_happy: whatMadeOthersHappy,
+        goals_without_greed: goalsWithoutGreed,
+        dreams_supported: dreamsSupported,
+        date: selectedDate,
+      });
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setSuccess(true);
+        setIsUpdate(true);
+        setWhatMadeYouHappy("");
+        setWhatMadeOthersHappy("");
+        setGoalsWithoutGreed("");
+        setDreamsSupported("");
+        loadTeamHistory();
+        // Refresh filtered view if active
+        if (logFilterDate === selectedDate) {
+          const r2 = await getTeamHappySheetsByDate(logFilterDate);
+          if (r2.data) setFilteredTeam(r2.data);
+        }
+        setTimeout(() => setSuccess(false), 5000);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to submit.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const displayEntries = logFilterDate ? filteredTeam : teamHistory;
+  const isLoadingLog = logFilterDate ? isLoadingFiltered : isLoadingHistory;
+
+  if (!user) return null;
+
+  return (
+    <MySpaceShell>
+      <div className="max-w-3xl mx-auto space-y-6 pb-20">
+        {/* Form Card */}
+        <div className="rounded-2xl p-6 md:p-8 shadow-sm" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
+          {/* Header row: title + date picker */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3">
+              <Sparkles size={24} style={{ color: "#522B5B" }} />
+              <h3 className="text-xl font-bold" style={{ color: "#2B124C" }}>Share Your Joy</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar size={15} style={{ color: "#854F6C" }} />
+              <label className="text-xs font-medium" style={{ color: "#854F6C" }}>Entry Date</label>
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayStr()}
+                onChange={(e) => {
+                  setSuccess(false);
+                  setError(null);
+                  setSelectedDate(e.target.value);
+                }}
+                className="h-8 px-2 rounded-lg text-sm focus:outline-none"
+                style={{ background: "rgba(255,255,255,0.8)", border: "1px solid #DFB6B2", color: "#2B124C" }}
+              />
+            </div>
+          </div>
+
+          {selectedDate !== todayStr() && (
+            <div className="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" style={{ background: "rgba(82,43,91,0.08)", color: "#522B5B" }}>
+              <Calendar size={13} />
+              Logging reflection for{" "}
+              <span className="font-bold">{new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">⚠️ {error}</div>
+          )}
+          {success && (
+            <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2">
+              <CheckCircle2 size={18} />
+              {isUpdate ? "Reflection saved successfully!" : "Your Joy has been shared! Keep shining."}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {([
+              { label: "What Made You Happy? *", value: whatMadeYouHappy, set: setWhatMadeYouHappy, placeholder: "Share your moments of joy..." },
+              { label: "What Made Others Happy? *", value: whatMadeOthersHappy, set: setWhatMadeOthersHappy, placeholder: "How did you brighten someone's day?" },
+              { label: "Goals & Self-Satisfaction Without Greed *", value: goalsWithoutGreed, set: setGoalsWithoutGreed, placeholder: "What personal goals bring you fulfillment?" },
+              { label: "Dreams That WorkForce Pro Can Make True *", value: dreamsSupported, set: setDreamsSupported, placeholder: "Share your aspirations where we can support you..." },
+            ] as const).map(({ label, value, set, placeholder }) => (
+              <div key={label}>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>{label}</label>
+                <textarea
+                  value={value}
+                  onChange={(e) => (set as any)(e.target.value)}
+                  placeholder={placeholder}
+                  className="w-full min-h-[100px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y"
+                  style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}
+                />
+              </div>
+            ))}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full h-11 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90"
+                style={{ background: "#522B5B" }}
+              >
+                {isSubmitting
+                  ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  : isUpdate ? "Update Reflection" : "Sync Personal Pulse"}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Joy Log */}
+        <div className="mt-8">
+          {/* Log header + date filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h3 className="text-lg font-bold" style={{ color: "#2B124C" }}>Joy Log</h3>
+            <div className="flex items-center gap-2">
+              <Filter size={14} style={{ color: "#854F6C" }} />
+              <label className="text-xs font-medium" style={{ color: "#854F6C" }}>Filter by date</label>
+              <input
+                type="date"
+                value={logFilterDate}
+                max={todayStr()}
+                onChange={(e) => setLogFilterDate(e.target.value)}
+                className="h-8 px-2 rounded-lg text-sm focus:outline-none"
+                style={{ background: "rgba(255,255,255,0.9)", border: "1px solid #DFB6B2", color: "#2B124C" }}
+              />
+              {logFilterDate && (
+                <button
+                  onClick={() => setLogFilterDate("")}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-black/5 transition-colors"
+                  title="Clear filter"
+                >
+                  <X size={14} style={{ color: "#854F6C" }} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {logFilterDate && (
+            <p className="text-xs mb-3" style={{ color: "#854F6C" }}>
+              Showing entries for{" "}
+              <span className="font-semibold" style={{ color: "#522B5B" }}>
+                {new Date(logFilterDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              </span>
+            </p>
+          )}
+
+          {isLoadingLog ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="h-6 w-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#522B5B", borderTopColor: "transparent" }} />
+            </div>
+          ) : displayEntries.length === 0 ? (
+            <div className="rounded-xl p-8 text-center text-sm" style={{ background: "hsl(5 38% 79% / 0.15)", color: "#854F6C", border: "1px dashed #DFB6B2" }}>
+              {logFilterDate
+                ? `No entries found for ${new Date(logFilterDate + "T00:00:00").toLocaleDateString()}.`
+                : "No reflections yet. Be the first to share your joy above!"}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {displayEntries.map((entry) => (
+                <div key={entry.id} className="rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
+                  {/* Avatar + name + date */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                      style={{ background: colorFor(entry.user_id) }}
+                    >
+                      {getInitials(entry.user_name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: "#2B124C" }}>
+                        {entry.user_name ?? entry.user_email ?? `User #${entry.user_id}`}
+                      </p>
+                      <div className="flex items-center gap-1 text-xs" style={{ color: "#854F6C" }}>
+                        <Calendar size={11} />
+                        {new Date(entry.date + "T00:00:00").toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                  {/* All 4 fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Happy Moment</p>
+                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.what_made_you_happy}</p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Made Others Happy</p>
+                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.what_made_others_happy}</p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Goals</p>
+                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.goals_without_greed}</p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Dreams</p>
+                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.dreams_supported}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </MySpaceShell>
+  );
+}

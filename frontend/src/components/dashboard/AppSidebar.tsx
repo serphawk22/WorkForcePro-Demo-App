@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  User,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getUnreadNotificationCount } from "@/lib/api";
@@ -26,12 +27,14 @@ const adminLinks = [
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
+  { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
+  { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
 ];
 
 interface SidebarProps {
@@ -114,7 +117,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
         {links.map((link) => {
           const isActive = link.path === "/project-management/summary"
             ? pathname.startsWith("/project-management")
-            : pathname === link.path;
+            : link.path === "/my-space/task-sheet"
+              ? pathname.startsWith("/my-space")
+              : pathname === link.path;
           const showBadge = (link as any).badgeKey === "pending" && pendingCount > 0;
           return (
             <Link

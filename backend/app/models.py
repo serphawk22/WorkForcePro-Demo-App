@@ -509,3 +509,133 @@ class EmployeeListItem(BaseModel):
     workspace: Optional[str] = None
     is_active: bool
     attendance_rate: Optional[int] = None  # Percentage
+
+
+# ==================== MY SPACE MODELS ====================
+
+class TaskSheet(SQLModel, table=True):
+    """Daily task sheet tracking model."""
+    __tablename__ = "task_sheets"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    date: DateType = Field(default_factory=DateType.today)
+    achievements: str = Field(max_length=1000)
+    repo_link: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class TaskSheetCreate(SQLModel):
+    achievements: str = Field(max_length=1000)
+    repo_link: Optional[str] = None
+
+class TaskSheetRead(SQLModel):
+    id: int
+    user_id: int
+    date: DateType
+    achievements: str
+    repo_link: Optional[str]
+    created_at: datetime
+
+class TaskSheetWithUser(TaskSheetRead):
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class HappySheet(SQLModel, table=True):
+    """Personal well-being happy sheet tracking model."""
+    __tablename__ = "happy_sheets"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    date: DateType = Field(default_factory=DateType.today)
+    what_made_you_happy: str
+    what_made_others_happy: str
+    goals_without_greed: str
+    dreams_supported: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class HappySheetCreate(SQLModel):
+    what_made_you_happy: str
+    what_made_others_happy: str
+    goals_without_greed: str
+    dreams_supported: str
+    date: Optional[DateType] = None  # if None, defaults to today on the backend
+
+class HappySheetRead(SQLModel):
+    id: int
+    user_id: int
+    date: DateType
+    what_made_you_happy: str
+    what_made_others_happy: str
+    goals_without_greed: str
+    dreams_supported: str
+    created_at: datetime
+
+class HappySheetWithUser(HappySheetRead):
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class DreamProject(SQLModel, table=True):
+    """Visionary Canvas: My Dream Project tracking model."""
+    __tablename__ = "dream_projects"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    description: str = Field(max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class DreamProjectCreate(SQLModel):
+    description: str = Field(max_length=2000)
+
+class DreamProjectRead(SQLModel):
+    id: int
+    user_id: int
+    description: str
+    created_at: datetime
+
+class DreamProjectWithUser(DreamProjectRead):
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    profile_picture: Optional[str] = None
+
+
+class LearningFocus(SQLModel, table=True):
+    """Learning Canvas: My Focus tracking model."""
+    __tablename__ = "learning_focuses"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    focus: str = Field(max_length=500)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class LearningFocusCreate(SQLModel):
+    focus: str = Field(max_length=500)
+
+class LearningFocusRead(SQLModel):
+    id: int
+    user_id: int
+    focus: str
+    created_at: datetime
+
+class LearningFocusWithUser(LearningFocusRead):
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    profile_picture: Optional[str] = None
+
+
+class PersonalProject(SQLModel, table=True):
+    """Learning Canvas: My Projects folder listing model."""
+    __tablename__ = "personal_projects"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    title: str = Field(max_length=200)
+    tag: Optional[str] = Field(default=None, max_length=50)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PersonalProjectCreate(SQLModel):
+    title: str = Field(max_length=200)
+    tag: Optional[str] = Field(default=None, max_length=50)
+
+class PersonalProjectRead(SQLModel):
+    id: int
+    user_id: int
+    title: str
+    tag: Optional[str]
+    created_at: datetime
