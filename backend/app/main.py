@@ -20,8 +20,26 @@ async def lifespan(app: FastAPI):
     # Startup: Create database tables
     create_db_and_tables()
     
-    # Seed default admin account
+    # Run database migrations to add any missing columns
     from app.database import engine
+    from sqlalchemy import text
+    
+    with engine.connect() as conn:
+        try:
+            # Add approved_at column if it doesn't exist
+            conn.execute(text("""
+                ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+            """))
+            # Add approved_by column if it doesn't exist
+            conn.execute(text("""
+                ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_by INTEGER;
+            """))
+            conn.commit()
+            print("✅ Database migrations completed (approved_at, approved_by)")
+        except Exception as e:
+            print(f"⚠️ Migration note: {e}")
+    
+    # Seed default admin account
     from app.models import User, UserRole
     from app.auth import get_password_hash
     from sqlmodel import Session, select
