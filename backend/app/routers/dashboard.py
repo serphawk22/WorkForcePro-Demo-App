@@ -51,24 +51,24 @@ async def get_admin_dashboard(
         # Count tasks by status using raw SQL to avoid enum type issues
         from sqlalchemy import text as sql_text
         
-        # Pending tasks (tasks submitted for review) - use raw count to avoid enum issues
+        # Pending tasks (tasks submitted for review) - cast enum to text to avoid type mismatch
         pending_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM tasks WHERE status = 'submitted' OR status = 'reviewing'")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE status::text IN ('submitted', 'reviewing')")
         ).one()
         pending_tasks = pending_tasks_result or 0
         
-        # Active tasks (any status except approved/rejected) - raw SQL
+        # Active tasks (any status except approved/rejected) - cast enum to text
         active_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM tasks WHERE status NOT IN ('approved', 'rejected')")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE status::text NOT IN ('approved', 'rejected')")
         ).one()
         active_tasks_count = active_tasks_result or 0
 
         # Total tasks
         total_tasks_count = session.exec(select(func.count(Task.id))).one() or 0
 
-        # Employees on leave today (approved leave covering today) - use raw SQL for enum
+        # Employees on leave today (approved leave covering today) - cast enum to text
         employees_on_leave_result = session.exec(
-            sql_text(f"SELECT COUNT(*) FROM leave_requests WHERE status = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
+            sql_text(f"SELECT COUNT(*) FROM leave_requests WHERE status::text = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
         ).one()
         employees_on_leave_today = employees_on_leave_result or 0
 
@@ -91,8 +91,8 @@ async def get_admin_dashboard(
                 sql_text("""
                     SELECT t.id, t.title, t.due_date, t.priority, t.status, u.name as assignee_name
                     FROM tasks t
-                    LEFT JOIN "user" u ON t.assigned_to = u.id
-                    WHERE t.status NOT IN ('approved', 'rejected')
+                    LEFT JOIN users u ON t.assigned_to = u.id
+                    WHERE t.status::text NOT IN ('approved', 'rejected')
                     AND t.due_date IS NOT NULL
                     ORDER BY t.due_date ASC
                     LIMIT 6
@@ -123,9 +123,9 @@ async def get_admin_dashboard(
         ).one()
         avg_daily_hours = round(float(avg_hours_result or 0), 2)
         
-        # Pending leave requests - use raw SQL for enum
+        # Pending leave requests - cast enum to text
         leave_pending_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'")
+            sql_text("SELECT COUNT(*) FROM leave_requests WHERE status::text = 'pending'")
         ).one()
         leave_requests_pending = leave_pending_result or 0
         
