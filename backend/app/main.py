@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
                 hashed_password=get_password_hash("admin"),
                 role=UserRole.admin,
                 is_active=True,
+                status="APPROVED",  # Admin should be pre-approved
                 age=30,
                 date_joined=date.today(),
                 github_url="https://github.com/admin",
@@ -50,7 +51,15 @@ async def lifespan(app: FastAPI):
             session.commit()
             print(f"✅ Default admin account created: {admin_email} / admin")
         else:
-            print(f"✅ Admin account already exists: {admin_email}")
+            # Ensure admin is approved and active
+            if existing_admin.status != "APPROVED" or not existing_admin.is_active:
+                existing_admin.status = "APPROVED"
+                existing_admin.is_active = True
+                session.add(existing_admin)
+                session.commit()
+                print(f"✅ Admin account updated to APPROVED status: {admin_email}")
+            else:
+                print(f"✅ Admin account already exists: {admin_email}")
     
     yield
     # Shutdown: cleanup if needed
