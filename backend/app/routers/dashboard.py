@@ -55,13 +55,13 @@ async def get_admin_dashboard(
         pending_tasks_result = session.exec(
             sql_text("SELECT COUNT(*) FROM tasks WHERE status::text IN ('submitted', 'reviewing')")
         ).one()
-        pending_tasks = pending_tasks_result or 0
+        pending_tasks = int(pending_tasks_result[0] if hasattr(pending_tasks_result, '__getitem__') else pending_tasks_result or 0)
         
         # Active tasks (any status except approved/rejected) - cast enum to text
         active_tasks_result = session.exec(
             sql_text("SELECT COUNT(*) FROM tasks WHERE status::text NOT IN ('approved', 'rejected')")
         ).one()
-        active_tasks_count = active_tasks_result or 0
+        active_tasks_count = int(active_tasks_result[0] if hasattr(active_tasks_result, '__getitem__') else active_tasks_result or 0)
 
         # Total tasks
         total_tasks_count = session.exec(select(func.count(Task.id))).one() or 0
@@ -70,7 +70,7 @@ async def get_admin_dashboard(
         employees_on_leave_result = session.exec(
             sql_text(f"SELECT COUNT(*) FROM leave_requests WHERE status::text = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
         ).one()
-        employees_on_leave_today = employees_on_leave_result or 0
+        employees_on_leave_today = int(employees_on_leave_result[0] if hasattr(employees_on_leave_result, '__getitem__') else employees_on_leave_result or 0)
 
         # Late check-ins today (punch_in after 09:30 local — stored as UTC datetime)
         # We use a simple hour-based heuristic: punch_in hour (UTC) > 4 as proxy for late
@@ -127,7 +127,7 @@ async def get_admin_dashboard(
         leave_pending_result = session.exec(
             sql_text("SELECT COUNT(*) FROM leave_requests WHERE status::text = 'pending'")
         ).one()
-        leave_requests_pending = leave_pending_result or 0
+        leave_requests_pending = int(leave_pending_result[0] if hasattr(leave_pending_result, '__getitem__') else leave_pending_result or 0)
         
         # Recent activities (last 10 actions)
         recent_activities = []
