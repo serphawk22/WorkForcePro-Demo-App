@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
 from datetime import datetime, timedelta, date, timezone, time
 from app.database import get_session
-from app.models import User, Task, Attendance, LeaveRequest, TaskStatus, LeaveStatus, TaskPriority
+from app.models import User, Task, Attendance, LeaveRequest, TaskStatus, LeaveStatus, TaskPriority, UserRole
 from app.auth import get_current_user, get_current_admin_user
 from app.schemas import AdminDashboardStats, EmployeeDashboardStats
 
@@ -28,9 +28,12 @@ async def get_admin_dashboard(
         - recent_activities: Recent system activities
         - leave_requests_pending: Pending leave requests
     """
-    # Total employees
+    # Total employees (exclude admin users)
     total_employees = session.exec(
-        select(func.count(User.id)).where(User.is_active == True)
+        select(func.count(User.id)).where(
+            User.is_active == True,
+            User.role != UserRole.admin
+        )
     ).one()
     
     # Active sessions (clocked in today)
@@ -82,27 +85,31 @@ async def get_admin_dashboard(
     ).one()
 
     # Upcoming tasks (nearest due dates, non-approved, with public_id)
-    upcoming_tasks_records = session.exec(
-        select(Task, User).join(User, Task.assigned_to == User.id, isouter=True)
-        .where(
-            Task.status.notin_([TaskStatus.approved, TaskStatus.rejected]),
-            Task.due_date.isnot(None)
-        )
-        .order_by(Task.due_date.asc())
-        .limit(6)
-    ).all()
-
     upcoming_tasks = []
-    for task, assignee in upcoming_tasks_records:
-        upcoming_tasks.append({
-            "id": task.id,
-            "public_id": task.public_id or "",
-            "title": task.title,
-            "due_date": task.due_date.isoformat() if task.due_date else None,
-            "priority": task.priority,
-            "status": task.status,
-            "assignee_name": assignee.name if assignee else None,
-        })
+    try:
+        upcoming_tasks_records = session.exec(
+            select(Task, User).join(User, Task.assigned_to == User.id, isouter=True)
+            .where(
+                Task.status.notin_([TaskStatus.approved, TaskStatus.rejected]),
+                Task.due_date.isnot(None)
+            )
+            .order_by(Task.due_date.asc())
+            .limit(6)
+        ).all()
+
+        for task, assignee in upcoming_tasks_records:
+            upcoming_tasks.append({
+                "id": task.id,
+                "public_id": getattr(task, 'public_id', '') or "",
+                "title": task.title,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                "assignee_name": assignee.name if assignee else None,
+            })
+    except Exception as e:
+        print(f"Warning: Could not fetch upcoming tasks: {e}")
+        upcoming_tasks = []
     
     # Average daily hours (last 30 days)
     thirty_days_ago = today - timedelta(days=30)
@@ -141,7 +148,7 @@ async def get_admin_dashboard(
             "type": "task",
             "description": f"{user_name} was assigned: {task.title}",
             "timestamp": task.created_at.isoformat(),
-            "status": task.status
+            "status": task.status.value if hasattr(task.status, 'value') else str(task.status)
         })
     
     for leave, user_name in recent_leaves:
@@ -149,7 +156,7 @@ async def get_admin_dashboard(
             "type": "leave",
             "description": f"{user_name} requested leave from {leave.start_date} to {leave.end_date}",
             "timestamp": leave.created_at.isoformat(),
-            "status": leave.status
+            "status": leave.status.value if hasattr(leave.status, 'value') else str(leave.status)
         })
     
     # Sort by timestamp

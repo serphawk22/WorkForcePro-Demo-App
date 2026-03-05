@@ -34,6 +34,14 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_by INTEGER;
             """))
+            # Add public_id column to task table if it doesn't exist
+            conn.execute(text("""
+                ALTER TABLE task ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+            """))
+            # Add public_id column to subtask table if it doesn't exist
+            conn.execute(text("""
+                ALTER TABLE subtask ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+            """))
             # Add USER_APPROVED to notification type enum if it doesn't exist
             try:
                 conn.execute(text("""
@@ -42,7 +50,7 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass  # Enum value may already exist or not applicable
             conn.commit()
-            print("✅ Database migrations completed (approved_at, approved_by, USER_APPROVED enum)")
+            print("✅ Database migrations completed (approved_at, approved_by, public_id, USER_APPROVED enum)")
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
     
