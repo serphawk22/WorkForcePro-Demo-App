@@ -49,8 +49,21 @@ async def lifespan(app: FastAPI):
                 """))
             except Exception:
                 pass  # Enum value may already exist or not applicable
+            # Add 'submitted' and 'reviewing' to taskstatus enum if missing
+            try:
+                conn.execute(text("""
+                    ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'submitted';
+                """))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("""
+                    ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'reviewing';
+                """))
+            except Exception:
+                pass
             conn.commit()
-            print("✅ Database migrations completed (approved_at, approved_by, public_id, USER_APPROVED enum)")
+            print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
     
