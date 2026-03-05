@@ -34,13 +34,13 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_by INTEGER;
             """))
-            # Add public_id column to task table if it doesn't exist
+            # Add public_id column to tasks table if it doesn't exist
             conn.execute(text("""
-                ALTER TABLE task ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+                ALTER TABLE tasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
             """))
-            # Add public_id column to subtask table if it doesn't exist
+            # Add public_id column to subtasks table if it doesn't exist
             conn.execute(text("""
-                ALTER TABLE subtask ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+                ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
             """))
             # Add USER_APPROVED to notification type enum if it doesn't exist
             try:

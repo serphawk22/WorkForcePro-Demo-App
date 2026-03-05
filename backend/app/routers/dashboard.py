@@ -53,13 +53,13 @@ async def get_admin_dashboard(
         
         # Pending tasks (tasks submitted for review) - use raw count to avoid enum issues
         pending_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM task WHERE status = 'submitted' OR status = 'reviewing'")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE status = 'submitted' OR status = 'reviewing'")
         ).one()
         pending_tasks = pending_tasks_result or 0
         
         # Active tasks (any status except approved/rejected) - raw SQL
         active_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM task WHERE status NOT IN ('approved', 'rejected')")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE status NOT IN ('approved', 'rejected')")
         ).one()
         active_tasks_count = active_tasks_result or 0
 
@@ -68,7 +68,7 @@ async def get_admin_dashboard(
 
         # Employees on leave today (approved leave covering today) - use raw SQL for enum
         employees_on_leave_result = session.exec(
-            sql_text(f"SELECT COUNT(*) FROM leaverequest WHERE status = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
+            sql_text(f"SELECT COUNT(*) FROM leave_requests WHERE status = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
         ).one()
         employees_on_leave_today = employees_on_leave_result or 0
 
@@ -90,7 +90,7 @@ async def get_admin_dashboard(
             upcoming_raw = session.exec(
                 sql_text("""
                     SELECT t.id, t.title, t.due_date, t.priority, t.status, u.name as assignee_name
-                    FROM task t
+                    FROM tasks t
                     LEFT JOIN "user" u ON t.assigned_to = u.id
                     WHERE t.status NOT IN ('approved', 'rejected')
                     AND t.due_date IS NOT NULL
@@ -125,7 +125,7 @@ async def get_admin_dashboard(
         
         # Pending leave requests - use raw SQL for enum
         leave_pending_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM leaverequest WHERE status = 'pending'")
+            sql_text("SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'")
         ).one()
         leave_requests_pending = leave_pending_result or 0
         
