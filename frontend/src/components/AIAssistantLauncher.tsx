@@ -2,12 +2,14 @@
 
 import React, { useState } from "react";
 import { Sparkles } from "lucide-react";
+import { usePathname } from "next/navigation";
 import AIAssistant from "./AIAssistant";
 import { useAuth } from "./AuthProvider";
 
 export default function AIAssistantLauncher() {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
+  const pathname = usePathname();
 
   if (!user) return null;
 
@@ -29,7 +31,9 @@ export default function AIAssistantLauncher() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         userRole={user.role}
+        pathname={pathname ?? "/"}
       />
     </>
   );
 }
+

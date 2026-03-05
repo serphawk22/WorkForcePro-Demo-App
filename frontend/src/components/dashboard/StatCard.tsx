@@ -11,9 +11,9 @@ interface StatCardProps {
 }
 
 const trendColors = {
-  up: "text-green-400 drop-shadow-[0_0_6px_rgba(74,222,128,0.8)]",
-  down: "text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.8)]",
-  stable: "text-blue-400 drop-shadow-[0_0_4px_rgba(96,165,250,0.6)]",
+  up: "bg-green-500/20 text-green-300 border border-green-500/30",
+  down: "bg-red-500/20 text-red-300 border border-red-500/30",
+  stable: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
 };
 
 export default function StatCard({ icon: Icon, label, value, subtitle, trend, trendType = "stable", iconColor }: StatCardProps) {
@@ -29,7 +29,7 @@ export default function StatCard({ icon: Icon, label, value, subtitle, trend, tr
           <Icon size={20} className="glow-icon" />
         </div>
         {trend && (
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-full glass-light ${trendColors[trendType]} backdrop-blur-md shadow-lg`}>
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${trendColors[trendType]}`}>
             {trendType === "up" ? "↑" : trendType === "down" ? "↓" : "•"} {trend}
           </span>
         )}

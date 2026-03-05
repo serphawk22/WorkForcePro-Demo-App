@@ -1,161 +1,313 @@
 "use client";
 
-import React, { useState } from "react";
-import { X, Send, Sparkles, TrendingUp, Users, AlertCircle, BarChart3 } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { X, Send, Sparkles, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ChatAction {
+  label: string;
+  route: string;
+}
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  actions?: ChatAction[];
+}
+
+interface ChatbotResponse {
+  reply: string;
+  actions: ChatAction[];
+  navigate_to?: string | null;
+}
 
 interface AIAssistantProps {
   isOpen: boolean;
   onClose: () => void;
   userRole: "admin" | "employee";
+  pathname: string;
 }
 
-export default function AIAssistant({ isOpen, onClose, userRole }: AIAssistantProps) {
-  const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([
-    {
-      role: "assistant",
-      content: userRole === "admin"
-        ? "Hello! I'm your AI workforce assistant. I can help you analyze team performance, generate reports, and provide insights on productivity trends."
-        : "Hi! I'm here to help you with your tasks, deadlines, and productivity tips. How can I assist you today?",
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token") || localStorage.getItem("access_token");
+}
+
+async function callChatbot(
+  endpoint: "query" | "context",
+  message: string,
+  current_page: string
+): Promise<ChatbotResponse> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}/api/chatbot/${endpoint}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  ]);
+    body: JSON.stringify({ message, current_page }),
+  });
+  if (!res.ok) throw new Error(`Chatbot API error: ${res.status}`);
+  return res.json();
+}
 
-  const handleSendMessage = () => {
-    if (!message.trim()) return;
-    
-    setMessages([...messages, { role: "user", content: message }]);
-    setMessage("");
-    
-    // Simulate AI response
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
+function formatReply(text: string): React.ReactNode {
+  const lines = text.split("\n\n");
+  return lines.map((line, i) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <p key={i} className={i > 0 ? "mt-2" : ""}>
+        {parts.map((part, j) =>
+          part.startsWith("**") && part.endsWith("**") ? (
+            <strong key={j}>{part.slice(2, -2)}</strong>
+          ) : (
+            <span key={j}>{part}</span>
+          )
+        )}
+      </p>
+    );
+  });
+}
+
+// ─── Typing Indicator ─────────────────────────────────────────────────────────
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start mb-3">
+      <div className="bg-gray-100 rounded-2xl px-4 py-3 flex items-center space-x-1">
+        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Action Buttons (inline in messages) ─────────────────────────────────────
+
+function InlineActions({
+  actions,
+  onNavigate,
+}: {
+  actions: ChatAction[];
+  onNavigate: (route: string) => void;
+}) {
+  if (!actions?.length) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      {actions.map((action, i) => (
+        <button
+          key={i}
+          onClick={() => onNavigate(action.route)}
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-xs text-gray-800 hover:text-purple-700 transition-all group shadow-sm"
+        >
+          <span className="font-medium">{action.label}</span>
+          <ChevronRight size={12} className="text-gray-400 group-hover:text-purple-500 transition-colors" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Message List ─────────────────────────────────────────────────────────────
+
+function MessageList({
+  messages,
+  isTyping,
+  onNavigate,
+  scrollRef,
+}: {
+  messages: Message[];
+  isTyping: boolean;
+  onNavigate: (route: string) => void;
+  scrollRef: React.RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[120px] max-h-56">
+      {messages.map((msg, index) => (
+        <div key={index} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+          <div
+            className={`max-w-[85%] rounded-2xl p-3 text-sm ${
+              msg.role === "user" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-800"
+            }`}
+          >
+            {msg.role === "assistant" ? formatReply(msg.content) : msg.content}
+          </div>
+          {msg.role === "assistant" && msg.actions && msg.actions.length > 0 && (
+            <div className="w-full max-w-[85%] mt-1">
+              <InlineActions actions={msg.actions} onNavigate={onNavigate} />
+            </div>
+          )}
+        </div>
+      ))}
+      {isTyping && <TypingIndicator />}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function AIAssistant({
+  isOpen,
+  onClose,
+  userRole,
+  pathname,
+}: AIAssistantProps) {
+  const router = useRouter();
+
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [currentActions, setCurrentActions] = useState<ChatAction[]>([]);
+  const [contextLoaded, setContextLoaded] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-scroll to bottom when messages or typing state changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isTyping]);
+
+  // Focus input when opened
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  // Load page context when chatbot first opens
+  useEffect(() => {
+    if (!isOpen || contextLoaded) return;
+    let cancelled = false;
+
+    (async () => {
+      setIsTyping(true);
+      try {
+        const data = await callChatbot("context", "", pathname);
+        if (cancelled) return;
+        setMessages([{ role: "assistant", content: data.reply, actions: data.actions }]);
+        setCurrentActions(data.actions);
+        setContextLoaded(true);
+      } catch {
+        if (cancelled) return;
+        setMessages([{
           role: "assistant",
-          content: "I'm processing your request. This is a demo response. In production, this would connect to your AI backend.",
-        },
-      ]);
-    }, 1000);
-  };
+          content: "Hi! I can help you navigate this platform. Type a question or use the quick actions below.",
+          actions: [],
+        }]);
+        setContextLoaded(true);
+      } finally {
+        if (!cancelled) setIsTyping(false);
+      }
+    })();
 
-  const quickActions = userRole === "admin"
-    ? [
-        { icon: <BarChart3 size={16} />, label: "Generate Payroll", subtitle: "Summary report", color: "text-purple-600", bg: "bg-purple-100 dark:bg-purple-900/30" },
-        { icon: <AlertCircle size={16} />, label: "Low Attendance", subtitle: "Alert employees", color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30" },
-        { icon: <TrendingUp size={16} />, label: "Dept Performance", subtitle: "View analytics", color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
-      ]
-    : [
-        { icon: <BarChart3 size={16} />, label: "My Task Summary", subtitle: "View progress", color: "text-purple-600", bg: "bg-purple-100 dark:bg-purple-900/30" },
-        { icon: <AlertCircle size={16} />, label: "Upcoming Deadlines", subtitle: "Check tasks", color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30" },
-        { icon: <TrendingUp size={16} />, label: "Productivity Tips", subtitle: "Get insights", color: "text-blue-600", bg: "bg-blue-100 dark:bg-blue-900/30" },
-      ];
+    return () => { cancelled = true; };
+  }, [isOpen, pathname, contextLoaded]);
 
-  const handleQuickAction = (label: string) => {
-    setMessages([
-      ...messages,
-      { role: "user", content: label },
-      {
+  // Reload context when pathname changes while chatbot is open
+  useEffect(() => {
+    if (isOpen && contextLoaded) setContextLoaded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  const handleNavigate = useCallback(
+    (route: string) => { router.push(route); onClose(); },
+    [router, onClose]
+  );
+
+  const handleSendMessage = useCallback(async () => {
+    const trimmed = message.trim();
+    if (!trimmed || isTyping) return;
+
+    setMessage("");
+    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+    setIsTyping(true);
+
+    try {
+      const data = await callChatbot("query", trimmed, pathname);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply, actions: data.actions }]);
+      setCurrentActions(data.actions);
+      if (data.navigate_to) {
+        setTimeout(() => handleNavigate(data.navigate_to!), 600);
+      }
+    } catch {
+      setMessages((prev) => [...prev, {
         role: "assistant",
-        content: `I'm analyzing ${label.toLowerCase()}. This feature will provide detailed insights in the full version.`,
-      },
-    ]);
-  };
+        content: "Sorry, I couldn't connect to the assistant right now. Please try again.",
+        actions: currentActions,
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
+  }, [message, isTyping, pathname, currentActions, handleNavigate]);
 
   if (!isOpen) return null;
 
-  // Admin: Centered Modal
+  // ── Admin: Centered Modal ──────────────────────────────────────────────────
   if (userRole === "admin") {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 animate-in fade-in duration-200">
-        <div className="w-[440px] max-h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="w-[440px] max-h-[640px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 flex justify-between items-center">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 flex justify-between items-center flex-shrink-0">
             <div>
-              <h3 className="font-semibold text-lg">AI Assistant</h3>
-              <p className="text-purple-100 text-sm">Intelligent workforce insights</p>
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Sparkles size={18} className="text-purple-200" />
+                AI Assistant
+              </h3>
+              <p className="text-purple-100 text-sm">Intelligent workforce navigator</p>
             </div>
-            <button 
-              onClick={onClose} 
-              className="text-purple-200 hover:text-white transition-colors rounded-lg p-1"
-            >
+            <button onClick={onClose} className="text-purple-200 hover:text-white transition-colors rounded-lg p-1">
               <X size={20} />
             </button>
           </div>
 
-          {/* Welcome Message */}
-          <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border-b border-purple-100">
-            <div className="bg-white rounded-2xl p-3 shadow-sm border border-purple-100">
-              <p className="text-gray-700 text-sm">
-                <span className="text-lg mr-2">👋</span>
-                Hi! I&apos;m your AI assistant. How can I help you today?
-              </p>
-            </div>
-          </div>
-
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 max-h-48 min-h-[100px]">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex mb-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl p-3 text-sm ${
-                    msg.role === "user"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-          </div>
+          <MessageList messages={messages} isTyping={isTyping} onNavigate={handleNavigate} scrollRef={scrollRef} />
 
-          {/* Quick Actions */}
-          <div className="p-4 border-t border-gray-100">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h4>
-            <div className="space-y-2">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleQuickAction(action.label)}
-                  className="w-full p-3 text-left rounded-lg bg-white border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all group"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className={`p-2 rounded-lg ${action.bg}`}>
-                      <div className={action.color}>
-                        {action.icon}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 text-sm group-hover:text-purple-700 transition-colors">
-                        {action.label}
-                      </div>
-                      <div className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
-                        {action.subtitle}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))}
+          {/* Quick Navigation */}
+          {currentActions.length > 0 && (
+            <div className="px-4 pb-2 border-t border-gray-100 pt-3 flex-shrink-0">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Navigation</h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                {currentActions.slice(0, 4).map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleNavigate(action.route)}
+                    className="px-3 py-2 text-left rounded-xl bg-purple-50 border border-purple-200 hover:border-purple-400 hover:bg-purple-100 text-xs text-purple-700 font-medium transition-all truncate"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Input */}
-          <div className="p-4 border-t border-gray-100">
+          <div className="p-4 border-t border-gray-100 flex-shrink-0">
             <div className="flex space-x-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                placeholder="Ask AI anything..."
+                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                placeholder='Ask anything or type "go to payroll"…'
                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-full focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
               />
               <button
                 onClick={handleSendMessage}
-                disabled={!message.trim()}
+                disabled={!message.trim() || isTyping}
                 className="px-4 py-2.5 bg-purple-600 text-white rounded-full hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
                 <Send size={16} />
@@ -167,107 +319,65 @@ export default function AIAssistant({ isOpen, onClose, userRole }: AIAssistantPr
     );
   }
 
-  // Employee: Right Slide Panel
+  // ── Employee: Right Slide Panel ────────────────────────────────────────────
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 animate-in fade-in duration-300"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 animate-in fade-in duration-300" onClick={onClose} />
 
       {/* Slide Panel */}
-      <div
-        className={`fixed top-0 right-0 h-full w-[380px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300`}
-      >
+      <div className="fixed top-0 right-0 h-full w-[380px] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-4 flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-white">AI Assistant</h2>
-            <p className="text-purple-100 text-xs mt-1">Your productivity companion</p>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Sparkles size={18} className="text-purple-200" />
+              AI Assistant
+            </h2>
+            <p className="text-purple-100 text-xs mt-1">Your navigation companion</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-purple-200 hover:text-white transition-colors rounded-lg p-1"
-          >
+          <button onClick={onClose} className="text-purple-200 hover:text-white transition-colors rounded-lg p-1">
             <X size={18} />
           </button>
         </div>
 
-        {/* Welcome Message */}
-        <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border-b border-purple-100">
-          <div className="bg-white rounded-2xl p-3 shadow-sm border border-purple-100">
-            <p className="text-gray-700 text-sm">
-              <span className="text-lg mr-2">👋</span>
-              Hi! I&apos;m here to help boost your productivity. What can I do for you?
-            </p>
-          </div>
-        </div>
-
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-48 min-h-[100px]">
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl p-3 text-sm ${
-                  msg.role === "user"
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-100 text-gray-800"
-                }`}
-              >
-                {msg.content}
-              </div>
-            </div>
-          ))}
-        </div>
+        <MessageList messages={messages} isTyping={isTyping} onNavigate={handleNavigate} scrollRef={scrollRef} />
 
-        {/* Quick Actions */}
-        <div className="px-4 pb-3 border-t border-gray-100 pt-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</p>
-          <div className="space-y-2">
-            {quickActions.map((action, index) => (
-              <button
-                key={index}
-                onClick={() => handleQuickAction(action.label)}
-                className="w-full p-3 text-left rounded-lg bg-white border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all group"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-lg ${action.bg}`}>
-                    <div className={action.color}>
-                      {action.icon}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 text-sm group-hover:text-purple-700 transition-colors">
-                      {action.label}
-                    </div>
-                    <div className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
-                      {action.subtitle}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
+        {/* Quick Navigation */}
+        {currentActions.length > 0 && (
+          <div className="px-4 pb-3 border-t border-gray-100 pt-3 flex-shrink-0">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Navigation</p>
+            <div className="space-y-1.5">
+              {currentActions.slice(0, 4).map((action, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleNavigate(action.route)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-purple-50 border border-purple-200 hover:border-purple-400 hover:bg-purple-100 text-sm text-purple-700 font-medium transition-all group"
+                >
+                  <span>{action.label}</span>
+                  <ChevronRight size={14} className="text-purple-400 group-hover:text-purple-600 transition-colors" />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Input */}
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100 flex-shrink-0">
           <div className="flex space-x-2">
             <input
+              ref={inputRef}
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-              placeholder="Ask AI anything..."
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              placeholder='Ask anything or type "go to tasks"…'
               className="flex-1 px-4 py-2.5 border border-gray-200 rounded-full focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
             />
             <button
               onClick={handleSendMessage}
-              disabled={!message.trim()}
+              disabled={!message.trim() || isTyping}
               className="px-4 py-2.5 bg-purple-600 text-white rounded-full hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               <Send size={16} />
@@ -278,3 +388,4 @@ export default function AIAssistant({ isOpen, onClose, userRole }: AIAssistantPr
     </>
   );
 }
+

@@ -148,7 +148,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
         })}
       </nav>
 
-      {/* Collapse toggle */}
+        {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="mx-3 mb-2 flex items-center justify-center rounded-lg p-2 text-sidebar-foreground/50 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground transition-colors"

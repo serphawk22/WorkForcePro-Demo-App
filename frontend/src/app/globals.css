@@ -109,10 +109,10 @@
     --secondary-foreground: 22 90% 94%;     /* Bright text */
 
     --muted:               266 45% 25%;     /* Lighter muted */
-    --muted-foreground:    22 70% 85%;      /* Brighter muted text */
+    --muted-foreground:    22 50% 80%;      /* Brighter muted text - MUCH MORE VISIBLE */
 
-    --accent:              328 50% 60%;     /* BRIGHT accent purple */
-    --accent-foreground:   0 0% 100%;       /* Pure white */
+    --accent:              30 90% 70%;      /* BRIGHT GOLD/PEACH for high contrast */
+    --accent-foreground:   300 100% 5%;     /* Dark text on bright accent */
 
     --destructive:         0 70% 55%;
     --destructive-foreground: 0 0% 100%;

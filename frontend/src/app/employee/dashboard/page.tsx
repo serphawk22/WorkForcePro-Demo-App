@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar } from "lucide-react";
-import { fetchEmployeeDashboard, punchIn, punchOut, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
+import { fetchEmployeeDashboard, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
 
 const priorityStyles: Record<string, string> = {
   high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
@@ -39,10 +40,9 @@ export default function EmployeeDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [punchLoading, setPunchLoading] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Global persistent timer from context
+  const { seconds, isActive, isPunching, handlePunchIn: ctxPunchIn, handlePunchOut: ctxPunchOut } = useAttendanceTimer();
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -59,24 +59,6 @@ export default function EmployeeDashboard() {
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
-        
-        // Initialize timer using server-provided elapsed_seconds
-        const currentSession = statsResponse.data.current_session;
-        if (currentSession?.clocked_in) {
-          // Active session - use server elapsed time and start live timer
-          const elapsedSeconds = Math.max(0, currentSession.elapsed_seconds || 0);
-          setElapsedTime(elapsedSeconds);
-          setIsTimerActive(true);
-        } else if (currentSession && !currentSession.clocked_in) {
-          // Completed session - show final time
-          const elapsedSeconds = Math.max(0, currentSession.elapsed_seconds || 0);
-          setElapsedTime(elapsedSeconds);
-          setIsTimerActive(false);
-        } else {
-          // No session
-          setElapsedTime(0);
-          setIsTimerActive(false);
-        }
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
@@ -88,107 +70,25 @@ export default function EmployeeDashboard() {
     }
   }, []);
 
-  // Sync with server periodically to prevent drift
-  const syncWithServer = useCallback(async () => {
-    if (!isTimerActive) return;
-    
-    try {
-      const statsResponse = await fetchEmployeeDashboard();
-      if (statsResponse.data?.current_session?.clocked_in) {
-        const serverElapsedSeconds = Math.max(0, statsResponse.data.current_session.elapsed_seconds || 0);
-        setElapsedTime(serverElapsedSeconds);
-      }
-    } catch (error) {
-      console.error("Error syncing with server:", error);
-    }
-  }, [isTimerActive]);
-
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Set up periodic server sync every 30 seconds when timer is active
-  useEffect(() => {
-    if (isTimerActive) {
-      syncIntervalRef.current = setInterval(() => {
-        syncWithServer();
-      }, 30000); // Sync every 30 seconds
-    } else {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-    };
-  }, [isTimerActive, syncWithServer]);
-
-  // Sync when page becomes visible (user returns to tab or navigates back)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isTimerActive) {
-        // Page became visible - sync with server immediately
-        syncWithServer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isTimerActive, syncWithServer]);
-
-  // Timer for current session - increments every second when active
-  useEffect(() => {
-    if (isTimerActive) {
-      const interval = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isTimerActive]);
-
-  const formatDuration = (seconds: number) => {
-    // Ensure non-negative time
-    const totalSeconds = Math.max(0, Math.floor(seconds));
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
+  // Punch in/out — delegate to global context, then reload dashboard stats
   const handlePunchIn = async () => {
-    setPunchLoading(true);
-    try {
-      await punchIn();
-      toast.success("Punched in successfully!");
-      fetchData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to punch in";
-      toast.error(errorMessage);
-    } finally {
-      setPunchLoading(false);
-    }
+    await ctxPunchIn();
+    await fetchData();
   };
 
   const handlePunchOut = async () => {
-    setPunchLoading(true);
-    try {
-      await punchOut();
-      toast.success("Punched out successfully!");
-      fetchData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to punch out";
-      toast.error(errorMessage);
-    } finally {
-      setPunchLoading(false);
-    }
+    await ctxPunchOut();
+    await fetchData();
   };
+
+  const formatDuration = (secs: number) => formatTimerDisplay(secs);
+
+  // isWorking derived from global timer context
+  const isWorking = isActive;
 
   const handleTaskStatusChange = async (taskId: number, selectedStatus: string) => {
     try {
@@ -219,7 +119,7 @@ export default function EmployeeDashboard() {
   const activeProjects = dashboardStats?.active_projects || 0;
   const leaveBalance = dashboardStats?.leave_balance || 0;
   const pendingLeaveRequests = dashboardStats?.pending_leave_requests || 0;
-  const isWorking = dashboardStats?.current_session?.clocked_in || false;
+  // isWorking comes from global AttendanceTimerContext (set above)
   
   // Calculate from tasks list for display - filter out approved tasks, but show submitted as "Done"
   const activeTasks = tasks.filter((t) => t.status !== "approved" && t.status !== "rejected");
@@ -256,19 +156,19 @@ export default function EmployeeDashboard() {
               {isWorking ? (
                 <button
                   onClick={handlePunchOut}
-                  disabled={punchLoading}
+                  disabled={isPunching}
                   className="inline-flex items-center gap-2 rounded-full glass-button bg-red-500 px-5 py-2 text-sm font-semibold text-white hover:bg-red-600 hover:scale-105 transition-all disabled:opacity-50"
                 >
-                  {punchLoading ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+                  {isPunching ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
                   Punch Out
                 </button>
               ) : (
                 <button
                   onClick={handlePunchIn}
-                  disabled={punchLoading}
+                  disabled={isPunching}
                   className="inline-flex items-center gap-2 rounded-full glass-button bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 hover:scale-105 transition-all disabled:opacity-50 glow-primary"
                 >
-                  {punchLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  {isPunching ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
                   Punch In
                 </button>
               )}
@@ -280,7 +180,7 @@ export default function EmployeeDashboard() {
             <StatCard
               icon={Clock}
               label="Current Session"
-              value={isWorking ? formatDuration(elapsedTime) : "--"}
+              value={isWorking ? formatDuration(seconds) : "--"}
               subtitle={isWorking ? "Active session" : "Not clocked in"}
               trend={isWorking ? "LIVE" : undefined}
               trendType="up"

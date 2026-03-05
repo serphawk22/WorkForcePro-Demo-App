@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { QueryProvider } from "@/components/QueryProvider";
 import { AuthProvider } from "@/components/AuthProvider";
+import { AttendanceTimerProvider } from "@/components/AttendanceTimerProvider";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -35,11 +36,13 @@ export default function RootLayout({
         >
           <QueryProvider>
             <AuthProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Sonner />
-                {children}
-              </TooltipProvider>
+              <AttendanceTimerProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <Sonner />
+                  {children}
+                </TooltipProvider>
+              </AttendanceTimerProvider>
             </AuthProvider>
           </QueryProvider>
         </ThemeProvider>

@@ -1,64 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy } from "lucide-react";
-import { fetchEmployeeDashboard, punchIn, punchOut, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
+import { fetchEmployeeDashboard, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-
-// Timer state persistence keys
-const TIMER_STATE_KEY = 'workforce_timer_state';
-
-interface TimerState {
-  isActive: boolean;
-  punchInTime: string | null;  // ISO string of punch-in time
-  lastSyncSeconds: number;
-  lastSyncTimestamp: number;  // When we last synced with server
-}
-
-function getPersistedTimerState(): TimerState | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const stored = localStorage.getItem(TIMER_STATE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Error reading timer state:', e);
-  }
-  return null;
-}
-
-function persistTimerState(state: TimerState): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(TIMER_STATE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('Error saving timer state:', e);
-  }
-}
-
-function clearPersistedTimerState(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(TIMER_STATE_KEY);
-  } catch (e) {
-    console.error('Error clearing timer state:', e);
-  }
-}
-
-// Calculate current elapsed seconds from persisted state
-function calculateCurrentSeconds(state: TimerState | null): number {
-  if (!state || !state.isActive) return state?.lastSyncSeconds || 0;
-  
-  // Calculate time elapsed since last sync
-  const timeSinceSync = Math.floor((Date.now() - state.lastSyncTimestamp) / 1000);
-  return Math.max(0, state.lastSyncSeconds + timeSinceSync);
-}
+import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
 
 const priorityStyles: Record<string, string> = {
   high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
@@ -89,29 +40,10 @@ export default function EmployeeDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [punchLoading, setPunchLoading] = useState(false);
-  
-  // Timer state - initialized to 0, then restored from localStorage after mount
-  const [seconds, setSeconds] = useState<number>(0);
-  const [isActive, setIsActive] = useState(false);
-  const [timerInitialized, setTimerInitialized] = useState(false);
-  
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSyncTimeRef = useRef<number>(Date.now());
-  
-  // Restore timer state from localStorage immediately on mount (client-side only)
-  useEffect(() => {
-    const persistedState = getPersistedTimerState();
-    if (persistedState && persistedState.isActive) {
-      // Calculate current seconds including time elapsed since last save
-      const currentSeconds = calculateCurrentSeconds(persistedState);
-      setSeconds(currentSeconds);
-      setIsActive(true);
-    }
-    setTimerInitialized(true);
-  }, []);
-  
+
+  // Global persistent timer — provided by AttendanceTimerProvider at root layout level
+  const { seconds, isActive, isPunching, handlePunchIn: ctxPunchIn, handlePunchOut: ctxPunchOut } = useAttendanceTimer();
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good Morning";
@@ -127,56 +59,6 @@ export default function EmployeeDashboard() {
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
-        
-        // Check if we have a persisted timer state (restored from localStorage)
-        const persistedState = getPersistedTimerState();
-        const hasPersistedActiveTimer = persistedState?.isActive && persistedState.lastSyncTimestamp > 0;
-        
-        // Initialize timer using server-provided elapsed_seconds (handles timezone correctly)
-        const isWorking = statsResponse.data.current_session?.clocked_in || false;
-        if (isWorking && statsResponse.data.current_session) {
-          // If we have a recent persisted state, use calculated elapsed time to avoid flash
-          // Only use server time if we don't have valid persisted state or server is significantly different
-          const serverElapsedSeconds = Math.max(0, statsResponse.data.current_session.elapsed_seconds || 0);
-          
-          if (hasPersistedActiveTimer) {
-            // We have persisted state - calculate current time from it
-            const calculatedSeconds = calculateCurrentSeconds(persistedState);
-            
-            // Only use server time if difference is significant (> 5 seconds)
-            // This prevents resetting the timer due to network latency
-            if (Math.abs(serverElapsedSeconds - calculatedSeconds) > 5) {
-              setSeconds(serverElapsedSeconds);
-            }
-            // Otherwise keep the calculated seconds from persisted state
-          } else {
-            // No persisted state - use server time
-            setSeconds(serverElapsedSeconds);
-          }
-          
-          setIsActive(true);
-          lastSyncTimeRef.current = Date.now();
-          
-          // Persist timer state for navigation resilience
-          persistTimerState({
-            isActive: true,
-            punchInTime: statsResponse.data.current_session.punch_in,
-            lastSyncSeconds: serverElapsedSeconds,
-            lastSyncTimestamp: Date.now()
-          });
-        } else if (statsResponse.data.current_session && !isWorking) {
-          // Completed session for today - use server-provided elapsed_seconds
-          const serverElapsedSeconds = Math.max(0, statsResponse.data.current_session.elapsed_seconds || 0);
-          setSeconds(serverElapsedSeconds);
-          setIsActive(false);
-          // Clear persisted state when session is complete
-          clearPersistedTimerState();
-        } else {
-          setSeconds(0);
-          setIsActive(false);
-          // Clear any stale persisted state
-          clearPersistedTimerState();
-        }
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
@@ -188,162 +70,22 @@ export default function EmployeeDashboard() {
     }
   }, []);
 
-  // Sync with server periodically to prevent drift
-  const syncWithServer = useCallback(async () => {
-    if (!isActive) return;
-    
-    try {
-      const statsResponse = await fetchEmployeeDashboard();
-      if (statsResponse.data?.current_session?.clocked_in) {
-        const serverElapsedSeconds = Math.max(0, statsResponse.data.current_session.elapsed_seconds || 0);
-        setSeconds(serverElapsedSeconds);
-        lastSyncTimeRef.current = Date.now();
-        
-        // Update persisted state with server data
-        persistTimerState({
-          isActive: true,
-          punchInTime: statsResponse.data.current_session.punch_in,
-          lastSyncSeconds: serverElapsedSeconds,
-          lastSyncTimestamp: Date.now()
-        });
-      } else {
-        // Session ended - stop timer and clear persisted state
-        setIsActive(false);
-        clearPersistedTimerState();
-      }
-    } catch (error) {
-      console.error("Error syncing with server:", error);
-    }
-  }, [isActive]);
-
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Set up periodic server sync every 30 seconds when timer is active
-  useEffect(() => {
-    if (isActive) {
-      syncIntervalRef.current = setInterval(() => {
-        syncWithServer();
-      }, 30000); // Sync every 30 seconds
-    } else {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-    };
-  }, [isActive, syncWithServer]);
-
-  // Sync when page becomes visible (user returns to tab or navigates back)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isActive) {
-        // Page became visible - sync with server immediately
-        syncWithServer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isActive, syncWithServer]);
-
-  // Timer effect - increments every second when active
-  useEffect(() => {
-    if (isActive) {
-      intervalRef.current = setInterval(() => {
-        setSeconds(prev => prev + 1);
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isActive]);
-
-  // Persist timer state periodically (every 5 seconds) and on unmount
-  useEffect(() => {
-    if (!isActive) return;
-    
-    const persistCurrentState = () => {
-      const storedState = getPersistedTimerState();
-      if (storedState && isActive) {
-        persistTimerState({
-          ...storedState,
-          lastSyncSeconds: seconds,
-          lastSyncTimestamp: Date.now()
-        });
-      }
-    };
-
-    // Persist every 5 seconds
-    const persistInterval = setInterval(persistCurrentState, 5000);
-    
-    // Also persist on page unload/navigation
-    const handleBeforeUnload = () => persistCurrentState();
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      clearInterval(persistInterval);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Persist state when component unmounts (navigation)
-      persistCurrentState();
-    };
-  }, [isActive, seconds]);
-
-  const formatDuration = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
+  // Punch in/out — delegate to global context, then reload dashboard stats
   const handlePunchIn = async () => {
-    setPunchLoading(true);
-    try {
-      await punchIn();
-      toast.success("Punched in successfully!");
-      // Fetch fresh data to update dashboard and timer
-      await fetchData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to punch in";
-      toast.error(errorMessage);
-    } finally {
-      setPunchLoading(false);
-    }
+    await ctxPunchIn();
+    await fetchData();
   };
 
   const handlePunchOut = async () => {
-    setPunchLoading(true);
-    try {
-      await punchOut();
-      toast.success("Punched out successfully!");
-      // Clear persisted timer state immediately
-      clearPersistedTimerState();
-      // Reload data - backend will return completed session
-      await fetchData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to punch out";
-      toast.error(errorMessage);
-    } finally {
-      setPunchLoading(false);
-    }
+    await ctxPunchOut();
+    await fetchData();
   };
+
+  const formatDuration = (secs: number) => formatTimerDisplay(secs);
 
   const handleTaskStatusChange = async (taskId: number, selectedStatus: string) => {
     try {
@@ -374,8 +116,9 @@ export default function EmployeeDashboard() {
   const activeProjects = dashboardStats?.active_projects || 0;
   const leaveBalance = dashboardStats?.leave_balance || 0;
   const pendingLeaveRequests = dashboardStats?.pending_leave_requests || 0;
-  const isWorking = dashboardStats?.current_session?.clocked_in || false;
-  
+  // isWorking and timer seconds come from global AttendanceTimerContext
+  const isWorking = isActive;
+
   // Calculate from tasks list for display - filter out approved and rejected
   const activeTasks = tasks.filter((t) => t.status !== "approved" && t.status !== "rejected");
 
@@ -411,19 +154,19 @@ export default function EmployeeDashboard() {
               {isWorking ? (
                 <button
                   onClick={handlePunchOut}
-                  disabled={punchLoading}
+                  disabled={isPunching}
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 px-5 py-2 text-sm font-bold text-white hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105 shadow-lg shadow-red-500/50 hover:shadow-xl hover:shadow-red-500/60 disabled:opacity-50 disabled:hover:scale-100"
                 >
-                  {punchLoading ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Square size={14} className="glow-icon" />}
+                  {isPunching ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Square size={14} className="glow-icon" />}
                   Punch Out
                 </button>
               ) : (
                 <button
                   onClick={handlePunchIn}
-                  disabled={punchLoading}
+                  disabled={isPunching}
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-primary-light px-5 py-2 text-sm font-bold text-white hover:from-primary-light hover:to-primary-glow transition-all transform hover:scale-105 shadow-lg shadow-primary/50 hover:shadow-xl hover:shadow-primary/60 disabled:opacity-50 disabled:hover:scale-100"
                 >
-                  {punchLoading ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Play size={14} className="glow-icon" />}
+                  {isPunching ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Play size={14} className="glow-icon" />}
                   Punch In
                 </button>
               )}
@@ -435,7 +178,7 @@ export default function EmployeeDashboard() {
             <StatCard
               icon={Clock}
               label="Current Session"
-              value={dashboardStats?.current_session ? formatDuration(seconds) : "--"}
+              value={isWorking ? formatDuration(seconds) : (dashboardStats?.current_session ? formatDuration(seconds) : "--")}
               subtitle={
                 isWorking 
                   ? "Active session" 
