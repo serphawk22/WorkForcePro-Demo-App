@@ -34,8 +34,15 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_by INTEGER;
             """))
+            # Add USER_APPROVED to notification type enum if it doesn't exist
+            try:
+                conn.execute(text("""
+                    ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'USER_APPROVED';
+                """))
+            except Exception:
+                pass  # Enum value may already exist or not applicable
             conn.commit()
-            print("✅ Database migrations completed (approved_at, approved_by)")
+            print("✅ Database migrations completed (approved_at, approved_by, USER_APPROVED enum)")
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
     

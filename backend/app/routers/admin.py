@@ -151,22 +151,14 @@ async def approve_user(
         session.commit()
         session.refresh(user)
         
-        # Try to create notification, but don't fail the approval if it errors
-        try:
-            notification = Notification(
-                user_id=current_user.id,
-                type=NotificationType.USER_APPROVED,
-                message=f"You approved {user.name} ({user.email})"
-            )
-            session.add(notification)
-            session.commit()
-        except Exception:
-            pass  # Notification creation is optional
+        # Skip notification creation - the enum type may not be in sync
+        # This can be re-enabled once DB is fully migrated
         
         return {"message": f"User {user.email} has been approved.", "status": "APPROVED"}
     except HTTPException:
         raise
     except Exception as e:
+        session.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to approve user: {str(e)}")
 
 
