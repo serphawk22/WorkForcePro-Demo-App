@@ -385,9 +385,9 @@ async def delete_user(
         except Exception:
             pass
         
-        # 7. Delete payroll records
+        # 7. Delete payroll records (uses employee_id, not user_id)
         try:
-            payrolls = session.exec(select(Payroll).where(Payroll.user_id == user_id)).all()
+            payrolls = session.exec(select(Payroll).where(Payroll.employee_id == user_id)).all()
             for payroll in payrolls:
                 session.delete(payroll)
         except Exception:
