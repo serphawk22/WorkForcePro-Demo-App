@@ -28,154 +28,165 @@ async def get_admin_dashboard(
         - recent_activities: Recent system activities
         - leave_requests_pending: Pending leave requests
     """
-    # Total employees (exclude admin users)
-    total_employees = session.exec(
-        select(func.count(User.id)).where(
-            User.is_active == True,
-            User.role != UserRole.admin
-        )
-    ).one()
-    
-    # Active sessions (clocked in today)
-    today = date.today()
-    active_sessions = session.exec(
-        select(func.count(Attendance.id)).where(
-            Attendance.date == today,
-            Attendance.punch_in.isnot(None),
-            Attendance.punch_out.is_(None)
-        )
-    ).one()
-    
-    #Pending tasks (tasks submitted for review)
-    pending_tasks = session.exec(
-        select(func.count(Task.id)).where(
-            Task.status == TaskStatus.submitted
-        )
-    ).one()
-    
-    # Active tasks (any status except approved/rejected)
-    active_tasks_count = session.exec(
-        select(func.count(Task.id)).where(
-            Task.status.notin_([TaskStatus.approved, TaskStatus.rejected])
-        )
-    ).one()
-
-    # Total tasks
-    total_tasks_count = session.exec(select(func.count(Task.id))).one()
-
-    # Employees on leave today (approved leave covering today)
-    employees_on_leave_today = session.exec(
-        select(func.count(LeaveRequest.id)).where(
-            LeaveRequest.status == LeaveStatus.approved,
-            LeaveRequest.start_date <= today,
-            LeaveRequest.end_date >= today
-        )
-    ).one()
-
-    # Late check-ins today (punch_in after 09:30 local — stored as UTC datetime)
-    # We use a simple hour-based heuristic: punch_in hour (UTC) > 4 as proxy for late
-    today_start = datetime.combine(today, time(0, 0, 0))
-    today_late_threshold = datetime.combine(today, time(4, 0, 0))  # ~9:30 IST in UTC
-    late_checkins_today = session.exec(
-        select(func.count(Attendance.id)).where(
-            Attendance.date == today,
-            Attendance.punch_in.isnot(None),
-            Attendance.punch_in > today_late_threshold
-        )
-    ).one()
-
-    # Upcoming tasks (nearest due dates, non-approved, with public_id)
-    upcoming_tasks = []
     try:
-        upcoming_tasks_records = session.exec(
-            select(Task, User).join(User, Task.assigned_to == User.id, isouter=True)
-            .where(
-                Task.status.notin_([TaskStatus.approved, TaskStatus.rejected]),
-                Task.due_date.isnot(None)
+        today = date.today()
+        
+        # Total employees (exclude admin users)
+        total_employees = session.exec(
+            select(func.count(User.id)).where(
+                User.is_active == True,
+                User.role != UserRole.admin
             )
-            .order_by(Task.due_date.asc())
-            .limit(6)
-        ).all()
+        ).one() or 0
+        
+        # Active sessions (clocked in today)
+        active_sessions = session.exec(
+            select(func.count(Attendance.id)).where(
+                Attendance.date == today,
+                Attendance.punch_in.isnot(None),
+                Attendance.punch_out.is_(None)
+            )
+        ).one() or 0
+        
+        #Pending tasks (tasks submitted for review)
+        pending_tasks = session.exec(
+            select(func.count(Task.id)).where(
+                Task.status == TaskStatus.submitted
+            )
+        ).one() or 0
+        
+        # Active tasks (any status except approved/rejected)
+        active_tasks_count = session.exec(
+            select(func.count(Task.id)).where(
+                Task.status.notin_([TaskStatus.approved, TaskStatus.rejected])
+            )
+        ).one() or 0
 
-        for task, assignee in upcoming_tasks_records:
-            upcoming_tasks.append({
-                "id": task.id,
-                "public_id": getattr(task, 'public_id', '') or "",
-                "title": task.title,
-                "due_date": task.due_date.isoformat() if task.due_date else None,
-                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
-                "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
-                "assignee_name": assignee.name if assignee else None,
-            })
-    except Exception as e:
-        print(f"Warning: Could not fetch upcoming tasks: {e}")
+        # Total tasks
+        total_tasks_count = session.exec(select(func.count(Task.id))).one() or 0
+
+        # Employees on leave today (approved leave covering today)
+        employees_on_leave_today = session.exec(
+            select(func.count(LeaveRequest.id)).where(
+                LeaveRequest.status == LeaveStatus.approved,
+                LeaveRequest.start_date <= today,
+                LeaveRequest.end_date >= today
+            )
+        ).one() or 0
+
+        # Late check-ins today (punch_in after 09:30 local — stored as UTC datetime)
+        # We use a simple hour-based heuristic: punch_in hour (UTC) > 4 as proxy for late
+        today_late_threshold = datetime.combine(today, time(4, 0, 0))  # ~9:30 IST in UTC
+        late_checkins_today = session.exec(
+            select(func.count(Attendance.id)).where(
+                Attendance.date == today,
+                Attendance.punch_in.isnot(None),
+                Attendance.punch_in > today_late_threshold
+            )
+        ).one() or 0
+
+        # Upcoming tasks (nearest due dates, non-approved, with public_id)
         upcoming_tasks = []
-    
-    # Average daily hours (last 30 days)
-    thirty_days_ago = today - timedelta(days=30)
-    avg_hours_result = session.exec(
-        select(func.avg(Attendance.total_hours)).where(
-            Attendance.date >= thirty_days_ago,
-            Attendance.total_hours.isnot(None)
+        try:
+            upcoming_tasks_records = session.exec(
+                select(Task, User).join(User, Task.assigned_to == User.id, isouter=True)
+                .where(
+                    Task.status.notin_([TaskStatus.approved, TaskStatus.rejected]),
+                    Task.due_date.isnot(None)
+                )
+                .order_by(Task.due_date.asc())
+                .limit(6)
+            ).all()
+
+            for task, assignee in upcoming_tasks_records:
+                upcoming_tasks.append({
+                    "id": task.id,
+                    "public_id": getattr(task, 'public_id', '') or "",
+                    "title": task.title,
+                    "due_date": task.due_date.isoformat() if task.due_date else None,
+                    "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                    "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                    "assignee_name": assignee.name if assignee else None,
+                })
+        except Exception as e:
+            print(f"Warning: Could not fetch upcoming tasks: {e}")
+            upcoming_tasks = []
+        
+        # Average daily hours (last 30 days)
+        thirty_days_ago = today - timedelta(days=30)
+        avg_hours_result = session.exec(
+            select(func.avg(Attendance.total_hours)).where(
+                Attendance.date >= thirty_days_ago,
+                Attendance.total_hours.isnot(None)
+            )
+        ).one()
+        avg_daily_hours = round(float(avg_hours_result or 0), 2)
+        
+        # Pending leave requests
+        leave_requests_pending = session.exec(
+            select(func.count(LeaveRequest.id)).where(
+                LeaveRequest.status == LeaveStatus.pending
+            )
+        ).one() or 0
+        
+        # Recent activities (last 10 actions)
+        recent_activities = []
+        try:
+            recent_tasks = session.exec(
+                select(Task, User.name).join(User, Task.assigned_to == User.id, isouter=True)
+                .order_by(Task.created_at.desc())
+                .limit(5)
+            ).all()
+            
+            for task, user_name in recent_tasks:
+                recent_activities.append({
+                    "type": "task",
+                    "description": f"{user_name or 'Unknown'} was assigned: {task.title}",
+                    "timestamp": task.created_at.isoformat() if task.created_at else datetime.now().isoformat(),
+                    "status": task.status.value if hasattr(task.status, 'value') else str(task.status)
+                })
+        except Exception as e:
+            print(f"Warning: Could not fetch recent tasks: {e}")
+        
+        try:
+            recent_leaves = session.exec(
+                select(LeaveRequest, User.name).join(User, LeaveRequest.user_id == User.id, isouter=True)
+                .order_by(LeaveRequest.created_at.desc())
+                .limit(5)
+            ).all()
+            
+            for leave, user_name in recent_leaves:
+                recent_activities.append({
+                    "type": "leave",
+                    "description": f"{user_name or 'Unknown'} requested leave from {leave.start_date} to {leave.end_date}",
+                    "timestamp": leave.created_at.isoformat() if leave.created_at else datetime.now().isoformat(),
+                    "status": leave.status.value if hasattr(leave.status, 'value') else str(leave.status)
+                })
+        except Exception as e:
+            print(f"Warning: Could not fetch recent leaves: {e}")
+        
+        # Sort by timestamp
+        recent_activities.sort(key=lambda x: x["timestamp"], reverse=True)
+        recent_activities = recent_activities[:10]
+        
+        return AdminDashboardStats(
+            total_employees=total_employees,
+            active_sessions=active_sessions,
+            pending_tasks=pending_tasks,
+            avg_daily_hours=avg_daily_hours,
+            recent_activities=recent_activities,
+            leave_requests_pending=leave_requests_pending,
+            employees_on_leave_today=employees_on_leave_today,
+            late_checkins_today=late_checkins_today,
+            active_tasks_count=active_tasks_count,
+            total_tasks_count=total_tasks_count,
+            upcoming_tasks=upcoming_tasks
         )
-    ).one()
-    avg_daily_hours = round(float(avg_hours_result or 0), 2)
-    
-    # Pending leave requests
-    leave_requests_pending = session.exec(
-        select(func.count(LeaveRequest.id)).where(
-            LeaveRequest.status == LeaveStatus.pending
-        )
-    ).one()
-    
-    # Recent activities (last 10 actions)
-    recent_tasks = session.exec(
-        select(Task, User.name).join(User, Task.assigned_to == User.id)
-        .order_by(Task.created_at.desc())
-        .limit(5)
-    ).all()
-    
-    recent_leaves = session.exec(
-        select(LeaveRequest, User.name).join(User, LeaveRequest.user_id == User.id)
-        .order_by(LeaveRequest.created_at.desc())
-        .limit(5)
-    ).all()
-    
-    recent_activities = []
-    
-    for task, user_name in recent_tasks:
-        recent_activities.append({
-            "type": "task",
-            "description": f"{user_name} was assigned: {task.title}",
-            "timestamp": task.created_at.isoformat(),
-            "status": task.status.value if hasattr(task.status, 'value') else str(task.status)
-        })
-    
-    for leave, user_name in recent_leaves:
-        recent_activities.append({
-            "type": "leave",
-            "description": f"{user_name} requested leave from {leave.start_date} to {leave.end_date}",
-            "timestamp": leave.created_at.isoformat(),
-            "status": leave.status.value if hasattr(leave.status, 'value') else str(leave.status)
-        })
-    
-    # Sort by timestamp
-    recent_activities.sort(key=lambda x: x["timestamp"], reverse=True)
-    recent_activities = recent_activities[:10]
-    
-    return AdminDashboardStats(
-        total_employees=total_employees,
-        active_sessions=active_sessions,
-        pending_tasks=pending_tasks,
-        avg_daily_hours=avg_daily_hours,
-        recent_activities=recent_activities,
-        leave_requests_pending=leave_requests_pending,
-        employees_on_leave_today=employees_on_leave_today,
-        late_checkins_today=late_checkins_today,
-        active_tasks_count=active_tasks_count,
-        total_tasks_count=total_tasks_count,
-        upcoming_tasks=upcoming_tasks
-    )
+    except Exception as e:
+        print(f"Dashboard error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
 
 
 @router.get("/employee", response_model=EmployeeDashboardStats)
