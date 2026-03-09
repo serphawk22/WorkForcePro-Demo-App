@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CheckCircle2, XCircle, Clock, RefreshCw, UserCheck, Users } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, RefreshCw, UserCheck, Users, ArrowUpRight } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import {
   getAllUsers,
@@ -25,6 +25,7 @@ export default function UserApprovalsPage() {
   const [loadError, setLoadError] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [ripple, setRipple] = useState(false);
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -104,12 +105,36 @@ export default function UserApprovalsPage() {
             </div>
           </div>
           <button
-            onClick={loadUsers}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80 transition-colors"
+            onClick={() => {
+              if (loading) return;
+              setRipple(true);
+              setTimeout(() => setRipple(false), 600);
+              loadUsers();
+            }}
+            className={`group relative flex items-center justify-center gap-2 rounded-xl px-4 py-2 min-w-[110px] text-sm font-medium overflow-hidden
+              transition-all duration-200
+              hover:-translate-y-0.5 hover:shadow-md hover:shadow-primary/30
+              ${ripple ? "scale-90 duration-75" : ""}
+              ${loading
+                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 cursor-default"
+                : "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-primary hover:text-primary-foreground cursor-pointer"
+              }`}
           >
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-            Refresh
+            {/* Click ripple burst */}
+            {ripple && (
+              <span className="absolute inset-0 rounded-xl animate-[ping_0.4s_ease-out_forwards] bg-primary/40 pointer-events-none" />
+            )}
+            {/* Sweep shimmer while loading */}
+            {loading && (
+              <span className="absolute inset-0 animate-[sweep_1s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            )}
+            <RefreshCw
+              size={15}
+              className={`relative transition-transform duration-500 ${loading ? "animate-spin" : ripple ? "rotate-180" : "group-hover:rotate-180"}`}
+            />
+            <span className="relative whitespace-nowrap">
+              {loading ? "Refreshing…" : "Refresh"}
+            </span>
           </button>
         </div>
 
@@ -119,14 +144,29 @@ export default function UserApprovalsPage() {
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`rounded-xl p-4 text-left transition-all border ${
-                filter === s
-                  ? "glass-card glow-sm border-primary/40"
+              className={`rounded-xl p-4 text-left border group
+                transition-all duration-200 ease-out
+                active:scale-95 active:duration-75
+                hover:-translate-y-1 hover:shadow-lg
+                ${filter === s
+                  ? "glass-card glow-sm border-primary/40 scale-[1.03] shadow-md"
                   : "glass-card border-transparent hover:border-border"
-              }`}
+                }`}
             >
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s}</p>
-              <p className="text-2xl font-bold text-card-foreground">{counts[s]}</p>
+              <div className="flex items-start justify-between mb-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{s}</p>
+                <ArrowUpRight
+                  size={14}
+                  className={`transition-all duration-200 ${
+                    filter === s
+                      ? "text-primary translate-x-0.5 -translate-y-0.5"
+                      : "text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  }`}
+                />
+              </div>
+              <p className={`text-2xl font-bold transition-all duration-200 ${filter === s ? "text-primary scale-105 origin-left" : "text-card-foreground"}`}>
+                {counts[s]}
+              </p>
             </button>
           ))}
         </div>

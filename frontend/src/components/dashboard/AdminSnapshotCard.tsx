@@ -81,11 +81,13 @@ export default function AdminSnapshotCard({
       }}
       className={`
         group relative overflow-hidden rounded-xl glass-card p-5 
-        cursor-pointer transition-all duration-300 ease-out
-        hover:-translate-y-2 hover:shadow-2xl ${glowColors[gradientVariant]}
+        cursor-pointer select-none
+        transition-all duration-200 ease-out
+        hover:-translate-y-2 hover:scale-[1.04] hover:shadow-2xl ${glowColors[gradientVariant]}
         focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
-        active:scale-[0.98] hover:glow-md
-        ${isClicked ? "scale-[0.98]" : ""}
+        active:scale-95 active:translate-y-0.5 active:duration-75
+        hover:glow-md
+        ${isClicked ? "scale-95 translate-y-0.5" : ""}
       `}
     >
       {/* Background gradient glow - ENHANCED */}
@@ -102,9 +104,9 @@ export default function AdminSnapshotCard({
           absolute top-3 right-3 h-7 w-7 rounded-full 
           bg-gradient-to-br ${arrowBgGradients[gradientVariant]}
           flex items-center justify-center shadow-lg
-          opacity-0 group-hover:opacity-100
-          transition-all duration-300
-          group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:scale-110
+          opacity-40 group-hover:opacity-100
+          transition-all duration-200
+          group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:scale-125
         `}
       >
         <ArrowUpRight className={`h-4 w-4 ${iconColors[gradientVariant]}`} />
@@ -112,7 +114,7 @@ export default function AdminSnapshotCard({
 
       {/* Card content - ENHANCED */}
       <div className="relative">
-        <Icon className={`h-6 w-6 ${iconColors[gradientVariant]} mb-3 transition-all duration-300 group-hover:scale-125 group-hover:rotate-3`} />
+        <Icon className={`h-6 w-6 ${iconColors[gradientVariant]} mb-3 transition-all duration-200 group-hover:scale-130 group-hover:-rotate-6 group-hover:drop-shadow-none`} />
         <div className="text-3xl font-bold text-foreground transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
           {value}
         </div>

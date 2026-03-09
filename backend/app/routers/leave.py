@@ -1,9 +1,10 @@
 """
 Leave request management routes.
 """
+import base64
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -19,31 +20,65 @@ router = APIRouter(prefix="/leave", tags=["Leave Requests"])
 # Employee routes
 @router.post("/", response_model=LeaveRequestRead, status_code=status.HTTP_201_CREATED)
 async def create_leave_request(
-    leave_data: LeaveRequestCreate,
     request: Request,
+    reason: str = Form(..., min_length=5, max_length=500),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    leave_type: str = Form(default="personal"),
+    document: Optional[UploadFile] = File(default=None),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Create a new leave request."""
-    # Validate dates
-    if leave_data.end_date < leave_data.start_date:
+    """Create a new leave request with optional document attachment."""
+    from datetime import date as DateType
+    start = DateType.fromisoformat(start_date)
+    end = DateType.fromisoformat(end_date)
+
+    if end < start:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="End date must be after start date"
         )
-    
+
+    # Handle optional document upload
+    document_data = None
+    document_filename = None
+    if document and document.filename:
+        allowed_types = [
+            "application/pdf",
+            "image/jpeg", "image/jpg", "image/png",
+            "image/gif", "image/webp",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]
+        if document.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF, images (jpg, png, gif, webp) or Word documents are allowed"
+            )
+        contents = await document.read()
+        if len(contents) > 10 * 1024 * 1024:  # 10 MB limit
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Document size must be less than 10 MB"
+            )
+        document_data = f"data:{document.content_type};base64,{base64.b64encode(contents).decode('utf-8')}"
+        document_filename = document.filename
+
     leave_request = LeaveRequest(
         user_id=current_user.id,
-        reason=leave_data.reason,
-        start_date=leave_data.start_date,
-        end_date=leave_data.end_date,
-        leave_type=leave_data.leave_type
+        reason=reason,
+        start_date=start,
+        end_date=end,
+        leave_type=leave_type,
+        document_data=document_data,
+        document_filename=document_filename,
     )
-    
+
     session.add(leave_request)
     session.commit()
     session.refresh(leave_request)
-    
+
     return leave_request
 
 

@@ -5,6 +5,7 @@ Fixed salary model — no attendance-based deductions.
 from datetime import date, datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -118,6 +119,53 @@ async def mark_paid(
     )
     session.add(notification)
     session.commit()
+
+    return _build_payroll_read(record, user)
+
+
+class StatusUpdateBody(BaseModel):
+    status: str  # "Paid" | "Pending"
+
+
+@router.put("/{payroll_id}/status", response_model=dict)
+async def update_payroll_status(
+    payroll_id: int,
+    body: StatusUpdateBody,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Update a payroll record's status (Paid or Pending)."""
+    allowed = {"Paid", "Pending"}
+    if body.status not in allowed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Status must be one of: {allowed}")
+
+    record = session.get(Payroll, payroll_id)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll record not found")
+
+    record.status = body.status
+    if body.status == "Paid":
+        record.pay_date = date.today()
+    else:
+        record.pay_date = None
+
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    user = session.get(User, record.employee_id)
+
+    if body.status == "Paid":
+        from calendar import month_name
+        month_label = month_name[record.month]
+        salary_inr = f"\u20b9{record.salary:,.0f}"
+        notification = Notification(
+            user_id=record.employee_id,
+            type=NotificationType.SALARY_PAID,
+            message=f"Your salary of {salary_inr} for {month_label} {record.year} has been credited. Payment Date: {record.pay_date.strftime('%d %b %Y')}.",
+        )
+        session.add(notification)
+        session.commit()
 
     return _build_payroll_read(record, user)
 

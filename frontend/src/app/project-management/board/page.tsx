@@ -12,34 +12,34 @@ const COLUMNS = [
   { 
     key: "todo", 
     label: "To Do", 
-    accent: "#a78bfa", 
-    bg: "rgba(167, 139, 250, 0.15)",
-    gradient: "from-purple-500/20 to-purple-600/20",
-    shadow: "purple-500/30"
+    accent: "#7c3aed", 
+    dot: "#a78bfa",
+    bg: "rgba(124, 58, 237, 0.08)",
+    headerBg: "rgba(124, 58, 237, 0.06)",
   },
   { 
     key: "in_progress", 
     label: "In Progress", 
-    accent: "#60a5fa", 
-    bg: "rgba(96, 165, 250, 0.15)",
-    gradient: "from-blue-500/20 to-blue-600/20",
-    shadow: "blue-500/30"
+    accent: "#2563eb", 
+    dot: "#60a5fa",
+    bg: "rgba(37, 99, 235, 0.08)",
+    headerBg: "rgba(37, 99, 235, 0.06)",
   },
   { 
     key: "reviewing", 
     label: "Reviewing", 
-    accent: "#facc15", 
-    bg: "rgba(250, 204, 21, 0.15)",
-    gradient: "from-yellow-500/20 to-yellow-600/20",
-    shadow: "yellow-500/30"
+    accent: "#b45309", 
+    dot: "#fbbf24",
+    bg: "rgba(180, 83, 9, 0.08)",
+    headerBg: "rgba(180, 83, 9, 0.06)",
   },
   { 
     key: "approved", 
     label: "Done", 
-    accent: "#4ade80", 
-    bg: "rgba(74, 222, 128, 0.15)",
-    gradient: "from-green-500/20 to-green-600/20",
-    shadow: "green-500/30"
+    accent: "#15803d", 
+    dot: "#4ade80",
+    bg: "rgba(21, 128, 61, 0.08)",
+    headerBg: "rgba(21, 128, 61, 0.06)",
   },
 ];
 
@@ -119,7 +119,7 @@ export default function BoardPage() {
     <ProjectShell>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[600px]">
@@ -132,20 +132,20 @@ export default function BoardPage() {
                 onDragOver={(e) => handleDragOver(e, col.key)}
                 onDrop={(e) => handleDrop(e, col.key)}
                 onDragLeave={() => setDraggingOver(null)}
-                className="rounded-2xl flex flex-col transition-all"
+                className="rounded-2xl flex flex-col transition-all bg-muted/20 dark:bg-card/30 border border-border/50"
                 style={{
-                  background: isDraggingOverCol ? col.accent + "18" : "hsl(5 38% 79% / 0.2)",
-                  border: isDraggingOverCol ? `2px dashed ${col.accent}` : `1.5px solid #DFB6B250`,
+                  background: isDraggingOverCol ? col.accent + "10" : undefined,
+                  border: isDraggingOverCol ? `2px dashed ${col.accent}60` : undefined,
                   minHeight: 500,
                 }}
               >
                 {/* Column header */}
-                <div className={`flex items-center justify-between px-4 py-3 rounded-t-2xl bg-gradient-to-r ${col.gradient} border-b-2`} style={{ borderColor: col.accent + "30" }}>
+                <div className="flex items-center justify-between px-4 py-3 rounded-t-2xl border-b border-border/40" style={{ background: col.headerBg }}>
                   <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full shadow-lg" style={{ background: col.accent, boxShadow: `0 0 8px ${col.accent}` }} />
-                    <span className="font-bold text-sm drop-shadow-sm" style={{ color: col.accent }}>{col.label}</span>
+                    <div className="h-2.5 w-2.5 rounded-full" style={{ background: col.dot }} />
+                    <span className="font-semibold text-sm" style={{ color: col.accent }}>{col.label}</span>
                   </div>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full border drop-shadow-sm" style={{ background: col.bg, color: col.accent, borderColor: col.accent + "40" }}>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full border" style={{ background: col.bg, color: col.accent, borderColor: col.accent + "30" }}>
                     {colTasks.length}
                   </span>
                 </div>
@@ -153,7 +153,7 @@ export default function BoardPage() {
                 {/* Cards */}
                 <div className="flex-1 p-3 space-y-3 overflow-y-auto">
                   {colTasks.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-24 text-xs" style={{ color: "#DFB6B2" }}>
+                    <div className="flex flex-col items-center justify-center h-24 text-xs text-muted-foreground/50">
                       <span>Drop tasks here</span>
                     </div>
                   )}
@@ -164,12 +164,12 @@ export default function BoardPage() {
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
                       onClick={() => router.push(`/project-management/${task.id}`)}
-                      className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none glass-card border border-border/30 ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/20 hover:border-purple-500/30"}`}
+                      className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none bg-card border border-border/40 shadow-sm ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:shadow-md hover:border-border/70"}`}
                     >
                       {/* Ref ID + priority */}
                       <div className="flex items-center justify-between mb-2">
                         {task.public_id ? (
-                          <span className="font-mono text-[10px] font-bold px-2 py-1 rounded tracking-wider bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 drop-shadow-sm">
+                          <span className="font-mono text-[10px] font-medium px-2 py-1 rounded tracking-wider bg-muted border border-border/60 text-muted-foreground">
                             {task.public_id}
                           </span>
                         ) : <span />}
@@ -182,16 +182,16 @@ export default function BoardPage() {
                       <p className="text-sm font-semibold line-clamp-2 mb-3 text-foreground">{task.title}</p>
 
                       {/* Footer */}
-                      <div className="flex items-center justify-between text-[11px]" style={{ color: "#854F6C" }}>
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                         {task.assignee_name ? (
                           <div className="flex items-center gap-1.5">
-                            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: "#522B5B18", color: "#522B5B" }}>
+                            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold bg-muted text-muted-foreground">
                               {task.assignee_name.split(" ").map(n => n[0]).join("")}
                             </div>
                             <span className="truncate max-w-[70px]">{task.assignee_name.split(" ")[0]}</span>
                           </div>
                         ) : (
-                          <span className="text-[10px]" style={{ color: "#DFB6B2" }}>Unassigned</span>
+                          <span className="text-[10px] text-muted-foreground/50">Unassigned</span>
                         )}
                         {task.due_date && (
                           <div className="flex items-center gap-1">

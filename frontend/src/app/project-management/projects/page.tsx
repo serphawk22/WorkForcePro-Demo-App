@@ -9,7 +9,7 @@ import {
   Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy,
 } from "lucide-react";
 import {
-  getAllTasks, getMyTasks, createTask, updateTaskStatus, updateTaskLinks,
+  getAllTasks, getMyTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
   deleteTask, fetchEmployees, getAllEmployees, createSubtask, getTaskSubtasks,
   updateSubtaskStatus, deleteSubtask, searchByPublicId,
   Task, TaskCreate, Subtask, SubtaskCreate, User,
@@ -17,9 +17,14 @@ import {
 import { toast } from "sonner";
 
 const priorityColors: Record<string, string> = {
-  high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30",
-  medium: "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-yellow-400 border border-yellow-500/30",
-  low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30",
+  high: "bg-red-500/10 text-red-500 border border-red-500/30",
+  medium: "bg-yellow-500/10 text-yellow-600 border border-yellow-500/30",
+  low: "bg-green-500/10 text-green-600 border border-green-500/30",
+};
+const prioritySelectColors: Record<string, string> = {
+  high: "text-red-500",
+  medium: "text-yellow-600",
+  low: "text-green-600",
 };
 const statusColors: Record<string, string> = {
   todo: "text-purple-400", in_progress: "text-blue-400",
@@ -89,6 +94,7 @@ export default function ProjectsPage() {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim()) { toast.error("Task title is required"); return; }
+    if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to an employee"); return; }
     setIsCreating(true);
     const result = await createTask(newTask);
     if (result.error) toast.error(result.error);
@@ -99,6 +105,13 @@ export default function ProjectsPage() {
       loadData();
     }
     setIsCreating(false);
+  };
+
+  const handlePriorityChange = async (taskId: number, priority: "low" | "medium" | "high") => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
+    const result = await updateTask(taskId, { priority });
+    if (result.error) { toast.error(result.error); loadData(); }
+    else toast.success("Priority updated!");
   };
 
   const handleStatusChange = async (taskId: number, selectedStatus: string) => {
@@ -286,6 +299,15 @@ export default function ProjectsPage() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-card-foreground">{task.title}</span>
+                            {(isAdmin || task.assigned_to === user?.id) && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedTaskForSubtask(task.id); setShowSubtaskModal(true); }}
+                                className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-500 hover:bg-blue-500/20 transition-colors"
+                                title="Add subtask"
+                              >
+                                <Plus size={10} />
+                              </button>
+                            )}
                             {!isAdmin && task.assigned_to === user?.id && (
                               <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
                                 Assigned to You
@@ -316,9 +338,16 @@ export default function ProjectsPage() {
                         </div>
                       </td>
                       <td className="py-3.5">
-                        <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize ${priorityColors[task.priority]}`}>
-                          {task.priority}
-                        </span>
+                        <select
+                          value={task.priority}
+                          onChange={(e) => handlePriorityChange(task.id, e.target.value as "low" | "medium" | "high")}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize cursor-pointer border bg-transparent focus:outline-none focus:ring-1 focus:ring-primary/40 ${priorityColors[task.priority]}`}
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
                       </td>
                       <td className="py-3.5">
                         {isAdmin ? (
@@ -356,16 +385,9 @@ export default function ProjectsPage() {
                         </td>
                       )}
                       <td className="py-3.5">
-                        <div className="flex items-center gap-2">
-                          {(isAdmin || task.assigned_to === user?.id) && (
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedTaskForSubtask(task.id); setShowSubtaskModal(true); }} className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600">
-                              <ListTree size={14} /> Subtask
-                            </button>
-                          )}
-                          {isAdmin && (
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
-                          )}
-                        </div>
+                        {isAdmin && (
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
+                        )}
                       </td>
                     </tr>
 
@@ -454,7 +476,7 @@ export default function ProjectsPage() {
       {/* ── Create Project Modal ── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
+          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl bg-card border border-border">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 Create New Project
@@ -467,17 +489,17 @@ export default function ProjectsPage() {
               ].map(f => (
                 <div key={f.name}>
                   <label className="block text-sm font-semibold mb-1 text-foreground">{f.label}</label>
-                  <input type={f.type} value={(newTask as any)[f.name] || ""} onChange={e => setNewTask({ ...newTask, [f.name]: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2", focusRingColor: "#522B5B" } as any} placeholder={f.placeholder} required={f.required} />
+                  <input type={f.type} value={(newTask as any)[f.name] || ""} onChange={e => setNewTask({ ...newTask, [f.name]: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder={f.placeholder} required={f.required} />
                 </div>
               ))}
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>Description</label>
-                <textarea value={newTask.description || ""} onChange={e => setNewTask({ ...newTask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} rows={3} />
+                <label className="block text-sm font-medium mb-1 text-foreground">Description</label>
+                <textarea value={newTask.description || ""} onChange={e => setNewTask({ ...newTask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" rows={3} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
-                  <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value as any })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
+                  <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value as any })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none">
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -485,21 +507,21 @@ export default function ProjectsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Due Date</label>
-                  <input type="date" value={newTask.due_date || ""} onChange={e => setNewTask({ ...newTask, due_date: e.target.value || undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} />
+                  <input type="date" value={newTask.due_date || ""} onChange={e => setNewTask({ ...newTask, due_date: e.target.value || undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" />
                 </div>
               </div>
               {isAdmin && (
                 <div>
-                  <label className="block text-sm font-semibold mb-1 text-foreground">Assign To</label>
-                  <select value={newTask.assigned_to || ""} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
-                    <option value="">Unassigned</option>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
+                  <select value={newTask.assigned_to || ""} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
+                    <option value="" disabled>Select employee</option>
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                   </select>
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ border: "1px solid #DFB6B2", color: "#522B5B", background: "transparent" }}>Cancel</button>
-                <button type="submit" disabled={isCreating} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#522B5B" }}>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isCreating} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                   {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Project"}
                 </button>
               </div>
@@ -511,32 +533,32 @@ export default function ProjectsPage() {
       {/* ── Create Subtask Modal ── */}
       {showSubtaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
+          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl bg-card border border-border">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                <ListTree size={20} className="text-purple-400" /> Create Subtask
+                <ListTree size={20} className="text-primary" /> Create Subtask
               </h2>
               <button onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateSubtask} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Title *</label>
-                <input type="text" value={newSubtask.title} onChange={e => setNewSubtask({ ...newSubtask, title: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="Subtask title" required />
+                <input type="text" value={newSubtask.title} onChange={e => setNewSubtask({ ...newSubtask, title: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="Subtask title" required />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Description</label>
-                <textarea value={newSubtask.description || ""} onChange={e => setNewSubtask({ ...newSubtask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} rows={3} />
+                <textarea value={newSubtask.description || ""} onChange={e => setNewSubtask({ ...newSubtask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" rows={3} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
-                <select value={newSubtask.assigned_to || ""} onChange={e => setNewSubtask({ ...newSubtask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} required>
+                <select value={newSubtask.assigned_to || ""} onChange={e => setNewSubtask({ ...newSubtask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
                   <option value="">Select employee</option>
                   {employees.filter(e => e.id !== user?.id).map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); }} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ border: "1px solid #DFB6B2", color: "#522B5B" }}>Cancel</button>
-                <button type="submit" disabled={isCreatingSubtask} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#522B5B" }}>
+                <button type="button" onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isCreatingSubtask} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                   {isCreatingSubtask ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Subtask"}
                 </button>
               </div>
@@ -548,30 +570,30 @@ export default function ProjectsPage() {
       {/* ── Edit Links Modal ── */}
       {showEditLinksModal && selectedTaskForEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
+          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl bg-card border border-border">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold flex items-center gap-2" style={{ color: "#2B124C" }}><Link size={20} style={{ color: "#522B5B" }} /> Edit Project Links</h2>
+              <h2 className="text-lg font-bold flex items-center gap-2 text-foreground"><Link size={20} className="text-primary" /> Edit Project Links</h2>
               <button onClick={() => { setShowEditLinksModal(false); setSelectedTaskForEdit(null); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
-            <div className="mb-4 p-3 rounded-lg" style={{ background: "hsl(289 36% 26% / 0.08)", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
-              <p className="text-sm font-medium" style={{ color: "#522B5B" }}>{selectedTaskForEdit.title}</p>
+            <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-sm font-medium text-foreground">{selectedTaskForEdit.title}</p>
             </div>
             <form onSubmit={handleUpdateLinks} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
                   <Github size={14} /> GitHub Link
                 </label>
-                <input type="url" value={editingLinks.github_link} onChange={e => setEditingLinks({ ...editingLinks, github_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="https://github.com/user/repo" />
+                <input type="url" value={editingLinks.github_link} onChange={e => setEditingLinks({ ...editingLinks, github_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="https://github.com/user/repo" />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
                   <ExternalLink size={14} /> Deployed Link
                 </label>
-                <input type="url" value={editingLinks.deployed_link} onChange={e => setEditingLinks({ ...editingLinks, deployed_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm focus:outline-none" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }} placeholder="https://app.vercel.app" />
+                <input type="url" value={editingLinks.deployed_link} onChange={e => setEditingLinks({ ...editingLinks, deployed_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="https://app.vercel.app" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowEditLinksModal(false); setSelectedTaskForEdit(null); }} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ border: "1px solid #DFB6B2", color: "#522B5B" }}>Cancel</button>
-                <button type="submit" disabled={isUpdatingLinks} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 flex items-center gap-2" style={{ background: "#522B5B" }}>
+                <button type="button" onClick={() => { setShowEditLinksModal(false); setSelectedTaskForEdit(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isUpdatingLinks} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
                   {isUpdatingLinks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
                   {isUpdatingLinks ? "Saving..." : "Save Links"}
                 </button>

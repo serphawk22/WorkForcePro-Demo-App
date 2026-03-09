@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2 } from "lucide-react";
+import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2, Paperclip, FileText, Image } from "lucide-react";
 import {
   getMyLeaveRequests,
   getAllLeaveRequests,
@@ -47,6 +47,7 @@ export default function RequestsPage() {
     end_date: "",
     leave_type: "personal",
   });
+  const [document, setDocument] = useState<File | null>(null);
   
   // Review form state
   const [reviewComment, setReviewComment] = useState("");
@@ -80,7 +81,7 @@ export default function RequestsPage() {
     }
     
     setIsSubmitting(true);
-    const result = await createLeaveRequest(newRequest);
+    const result = await createLeaveRequest(newRequest, document);
     
     if (result.error) {
       toast.error(result.error);
@@ -88,6 +89,7 @@ export default function RequestsPage() {
       toast.success("Leave request submitted successfully!");
       setShowCreateModal(false);
       setNewRequest({ reason: "", start_date: "", end_date: "", leave_type: "personal" });
+      setDocument(null);
       loadData();
     }
     setIsSubmitting(false);
@@ -202,6 +204,16 @@ export default function RequestsPage() {
                             Admin comment: {req.admin_comment}
                           </p>
                         )}
+                        {req.document_filename && (
+                          <a
+                            href={req.document_data || "#"}
+                            download={req.document_filename}
+                            className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-primary hover:underline"
+                            title="Download attached document"
+                          >
+                            <Paperclip size={12} /> {req.document_filename}
+                          </a>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <div className={`flex items-center gap-1.5 text-xs font-medium ${statusConfig[req.status].className}`}>
@@ -298,11 +310,47 @@ export default function RequestsPage() {
                     minLength={5}
                   />
                 </div>
+
+                {/* Optional document upload */}
+                <div>
+                  <label className="block text-sm font-medium text-card-foreground mb-1">
+                    Supporting Document <span className="text-muted-foreground font-normal">(optional)</span>
+                  </label>
+                  {document ? (
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/40 px-3 py-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        {document.type.startsWith("image/") ? <Image size={16} /> : <FileText size={16} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-card-foreground truncate">{document.name}</p>
+                        <p className="text-xs text-muted-foreground">{(document.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDocument(null)}
+                        className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border bg-background px-4 py-3 hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                      <Paperclip size={16} className="text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Attach PDF, image or Word document (max 10 MB)</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx"
+                        onChange={(e) => setDocument(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                  )}
+                </div>
                 
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={() => { setShowCreateModal(false); setDocument(null); }}
                     className="px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-secondary transition-colors"
                   >
                     Cancel
@@ -338,6 +386,15 @@ export default function RequestsPage() {
                   <p className="text-xs text-muted-foreground mt-2">
                     {formatDateRange(selectedRequest.start_date, selectedRequest.end_date)}
                   </p>
+                  {selectedRequest.document_filename && (
+                    <a
+                      href={selectedRequest.document_data || "#"}
+                      download={selectedRequest.document_filename}
+                      className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium text-primary hover:underline"
+                    >
+                      <Paperclip size={12} /> {selectedRequest.document_filename}
+                    </a>
+                  )}
                 </div>
                 
                 <div>

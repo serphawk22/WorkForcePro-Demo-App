@@ -246,12 +246,14 @@ export default function AdminDashboard() {
                   </div>
                   
                   <div className="p-5 space-y-3">
-                    {upcomingTasks.length > 0 ? upcomingTasks.map((task) => (
+                    {upcomingTasks.length > 0 ? upcomingTasks.map((task, index) => (
                       <div
                         key={task.id}
                         onClick={() => router.push(`/project-management/${task.id}`)}
-                        className="p-4 rounded-xl glass-light hover:scale-[1.02] transition-all duration-300 cursor-pointer"
+                        className="relative p-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent hover:from-primary/20 hover:border-primary/40 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 cursor-pointer overflow-hidden group"
                       >
+                        {/* subtle left accent bar */}
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-accent to-primary/30 rounded-l-xl opacity-70 group-hover:opacity-100 transition-opacity" />
                         <div className="flex items-start justify-between mb-2 gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             {task.public_id && (
@@ -275,12 +277,12 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1 text-muted-foreground">
+                          <div className="flex items-center gap-1 text-primary/70 group-hover:text-primary transition-colors">
                             <CalendarDays className="h-3 w-3" />
                             <span>Due: {task.due_date ? new Date(task.due_date).toLocaleDateString('en-IN') : 'No date'}</span>
                           </div>
                           {task.assignee_name && (
-                            <div className="flex items-center gap-1 text-muted-foreground">
+                            <div className="flex items-center gap-1 text-muted-foreground group-hover:text-foreground transition-colors">
                               <Users className="h-3 w-3" />
                               <span>{task.assignee_name}</span>
                             </div>

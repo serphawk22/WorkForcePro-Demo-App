@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserById, getLatestPayroll, updateEmployeeDateJoined, updateEmployeeBaseSalary, UserProfile, PayrollRecord } from "@/lib/api";
-import { ArrowLeft, Mail, Calendar, Github, Linkedin, User as UserIcon, Loader2, Shield, DollarSign, Briefcase, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Mail, Calendar, Github, Linkedin, User as UserIcon, Loader2, Shield, DollarSign, Briefcase, Pencil, Check, X, Building2, CreditCard, Hash, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -172,7 +172,7 @@ export default function UserDetailPage() {
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Full Name</label>
                       <div className="mt-1 flex items-center gap-2">
-                        <UserIcon className="h-4 w-4 text-muted-foreground" />
+                        <UserIcon className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                         <p className="text-sm font-medium">{employee.name}</p>
                       </div>
                     </div>
@@ -180,7 +180,7 @@ export default function UserDetailPage() {
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Email</label>
                       <div className="mt-1 flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <Mail className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                         <p className="text-sm font-medium">{employee.email}</p>
                       </div>
                     </div>
@@ -188,7 +188,7 @@ export default function UserDetailPage() {
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Role</label>
                       <div className="mt-1 flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-muted-foreground" />
+                        <Shield className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                         <p className="text-sm font-medium capitalize">{employee.role}</p>
                       </div>
                     </div>
@@ -245,7 +245,7 @@ export default function UserDetailPage() {
                         </div>
                       ) : (
                         <div className="mt-1 flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <Calendar className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                           <p className="text-sm font-medium">
                             {employee.date_joined
                               ? new Date(employee.date_joined).toLocaleDateString("en-US", {
@@ -270,7 +270,7 @@ export default function UserDetailPage() {
                       <div>
                         <label className="text-xs font-medium text-muted-foreground">GitHub</label>
                         <div className="mt-1 flex items-center gap-2">
-                          <Github className="h-4 w-4 text-muted-foreground" />
+                          <Github className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                           <a
                             href={employee.github_url}
                             target="_blank"
@@ -287,7 +287,7 @@ export default function UserDetailPage() {
                       <div>
                         <label className="text-xs font-medium text-muted-foreground">LinkedIn</label>
                         <div className="mt-1 flex items-center gap-2">
-                          <Linkedin className="h-4 w-4 text-muted-foreground" />
+                          <Linkedin className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                           <a
                             href={employee.linkedin_url}
                             target="_blank"
@@ -355,7 +355,7 @@ export default function UserDetailPage() {
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <Briefcase className="h-4 w-4 text-muted-foreground" />
+                      <Briefcase className="h-4 w-4 text-muted-foreground dark:text-white/70" />
                       <p className="text-sm font-medium">{employee.department ?? <span className="italic text-muted-foreground">Not set</span>}</p>
                     </div>
                   )}
@@ -438,6 +438,50 @@ export default function UserDetailPage() {
                     <Pencil size={13} /> Edit Salary &amp; Department
                   </button>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Bank Details Card — read-only for admin */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2.5">
+                <span className="flex items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20 p-1.5 text-primary">
+                  <Landmark className="h-4 w-4" />
+                </span>
+                Bank Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Account Holder</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <UserIcon className="h-4 w-4 text-muted-foreground dark:text-white/70 shrink-0" />
+                    <p className="text-sm font-medium">{employee.bank_account_holder || <span className="italic text-muted-foreground">—</span>}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Bank Name</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Landmark className="h-4 w-4 text-muted-foreground dark:text-white/70 shrink-0" />
+                    <p className="text-sm font-medium">{employee.bank_name || <span className="italic text-muted-foreground">—</span>}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Account Number</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-muted-foreground dark:text-white/70 shrink-0" />
+                    <p className="text-sm font-medium font-mono tracking-wider">{employee.bank_account_number || <span className="italic text-muted-foreground font-sans tracking-normal">—</span>}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">IFSC Code</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-muted-foreground dark:text-white/70 shrink-0" />
+                    <p className="text-sm font-medium font-mono uppercase">{employee.bank_ifsc_code || <span className="italic text-muted-foreground font-sans normal-case">—</span>}</p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

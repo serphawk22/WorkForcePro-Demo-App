@@ -152,6 +152,8 @@ export interface LeaveRequest {
   reviewed_at: string | null;
   user_name?: string;
   user_email?: string;
+  document_data?: string | null;
+  document_filename?: string | null;
 }
 
 export interface LeaveRequestCreate {
@@ -921,15 +923,47 @@ export async function getTaskStats(): Promise<ApiResponse<TaskStats>> {
 // ==================== LEAVE REQUESTS ====================
 
 /**
- * Create a leave request.
+ * Create a leave request (with optional document attachment).
  */
 export async function createLeaveRequest(
-  data: LeaveRequestCreate
+  data: LeaveRequestCreate,
+  document?: File | null
 ): Promise<ApiResponse<LeaveRequest>> {
-  return apiFetch<LeaveRequest>("/leave/", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("reason", data.reason);
+  formData.append("start_date", data.start_date);
+  formData.append("end_date", data.end_date);
+  formData.append("leave_type", data.leave_type || "personal");
+  if (document) {
+    formData.append("document", document);
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/leave/`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: formData,
+    });
+
+    const text = await response.text();
+    const result = text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearAuth();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        return { error: "Session expired. Please login again." };
+      }
+      return { error: result.detail || "Failed to submit leave request" };
+    }
+    return { data: result };
+  } catch (err) {
+    return { error: "Network error. Please try again." };
+  }
 }
 
 /**
@@ -1014,6 +1048,10 @@ export interface UserProfile {
   profile_picture?: string;
   department?: string;
   base_salary?: number;
+  bank_account_number?: string | null;
+  bank_ifsc_code?: string | null;
+  bank_name?: string | null;
+  bank_account_holder?: string | null;
 }
 
 export interface PayrollRecord {
@@ -1062,6 +1100,21 @@ export async function updateMyProfile(
   console.log('[API] Update data:', data);
   clearCache("users/me");
   return apiFetch<UserProfile>("/users/me", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Update current user's bank details.
+ */
+export async function updateMyBankDetails(data: {
+  bank_account_number?: string | null;
+  bank_ifsc_code?: string | null;
+  bank_name?: string | null;
+  bank_account_holder?: string | null;
+}): Promise<ApiResponse<UserProfile>> {
+  return apiFetch<UserProfile>("/users/me/bank-details", {
     method: "PUT",
     body: JSON.stringify(data),
   });
@@ -1297,6 +1350,19 @@ export async function getPayroll(month?: number, year?: number): Promise<ApiResp
  */
 export async function markPayrollPaid(payrollId: number): Promise<ApiResponse<PayrollRecord>> {
   return apiFetch<PayrollRecord>(`/payroll/${payrollId}/mark-paid`, { method: "PUT" });
+}
+
+/**
+ * Update a payroll record's status (Paid | Pending).
+ */
+export async function updatePayrollStatus(
+  payrollId: number,
+  status: "Paid" | "Pending"
+): Promise<ApiResponse<PayrollRecord>> {
+  return apiFetch<PayrollRecord>(`/payroll/${payrollId}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
 }
 
 /**

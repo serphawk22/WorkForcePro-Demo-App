@@ -2,19 +2,20 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Github, Linkedin, Mail, User as UserIcon, Upload, Camera } from "lucide-react";
+import { Calendar, Github, Linkedin, Mail, User as UserIcon, Upload, Camera, Building2, CreditCard, Hash, Landmark, Banknote, Briefcase, Clock, BadgeCheck, DollarSign } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/AuthProvider";
-import { getMyProfile, updateMyProfile, uploadProfilePicture, getMyPayroll, UserProfile, PayrollRecord } from "@/lib/api";
+import { getMyProfile, updateMyProfile, updateMyBankDetails, uploadProfilePicture, getMyPayroll, UserProfile, PayrollRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { DollarSign, Briefcase } from "lucide-react";
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -22,6 +23,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
@@ -30,6 +32,13 @@ export default function ProfilePage() {
     date_joined: "",
     github_url: "",
     linkedin_url: "",
+  });
+
+  const [bankData, setBankData] = useState({
+    bank_account_number: "",
+    bank_ifsc_code: "",
+    bank_name: "",
+    bank_account_holder: "",
   });
 
   // Invalidate Next.js route cache on every mount so payroll data is always fresh
@@ -58,6 +67,12 @@ export default function ProfilePage() {
         github_url: response.data.github_url || "",
         linkedin_url: response.data.linkedin_url || "",
       });
+      setBankData({
+        bank_account_number: response.data.bank_account_number || "",
+        bank_ifsc_code: response.data.bank_ifsc_code || "",
+        bank_name: response.data.bank_name || "",
+        bank_account_holder: response.data.bank_account_holder || "",
+      });
       // Fetch latest payroll for this user
       if (response.data.id) {
         const payRes = await getMyPayroll();
@@ -72,6 +87,35 @@ export default function ProfilePage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleBankChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setBankData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleBankSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBank(true);
+    const res = await updateMyBankDetails({
+      bank_account_number: bankData.bank_account_number || null,
+      bank_ifsc_code: bankData.bank_ifsc_code || null,
+      bank_name: bankData.bank_name || null,
+      bank_account_holder: bankData.bank_account_holder || null,
+    });
+    if (res.data) {
+      toast({
+        title: "Bank details saved",
+        description: "Your bank information has been updated successfully.",
+      });
+    } else {
+      toast({
+        title: "Failed to save",
+        description: res.error || "Could not save bank details. Please try again.",
+        variant: "destructive",
+      });
+    }
+    setSavingBank(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -275,7 +319,7 @@ export default function ProfilePage() {
                       Name <span className="text-red-500">*</span>
                     </Label>
                     <div className="relative">
-                      <UserIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <UserIcon className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
                       <Input
                         id="name"
                         name="name"
@@ -291,7 +335,7 @@ export default function ProfilePage() {
                   <div className="space-y-2">
                     <Label htmlFor="email">Email (cannot be changed)</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
                       <Input
                         id="email"
                         value={profile?.email || ""}
@@ -307,17 +351,21 @@ export default function ProfilePage() {
                     <Label htmlFor="age">
                       Age <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      id="age"
-                      name="age"
-                      type="number"
-                      min="18"
-                      max="100"
-                      value={formData.age}
-                      onChange={handleChange}
-                      placeholder="25"
-                      required
-                    />
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                      <Input
+                        id="age"
+                        name="age"
+                        type="number"
+                        min="18"
+                        max="100"
+                        value={formData.age}
+                        onChange={handleChange}
+                        placeholder="25"
+                        className="pl-10"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -325,7 +373,7 @@ export default function ProfilePage() {
                       Date Joined <span className="text-red-500">*</span>
                     </Label>
                     <div className="relative">
-                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
                       <Input
                         id="date_joined"
                         name="date_joined"
@@ -344,7 +392,7 @@ export default function ProfilePage() {
                     GitHub URL <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
-                    <Github className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Github className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
                     <Input
                       id="github_url"
                       name="github_url"
@@ -362,7 +410,7 @@ export default function ProfilePage() {
                     LinkedIn URL <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
-                    <Linkedin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Linkedin className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
                     <Input
                       id="linkedin_url"
                       name="linkedin_url"
@@ -403,8 +451,10 @@ export default function ProfilePage() {
         {(profile?.base_salary || profile?.department || payroll) && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" />
+              <CardTitle className="flex items-center gap-2.5">
+                <span className="flex items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20 p-1.5 text-primary">
+                  <Banknote className="h-4 w-4" />
+                </span>
                 Salary &amp; Department
               </CardTitle>
               <CardDescription>Set by your administrator</CardDescription>
@@ -413,11 +463,14 @@ export default function ProfilePage() {
               <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Base Salary</label>
-                  <p className="mt-1 text-sm font-semibold text-card-foreground">
-                    {profile?.base_salary
-                      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(profile.base_salary)
-                      : "Not set"}
-                  </p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-primary/70" />
+                    <p className="text-sm font-semibold text-card-foreground">
+                      {profile?.base_salary
+                        ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(profile.base_salary)
+                        : "Not set"}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Department</label>
@@ -428,25 +481,31 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Last Payment Date</label>
-                  <p className="mt-1 text-sm font-medium">
-                    {payroll?.pay_date
-                      ? new Date(payroll.pay_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })
-                      : "—"}
-                  </p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-sm font-medium">
+                      {payroll?.pay_date
+                        ? new Date(payroll.pay_date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })
+                        : "—"}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Payment Status</label>
                   <p className="mt-1">
                     {payroll ? (
                       <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                           payroll.status === "Paid"
-                            ? "bg-green-500/10 text-green-500"
+                            ? "bg-primary/10 text-primary dark:bg-primary/20"
                             : payroll.status === "Pending"
-                            ? "bg-yellow-500/10 text-yellow-500"
-                            : "bg-blue-500/10 text-blue-500"
+                            ? "bg-secondary/60 text-primary-light dark:bg-primary/10 dark:text-primary-light"
+                            : "bg-primary/5 text-accent"
                         }`}
                       >
+                        {payroll.status === "Paid"
+                          ? <BadgeCheck className="h-3 w-3" />
+                          : <Clock className="h-3 w-3" />}
                         {payroll.status}
                       </span>
                     ) : (
@@ -458,6 +517,97 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Bank Details Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2.5">
+              <span className="flex items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20 p-1.5 text-primary">
+                <Landmark className="h-4 w-4" />
+              </span>
+              Bank Details
+            </CardTitle>
+            <CardDescription>Your salary will be credited to this account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleBankSubmit} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bank_account_holder">Account Holder Name</Label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <Input
+                      id="bank_account_holder"
+                      name="bank_account_holder"
+                      value={bankData.bank_account_holder}
+                      onChange={handleBankChange}
+                      placeholder="As on bank account"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bank_name">Bank Name</Label>
+                  <div className="relative">
+                    <Landmark className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <Input
+                      id="bank_name"
+                      name="bank_name"
+                      value={bankData.bank_name}
+                      onChange={handleBankChange}
+                      placeholder="e.g. State Bank of India"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bank_account_number">Account Number</Label>
+                  <div className="relative">
+                    <CreditCard className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <Input
+                      id="bank_account_number"
+                      name="bank_account_number"
+                      value={bankData.bank_account_number}
+                      onChange={handleBankChange}
+                      placeholder="e.g. 1234567890"
+                      className="pl-10"
+                      maxLength={30}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bank_ifsc_code">IFSC Code</Label>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <Input
+                      id="bank_ifsc_code"
+                      name="bank_ifsc_code"
+                      value={bankData.bank_ifsc_code}
+                      onChange={handleBankChange}
+                      placeholder="e.g. SBIN0001234"
+                      className="pl-10 uppercase"
+                      maxLength={20}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" disabled={savingBank}>
+                  {savingBank ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Bank Details"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

@@ -308,7 +308,7 @@ export default function AttendancePage() {
                     
                     {!isActive && status?.status === "completed" && (
                       <div className="px-6 py-3 rounded-xl glass-light text-green-600 font-medium">
-                        Today&apos;s Work Hours: {status.total_hours?.toFixed(2)}h
+                        Today&apos;s Work Hours: {status.total_hours ? (status.total_hours / 60).toFixed(2) : "0.00"}h
                       </div>
                     )}
                   </div>
@@ -326,13 +326,13 @@ export default function AttendancePage() {
                 <StatCard 
                   icon={Clock} 
                   label="Total Hours" 
-                  value={`${Math.abs(history.reduce((acc, h) => acc + (Math.abs(h.total_hours || 0)), 0)).toFixed(1)}h`} 
+                  value={`${(Math.abs(history.reduce((acc, h) => acc + (Math.abs(h.total_hours || 0)), 0)) / 60).toFixed(1)}h`} 
                   subtitle="This month" 
                 />
                 <StatCard 
                   icon={UserCheck} 
                   label="Avg Hours/Day" 
-                  value={`${Math.abs(history.filter(h => h.total_hours).reduce((acc, h) => acc + (Math.abs(h.total_hours || 0)), 0) / Math.max(history.filter(h => h.total_hours).length, 1)).toFixed(1)}h`} 
+                  value={`${(Math.abs(history.filter(h => h.total_hours).reduce((acc, h) => acc + (Math.abs(h.total_hours || 0)), 0)) / 60 / Math.max(history.filter(h => h.total_hours).length, 1)).toFixed(1)}h`} 
                   subtitle="Per day worked" 
                 />
               </div>
@@ -484,7 +484,7 @@ export default function AttendancePage() {
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_in)}</td>
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_out)}</td>
                         <td className="py-3.5 text-card-foreground font-medium">
-                          {record.total_hours ? `${Math.abs(record.total_hours).toFixed(2)}h` : "--"}
+                          {record.total_hours ? `${(Math.abs(record.total_hours) / 60).toFixed(2)}h` : "--"}
                         </td>
                       </tr>
                     ))}

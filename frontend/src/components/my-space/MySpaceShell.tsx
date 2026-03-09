@@ -44,10 +44,10 @@ export default function MySpaceShell({ children, headerAction }: MySpaceShellPro
             {/* Page title */}
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold" style={{ color: "#2B124C" }}>
+                <h1 className="text-2xl font-bold text-[#2B124C] dark:text-purple-100">
                   The Lighthouse
                 </h1>
-                <p className="text-sm mt-0.5" style={{ color: "#854F6C" }}>
+                <p className="text-sm mt-0.5 text-[#854F6C] dark:text-purple-400">
                   Your personal space for growth, reflections, and aspirations
                 </p>
               </div>
@@ -56,11 +56,7 @@ export default function MySpaceShell({ children, headerAction }: MySpaceShellPro
 
             {/* Tab bar */}
             <div
-              className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto border"
-              style={{
-                background: "hsl(5 38% 79% / 0.35)",
-                borderColor: "hsl(5 38% 79% / 0.5)",
-              }}
+              className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto border lighthouse-tab-bar"
             >
               {TABS.map((tab) => {
                 const isActive = pathname === tab.path;
@@ -70,14 +66,9 @@ export default function MySpaceShell({ children, headerAction }: MySpaceShellPro
                     href={tab.path}
                     className={`whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                       isActive
-                        ? "text-white shadow-md transform scale-[1.02]"
-                        : "hover:bg-white/50"
+                        ? "text-white shadow-md transform scale-[1.02] lighthouse-tab-active"
+                        : "hover:bg-white/50 dark:hover:bg-white/10 lighthouse-tab-inactive"
                     }`}
-                    style={
-                      isActive
-                        ? { background: "#522B5B" }
-                        : { color: "#522B5B" }
-                    }
                   >
                     {tab.label}
                   </Link>

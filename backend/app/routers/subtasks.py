@@ -1,10 +1,23 @@
 """
 Subtask management routes for task delegation.
 """
+import random
+import string
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
+
+
+def generate_public_id(session: Session, model_class, prefix: str = "", length: int = 6) -> str:
+    """Generate a unique alphanumeric public ID like A7X9K2."""
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        suffix = ''.join(random.choices(chars, k=length))
+        candidate = f"{prefix}{suffix}" if prefix else suffix
+        existing = session.exec(select(model_class).where(model_class.public_id == candidate)).first()
+        if not existing:
+            return candidate
 
 from app.database import get_session
 from app.models import (
@@ -81,7 +94,8 @@ async def create_subtask(
         title=subtask_data.title,
         description=subtask_data.description,
         assigned_to=subtask_data.assigned_to,
-        assigned_by=current_user.id
+        assigned_by=current_user.id,
+        public_id=generate_public_id(session, Subtask)
     )
     
     session.add(subtask)

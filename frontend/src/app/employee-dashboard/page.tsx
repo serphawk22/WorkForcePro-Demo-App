@@ -189,6 +189,7 @@ export default function EmployeeDashboard() {
               trend={isWorking ? "LIVE" : dashboardStats?.current_session ? "Done" : undefined}
               trendType={isWorking ? "up" : "stable"}
               iconColor="bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/50"
+              href="/attendance"
             />
             <StatCard
               icon={AlertCircle}
@@ -198,6 +199,7 @@ export default function EmployeeDashboard() {
               trend={tasksDueToday > 0 ? "Attention" : "Good"}
               trendType={tasksDueToday > 0 ? "down" : "up"}
               iconColor="bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/50"
+              href="/project-management"
             />
             <StatCard
               icon={Zap}
@@ -207,6 +209,7 @@ export default function EmployeeDashboard() {
               trend={productivityScore >= 50 ? "Great" : "Keep going"}
               trendType={productivityScore >= 50 ? "up" : "stable"}
               iconColor="bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/50"
+              href="/project-management"
             />
             <StatCard
               icon={Building2}
@@ -216,6 +219,7 @@ export default function EmployeeDashboard() {
               trend={activeProjects > 0 ? "Working" : "None"}
               trendType={activeProjects > 0 ? "up" : "stable"}
               iconColor="bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/50"
+              href="/project-management"
             />
           </div>
 
@@ -229,6 +233,7 @@ export default function EmployeeDashboard() {
               trend={leaveBalance > 10 ? "Healthy" : leaveBalance > 5 ? "Moderate" : "Low"}
               trendType={leaveBalance > 10 ? "up" : leaveBalance > 5 ? "stable" : "down"}
               iconColor="bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/50"
+              href="/requests"
             />
             <StatCard
               icon={Clock}
@@ -238,6 +243,7 @@ export default function EmployeeDashboard() {
               trend={pendingLeaveRequests > 0 ? "Pending" : "None"}
               trendType="stable"
               iconColor="bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/50"
+              href="/requests"
             />
           </div>
 

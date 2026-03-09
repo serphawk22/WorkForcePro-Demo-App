@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { DollarSign, TrendingUp, ChevronRight, CheckCircle2, Loader2, Download } from "lucide-react";
-import { getPayroll, markPayrollPaid, PayrollRecord } from "@/lib/api";
+import { getPayroll, markPayrollPaid, updatePayrollStatus, PayrollRecord } from "@/lib/api";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -13,9 +13,24 @@ const MONTHS = [
 ];
 
 const statusStyle: Record<string, string> = {
-  Paid: "bg-green-500/10 text-green-500",
-  Pending: "bg-yellow-500/10 text-yellow-500",
-  Processing: "bg-blue-500/10 text-blue-500",
+  Paid: "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary",
+  Pending: "bg-secondary/60 text-primary-light dark:bg-primary/10 dark:text-primary-light",
+  Processing: "bg-primary/5 text-accent dark:bg-primary/10 dark:text-accent",
+};
+
+const statusSelectStyle: Record<string, string> = {
+  Paid: [
+    // light: primary purple tint
+    "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20",
+    // dark: brighter purple tint
+    "dark:bg-primary/20 dark:text-primary dark:border-primary/30 dark:hover:bg-primary/30",
+  ].join(" "),
+  Pending: [
+    // light: beige/accent muted
+    "bg-secondary/60 text-primary-light border-secondary hover:bg-secondary/90",
+    // dark: muted purple tint
+    "dark:bg-primary/10 dark:text-primary-light dark:border-primary/20 dark:hover:bg-primary/20",
+  ].join(" "),
 };
 
 export default function PayrollPage() {
@@ -26,6 +41,7 @@ export default function PayrollPage() {
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingId, setMarkingId] = useState<number | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const loadPayroll = async () => {
@@ -65,6 +81,21 @@ export default function PayrollPage() {
       );
     }
     setMarkingId(null);
+  };
+
+  const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>, id: number) => {
+    e.stopPropagation();
+    const newStatus = e.target.value as "Paid" | "Pending";
+    setUpdatingStatusId(id);
+    const res = await updatePayrollStatus(id, newStatus);
+    if (res.data) {
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, status: res.data!.status, pay_date: res.data!.pay_date } : r
+        )
+      );
+    }
+    setUpdatingStatusId(null);
   };
 
   const formatSalary = (amount: number) =>
@@ -197,9 +228,27 @@ export default function PayrollPage() {
                     <td className="py-3.5 text-muted-foreground">{row.department ?? "—"}</td>
                     <td className="py-3.5 font-semibold text-card-foreground">{formatSalary(row.salary)}</td>
                     <td className="py-3.5">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle[row.status] ?? ""}`}>
-                        {row.status}
-                      </span>
+                      <div className="relative inline-flex items-center">
+                        <select
+                          value={row.status === "Processing" ? "Pending" : row.status}
+                          onChange={(e) => handleStatusChange(e, row.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={updatingStatusId === row.id}
+                          className={`appearance-none rounded-full pl-2.5 pr-6 py-0.5 text-xs font-medium border cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 disabled:cursor-not-allowed ${
+                            statusSelectStyle[row.status] ?? statusSelectStyle["Pending"]
+                          }`}
+                        >
+                          <option value="Paid">Paid</option>
+                          <option value="Pending">Pending</option>
+                        </select>
+                        {updatingStatusId === row.id ? (
+                          <Loader2 size={10} className="absolute right-1.5 animate-spin text-current pointer-events-none" />
+                        ) : (
+                          <svg className="absolute right-1.5 w-2.5 h-2.5 pointer-events-none opacity-60" viewBox="0 0 10 6" fill="none">
+                            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 text-muted-foreground">{formatPayDate(row.pay_date)}</td>
                     <td className="py-3.5 pr-5">

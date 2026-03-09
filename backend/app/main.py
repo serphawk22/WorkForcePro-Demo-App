@@ -62,6 +62,22 @@ async def lifespan(app: FastAPI):
                 """))
             except Exception:
                 pass
+            # Backfill public_id for existing tasks that have NULL
+            conn.execute(text("""
+                UPDATE tasks
+                SET public_id = UPPER(
+                    SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
+                )
+                WHERE public_id IS NULL;
+            """))
+            # Backfill public_id for existing subtasks that have NULL
+            conn.execute(text("""
+                UPDATE subtasks
+                SET public_id = UPPER(
+                    SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
+                )
+                WHERE public_id IS NULL;
+            """))
             conn.commit()
             print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
         except Exception as e:

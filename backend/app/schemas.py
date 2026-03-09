@@ -58,9 +58,21 @@ class UserRead(BaseModel):
     profile_picture: Optional[str] = None
     department: Optional[str] = None
     base_salary: Optional[float] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_holder: Optional[str] = None
 
     class Config:   
         from_attributes = True
+
+
+class BankDetailsUpdate(BaseModel):
+    """Schema for updating bank details."""
+    bank_account_number: Optional[str] = Field(default=None, max_length=30)
+    bank_ifsc_code: Optional[str] = Field(default=None, max_length=20)
+    bank_name: Optional[str] = Field(default=None, max_length=100)
+    bank_account_holder: Optional[str] = Field(default=None, max_length=100)
 
 
 class UserUpdate(BaseModel):

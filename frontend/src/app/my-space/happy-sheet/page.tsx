@@ -154,16 +154,16 @@ export default function HappySheetPage() {
     <MySpaceShell>
       <div className="max-w-3xl mx-auto space-y-6 pb-20">
         {/* Form Card */}
-        <div className="rounded-2xl p-6 md:p-8 shadow-sm" style={{ background: "#FBE4D8", border: "1px solid #DFB6B2" }}>
+        <div className="rounded-2xl p-6 md:p-8 shadow-sm lighthouse-card">
           {/* Header row: title + date picker */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
             <div className="flex items-center gap-3">
-              <Sparkles size={24} style={{ color: "#522B5B" }} />
-              <h3 className="text-xl font-bold" style={{ color: "#2B124C" }}>Share Your Joy</h3>
+              <Sparkles size={24} className="lighthouse-accent" />
+              <h3 className="text-xl font-bold text-[#2B124C] dark:text-purple-100">Share Your Joy</h3>
             </div>
             <div className="flex items-center gap-2">
-              <Calendar size={15} style={{ color: "#854F6C" }} />
-              <label className="text-xs font-medium" style={{ color: "#854F6C" }}>Entry Date</label>
+              <Calendar size={15} className="lighthouse-muted" />
+              <label className="text-xs font-medium text-[#854F6C] dark:text-purple-400">Entry Date</label>
               <input
                 type="date"
                 value={selectedDate}
@@ -173,14 +173,13 @@ export default function HappySheetPage() {
                   setError(null);
                   setSelectedDate(e.target.value);
                 }}
-                className="h-8 px-2 rounded-lg text-sm focus:outline-none"
-                style={{ background: "rgba(255,255,255,0.8)", border: "1px solid #DFB6B2", color: "#2B124C" }}
+                className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
             </div>
           </div>
 
           {selectedDate !== todayStr() && (
-            <div className="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" style={{ background: "rgba(82,43,91,0.08)", color: "#522B5B" }}>
+            <div className="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 lighthouse-date-note">
               <Calendar size={13} />
               Logging reflection for{" "}
               <span className="font-bold">{new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
@@ -205,13 +204,12 @@ export default function HappySheetPage() {
               { label: "Dreams That WorkForce Pro Can Make True *", value: dreamsSupported, set: setDreamsSupported, placeholder: "Share your aspirations where we can support you..." },
             ] as const).map(({ label, value, set, placeholder }) => (
               <div key={label}>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#522B5B" }}>{label}</label>
+                <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">{label}</label>
                 <textarea
                   value={value}
                   onChange={(e) => (set as any)(e.target.value)}
                   placeholder={placeholder}
-                  className="w-full min-h-[100px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y"
-                  style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}
+                  className="w-full min-h-[100px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input"
                 />
               </div>
             ))}
@@ -234,34 +232,33 @@ export default function HappySheetPage() {
         <div className="mt-8">
           {/* Log header + date filter */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <h3 className="text-lg font-bold" style={{ color: "#2B124C" }}>Joy Log</h3>
+            <h3 className="text-lg font-bold text-[#2B124C] dark:text-purple-100">Joy Log</h3>
             <div className="flex items-center gap-2">
-              <Filter size={14} style={{ color: "#854F6C" }} />
-              <label className="text-xs font-medium" style={{ color: "#854F6C" }}>Filter by date</label>
+              <Filter size={14} className="lighthouse-muted" />
+              <label className="text-xs font-medium text-[#854F6C] dark:text-purple-400">Filter by date</label>
               <input
                 type="date"
                 value={logFilterDate}
                 max={todayStr()}
                 onChange={(e) => setLogFilterDate(e.target.value)}
-                className="h-8 px-2 rounded-lg text-sm focus:outline-none"
-                style={{ background: "rgba(255,255,255,0.9)", border: "1px solid #DFB6B2", color: "#2B124C" }}
+                className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
               {logFilterDate && (
                 <button
                   onClick={() => setLogFilterDate("")}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-black/5 transition-colors"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                   title="Clear filter"
                 >
-                  <X size={14} style={{ color: "#854F6C" }} />
+                  <X size={14} className="lighthouse-muted" />
                 </button>
               )}
             </div>
           </div>
 
           {logFilterDate && (
-            <p className="text-xs mb-3" style={{ color: "#854F6C" }}>
+            <p className="text-xs mb-3 text-[#854F6C] dark:text-purple-400">
               Showing entries for{" "}
-              <span className="font-semibold" style={{ color: "#522B5B" }}>
+              <span className="font-semibold text-[#522B5B] dark:text-purple-300">
                 {new Date(logFilterDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </span>
             </p>
@@ -272,7 +269,7 @@ export default function HappySheetPage() {
               <div className="h-6 w-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#522B5B", borderTopColor: "transparent" }} />
             </div>
           ) : displayEntries.length === 0 ? (
-            <div className="rounded-xl p-8 text-center text-sm" style={{ background: "hsl(5 38% 79% / 0.15)", color: "#854F6C", border: "1px dashed #DFB6B2" }}>
+            <div className="rounded-xl p-8 text-center text-sm lighthouse-empty">
               {logFilterDate
                 ? `No entries found for ${new Date(logFilterDate + "T00:00:00").toLocaleDateString()}.`
                 : "No reflections yet. Be the first to share your joy above!"}
@@ -280,7 +277,7 @@ export default function HappySheetPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {displayEntries.map((entry) => (
-                <div key={entry.id} className="rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow" style={{ background: "rgba(255,255,255,0.7)", border: "1px solid #DFB6B2" }}>
+                <div key={entry.id} className="rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow lighthouse-inner-card">
                   {/* Avatar + name + date */}
                   <div className="flex items-center gap-3 mb-4">
                     <div
@@ -290,10 +287,10 @@ export default function HappySheetPage() {
                       {getInitials(entry.user_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate" style={{ color: "#2B124C" }}>
+                      <p className="text-sm font-semibold truncate text-[#2B124C] dark:text-purple-100">
                         {entry.user_name ?? entry.user_email ?? `User #${entry.user_id}`}
                       </p>
-                      <div className="flex items-center gap-1 text-xs" style={{ color: "#854F6C" }}>
+                      <div className="flex items-center gap-1 text-xs text-[#854F6C] dark:text-purple-400">
                         <Calendar size={11} />
                         {new Date(entry.date + "T00:00:00").toLocaleDateString()}
                       </div>
@@ -301,21 +298,21 @@ export default function HappySheetPage() {
                   </div>
                   {/* All 4 fields */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Happy Moment</p>
-                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.what_made_you_happy}</p>
+                    <div className="rounded-lg p-3 lighthouse-sub-card">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Happy Moment</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_you_happy}</p>
                     </div>
-                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Made Others Happy</p>
-                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.what_made_others_happy}</p>
+                    <div className="rounded-lg p-3 lighthouse-sub-card">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Made Others Happy</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_others_happy}</p>
                     </div>
-                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Goals</p>
-                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.goals_without_greed}</p>
+                    <div className="rounded-lg p-3 lighthouse-sub-card">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed}</p>
                     </div>
-                    <div className="rounded-lg p-3" style={{ background: "#FBE4D8" }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#854F6C" }}>Dreams</p>
-                      <p className="text-sm" style={{ color: "#2B124C" }}>{entry.dreams_supported}</p>
+                    <div className="rounded-lg p-3 lighthouse-sub-card">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Dreams</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.dreams_supported}</p>
                     </div>
                   </div>
                 </div>

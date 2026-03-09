@@ -185,6 +185,7 @@ export default function EmployeeDashboard() {
               trend={isWorking ? "LIVE" : undefined}
               trendType="up"
               iconColor="bg-accent text-accent-foreground"
+              href="/attendance"
             />
             <StatCard
               icon={AlertCircle}
@@ -193,6 +194,7 @@ export default function EmployeeDashboard() {
               subtitle="Tasks due today"
               trend={tasksDueToday > 0 ? "Attention" : "Good"}
               trendType={tasksDueToday > 0 ? "down" : "up"}
+              href="/project-management"
             />
             <StatCard
               icon={Zap}
@@ -201,6 +203,7 @@ export default function EmployeeDashboard() {
               subtitle={`${tasksCompleted} completed`}
               trend={productivityScore >= 50 ? "Great" : "Keep going"}
               trendType={productivityScore >= 50 ? "up" : "stable"}
+              href="/project-management"
             />
             <StatCard
               icon={Building2}
@@ -209,6 +212,7 @@ export default function EmployeeDashboard() {
               subtitle="In progress"
               trend={activeProjects > 0 ? "Working" : "None"}
               trendType={activeProjects > 0 ? "up" : "stable"}
+              href="/project-management"
             />
           </div>
 
@@ -221,6 +225,7 @@ export default function EmployeeDashboard() {
               subtitle="Days remaining"
               trend={leaveBalance > 10 ? "Healthy" : leaveBalance > 5 ? "Moderate" : "Low"}
               trendType={leaveBalance > 10 ? "up" : leaveBalance > 5 ? "stable" : "down"}
+              href="/requests"
             />
             <StatCard
               icon={Clock}
@@ -229,6 +234,7 @@ export default function EmployeeDashboard() {
               subtitle="Leave requests"
               trend={pendingLeaveRequests > 0 ? "Pending" : "None"}
               trendType="stable"
+              href="/requests"
             />
           </div>
 

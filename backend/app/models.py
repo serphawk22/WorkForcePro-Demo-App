@@ -88,6 +88,10 @@ class UserBase(SQLModel):
     profile_picture: Optional[str] = Field(default=None)  # No max_length for base64 images
     department: Optional[str] = Field(default=None, max_length=100)
     base_salary: Optional[float] = Field(default=None)
+    bank_account_number: Optional[str] = Field(default=None, max_length=30)
+    bank_ifsc_code: Optional[str] = Field(default=None, max_length=20)
+    bank_name: Optional[str] = Field(default=None, max_length=100)
+    bank_account_holder: Optional[str] = Field(default=None, max_length=100)
 
 
 class User(UserBase, table=True):
@@ -128,6 +132,10 @@ class UserRead(SQLModel):
     profile_picture: Optional[str] = None
     department: Optional[str] = None
     base_salary: Optional[float] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_holder: Optional[str] = None
 
 class UserLogin(SQLModel):
     """Schema for user login."""
@@ -372,6 +380,8 @@ class LeaveRequest(LeaveRequestBase, table=True):
     reviewed_by: Optional[int] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reviewed_at: Optional[datetime] = None
+    document_data: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})  # base64 data URI
+    document_filename: Optional[str] = Field(default=None, sa_column_kwargs={"nullable": True})
 
 
 class LeaveRequestCreate(LeaveRequestBase):
@@ -394,6 +404,8 @@ class LeaveRequestRead(LeaveRequestBase):
     reviewed_by: Optional[int]
     created_at: datetime
     reviewed_at: Optional[datetime]
+    document_data: Optional[str] = None
+    document_filename: Optional[str] = None
 
 
 class LeaveRequestWithUser(LeaveRequestRead):

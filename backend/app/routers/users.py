@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import User, UserRole
-from app.schemas import UserRead, UserUpdate
+from app.schemas import UserRead, UserUpdate, BankDetailsUpdate
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -163,3 +163,24 @@ async def upload_profile_picture(
         "message": "Profile picture uploaded successfully",
         "preview": data_uri[:100] + "..." if len(data_uri) > 100 else data_uri
     }
+
+
+@router.put("/me/bank-details", response_model=UserRead)
+async def update_bank_details(
+    body: BankDetailsUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Update the logged-in employee's bank details."""
+    user = session.exec(select(User).where(User.id == current_user.id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.bank_account_number = body.bank_account_number
+    user.bank_ifsc_code = body.bank_ifsc_code
+    user.bank_name = body.bank_name
+    user.bank_account_holder = body.bank_account_holder
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user

@@ -23,6 +23,30 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + "/"));
   
   if (isPublicRoute && pathname !== "/login") {
+    // If accessing root and has a valid cookie token, redirect to dashboard
+    if (pathname === "/") {
+      const cookieTokenForRoot = request.cookies.get("access_token")?.value;
+      if (cookieTokenForRoot) {
+        try {
+          const tokenPart = cookieTokenForRoot.split(".")[1];
+          const base64 = tokenPart.replace(/-/g, "+").replace(/_/g, "/");
+          const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+          let payload;
+          if (typeof Buffer !== 'undefined') {
+            payload = JSON.parse(Buffer.from(padded, "base64").toString());
+          } else {
+            payload = JSON.parse(atob(padded));
+          }
+          const isExpiredRoot = payload.exp * 1000 < Date.now();
+          if (!isExpiredRoot && payload.role) {
+            const dashboardUrl = payload.role === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+            return NextResponse.redirect(new URL(dashboardUrl, request.url));
+          }
+        } catch {
+          // Invalid token, allow landing page
+        }
+      }
+    }
     // Public routes (except login) always allowed
     return NextResponse.next();
   }
