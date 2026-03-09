@@ -82,6 +82,30 @@ async def lifespan(app: FastAPI):
             print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
+
+    # Additional migrations — run separately so one failure doesn't abort others
+    additional_migrations = [
+        # Bank details columns on users table
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR',
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
+        # Leave request document attachment columns
+        'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_data TEXT',
+        'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',
+        # Task start_date column
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+        # Subtask parent_subtask_id column
+        'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',
+    ]
+    with engine.connect() as conn:
+        for migration_sql in additional_migrations:
+            try:
+                conn.execute(text(migration_sql))
+                conn.commit()
+            except Exception as e:
+                print(f"⚠️ Migration skipped (may already exist): {e}")
+    print("✅ Additional migrations complete")
     
     # Seed default admin account
     from app.models import User, UserRole
