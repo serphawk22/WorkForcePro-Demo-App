@@ -387,10 +387,11 @@ export function isAuthenticated(): boolean {
  */
 async function apiFetch<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries = 1
 ): Promise<ApiResponse<T>> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s — covers Railway cold start
   
   try {
     const token = getToken();
@@ -440,6 +441,11 @@ async function apiFetch<T>(
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
+      // Retry once on timeout (covers Railway cold-start > 10s)
+      if (retries > 0) {
+        console.warn(`[API] Timeout on ${endpoint}, retrying...`);
+        return apiFetch<T>(endpoint, options, retries - 1);
+      }
       console.error("Request timeout:", endpoint);
       return { error: "Request timeout. Please check your connection." };
     }

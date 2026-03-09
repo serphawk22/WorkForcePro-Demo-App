@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Zap, Mail, Lock, ArrowRight, Loader2, ServerCrash } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [pendingMessage, setPendingMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serverWaking, setServerWaking] = useState(false);
   const router = useRouter();
 
   // 2️⃣ Auto-redirect if user is already logged in
@@ -31,6 +32,15 @@ export default function LoginPage() {
     }
   }, []);
 
+  // 3️⃣ Ping server on mount so Railway wakes up before the user even clicks Login
+  useEffect(() => {
+    const pingTimeout = setTimeout(() => setServerWaking(true), 3000); // show banner if no response in 3s
+    fetch(`${API_BASE_URL}/health`, { method: "GET", signal: AbortSignal.timeout(35000) })
+      .catch(() => fetch(`${API_BASE_URL}/docs`, { signal: AbortSignal.timeout(35000) }))
+      .finally(() => { clearTimeout(pingTimeout); setServerWaking(false); });
+    return () => clearTimeout(pingTimeout);
+  }, []);
+
   // 1️⃣ Login handler with direct fetch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,13 +51,31 @@ export default function LoginPage() {
     try {
       console.log("Attempting login with:", { email, password: "***" });
       
-      const res = await fetch(`${API_BASE_URL}/auth/login/json`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ email, password })
-      });
+      const controller = new AbortController();
+      const t1 = setTimeout(() => controller.abort(), 35000);
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE_URL}/auth/login/json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal,
+        });
+        clearTimeout(t1);
+      } catch (fetchErr: any) {
+        clearTimeout(t1);
+        if (fetchErr.name === "AbortError") {
+          // retry once for cold start
+          const res2 = await fetch(`${API_BASE_URL}/auth/login/json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          res = res2;
+        } else {
+          throw fetchErr;
+        }
+      }
 
       console.log("Response status:", res.status);
 
@@ -116,6 +144,13 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-card-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground mt-1">Sign in to your account to continue</p>
           </div>
+
+          {serverWaking && (
+            <div className="mb-5 p-3 rounded-xl flex items-center gap-3 border border-amber-400/40 bg-amber-500/10 text-amber-300 text-xs">
+              <Loader2 size={14} className="animate-spin shrink-0" />
+              <span>Server is waking up (free tier cold start). Login will work in ~20 seconds…</span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
