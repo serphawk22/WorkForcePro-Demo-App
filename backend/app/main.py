@@ -28,11 +28,11 @@ async def lifespan(app: FastAPI):
         try:
             # Add approved_at column if it doesn't exist
             conn.execute(text("""
-                ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
             """))
             # Add approved_by column if it doesn't exist
             conn.execute(text("""
-                ALTER TABLE "user" ADD COLUMN IF NOT EXISTS approved_by INTEGER;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER;
             """))
             # Add public_id column to tasks table if it doesn't exist
             conn.execute(text("""
@@ -83,13 +83,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
 
-    # Additional migrations — run separately so one failure doesn't abort others
+    # Additional migrations — each runs in its own connection so one failure doesn't abort others
     additional_migrations = [
         # Bank details columns on users table
-        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR',
-        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
-        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
-        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
         # Leave request document attachment columns
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_data TEXT',
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',
@@ -98,13 +98,13 @@ async def lifespan(app: FastAPI):
         # Subtask parent_subtask_id column
         'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',
     ]
-    with engine.connect() as conn:
-        for migration_sql in additional_migrations:
-            try:
+    for migration_sql in additional_migrations:
+        try:
+            with engine.connect() as conn:
                 conn.execute(text(migration_sql))
                 conn.commit()
-            except Exception as e:
-                print(f"⚠️ Migration skipped (may already exist): {e}")
+        except Exception as e:
+            print(f"⚠️ Migration skipped (may already exist): {e}")
     print("✅ Additional migrations complete")
     
     # Seed default admin account
