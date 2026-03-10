@@ -14,7 +14,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set. Please configure PostgreSQL.")
 
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_timeout=20,
+    pool_recycle=3600,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 10},
+)
 
 
 def create_db_and_tables():

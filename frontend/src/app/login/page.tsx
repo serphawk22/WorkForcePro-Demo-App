@@ -34,11 +34,30 @@ export default function LoginPage() {
 
   // 3️⃣ Ping server on mount so Railway wakes up before the user even clicks Login
   useEffect(() => {
-    const pingTimeout = setTimeout(() => setServerWaking(true), 3000); // show banner if no response in 3s
-    fetch(`${API_BASE_URL}/health`, { method: "GET", signal: AbortSignal.timeout(35000) })
-      .catch(() => fetch(`${API_BASE_URL}/docs`, { signal: AbortSignal.timeout(35000) }))
-      .finally(() => { clearTimeout(pingTimeout); setServerWaking(false); });
-    return () => clearTimeout(pingTimeout);
+    let cancelled = false;
+
+    const wakeAndPoll = async () => {
+      // Step 1: no-cors fire-and-forget to wake Railway without hitting CORS error
+      // (Railway's sleeping proxy returns 502 with no CORS headers; no-cors ignores that)
+      try {
+        await fetch(`${API_BASE_URL}/health`, { method: "GET", mode: "no-cors", cache: "no-store" });
+      } catch {}
+
+      // Step 2: poll with normal CORS fetch until FastAPI is actually up
+      for (let attempt = 0; attempt < 15; attempt++) {
+        if (cancelled) break;
+        if (attempt === 1) setServerWaking(true); // show "waking up" banner after first retry
+        try {
+          const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+          if (res.ok) { setServerWaking(false); return; }
+        } catch {}
+        await new Promise(r => setTimeout(r, 4000));
+      }
+      if (!cancelled) setServerWaking(false);
+    };
+
+    wakeAndPoll();
+    return () => { cancelled = true; };
   }, []);
 
   // 1️⃣ Login handler with direct fetch
