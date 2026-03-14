@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2, Paperclip, FileText, Image } from "lucide-react";
+import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2, Paperclip, FileText, Image, ChevronRight, User } from "lucide-react";
 import {
   getMyLeaveRequests,
   getAllLeaveRequests,
@@ -31,6 +32,7 @@ const leaveTypeColors: Record<string, string> = {
 
 export default function RequestsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isAdmin = user?.role === "admin";
   
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -177,12 +179,17 @@ export default function RequestsPage() {
                 requests.map((req) => {
                   const StatusIcon = statusConfig[req.status].icon;
                   return (
-                    <div 
-                      key={req.id} 
-                      className="flex items-start gap-4 rounded-xl border border-border bg-card p-4 card-shadow hover:card-shadow-hover transition-all duration-300"
+                    <div
+                      key={req.id}
+                      onClick={() => router.push(`/requests/${req.id}`)}
+                      className="group flex items-start gap-4 rounded-xl border border-border bg-card p-4 card-shadow hover:card-shadow-hover transition-all duration-200 cursor-pointer hover:border-primary/40 hover:-translate-y-0.5 hover:bg-primary/[0.03]"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent">
-                        <CalendarOff size={18} />
+                        {(req as any).user_profile_picture ? (
+                          <img src={(req as any).user_profile_picture} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                        ) : (
+                          <CalendarOff size={18} />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -195,8 +202,10 @@ export default function RequestsPage() {
                           {formatDateRange(req.start_date, req.end_date)}
                         </p>
                         {isAdmin && req.user_name && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Requested by <span className="font-medium">{req.user_name}</span>
+                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                            <User size={11} />
+                            <span className="font-medium">{req.user_name}</span>
+                            {req.user_email && <span className="opacity-60">· {req.user_email}</span>}
                           </p>
                         )}
                         {req.admin_comment && (
@@ -205,40 +214,40 @@ export default function RequestsPage() {
                           </p>
                         )}
                         {req.document_filename && (
-                          <a
-                            href={req.document_data || "#"}
-                            download={req.document_filename}
-                            className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-primary hover:underline"
-                            title="Download attached document"
-                          >
+                          <span className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-primary">
                             <Paperclip size={12} /> {req.document_filename}
-                          </a>
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3">
                         <div className={`flex items-center gap-1.5 text-xs font-medium ${statusConfig[req.status].className}`}>
                           <StatusIcon size={14} /> {statusConfig[req.status].label}
                         </div>
-                        
-                        {/* Actions */}
+
+                        {/* Admin review button */}
                         {isAdmin && req.status === "pending" && (
                           <button
-                            onClick={() => openReviewModal(req)}
+                            onClick={(e) => { e.stopPropagation(); openReviewModal(req); }}
                             className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
                           >
                             Review
                           </button>
                         )}
-                        
+
+                        {/* Employee cancel button */}
                         {!isAdmin && req.status === "pending" && (
                           <button
-                            onClick={() => handleCancelRequest(req.id)}
+                            onClick={(e) => { e.stopPropagation(); handleCancelRequest(req.id); }}
                             className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
                             title="Cancel request"
                           >
                             <Trash2 size={16} />
                           </button>
                         )}
+
+                        <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+                          View details <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform duration-150" />
+                        </span>
                       </div>
                     </div>
                   );

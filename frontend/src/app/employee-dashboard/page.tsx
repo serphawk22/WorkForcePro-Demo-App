@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy } from "lucide-react";
-import { fetchEmployeeDashboard, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats } from "@/lib/api";
+import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy, Video, ExternalLink } from "lucide-react";
+import { fetchEmployeeDashboard, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats, getActiveMeeting, TeamsMeeting } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
@@ -33,6 +33,41 @@ const statusLabels: Record<string, string> = {
   rejected: "Needs Changes",
 };
 
+type EmployeeCardAccentStyle = CSSProperties & {
+  "--admin-card-accent": string;
+  "--admin-card-accent-secondary": string;
+};
+
+const employeeCardAccentStyles: Record<
+  "session" | "attention" | "productivity" | "projects" | "meeting" | "neutral",
+  EmployeeCardAccentStyle
+> = {
+  session: {
+    "--admin-card-accent": "272 91% 65%",
+    "--admin-card-accent-secondary": "328 75% 62%",
+  },
+  attention: {
+    "--admin-card-accent": "20 100% 60%",
+    "--admin-card-accent-secondary": "0 84% 60%",
+  },
+  productivity: {
+    "--admin-card-accent": "45 93% 58%",
+    "--admin-card-accent-secondary": "28 92% 58%",
+  },
+  projects: {
+    "--admin-card-accent": "217 91% 60%",
+    "--admin-card-accent-secondary": "191 91% 55%",
+  },
+  meeting: {
+    "--admin-card-accent": "217 91% 60%",
+    "--admin-card-accent-secondary": "228 92% 66%",
+  },
+  neutral: {
+    "--admin-card-accent": "220 14% 55%",
+    "--admin-card-accent-secondary": "262 18% 60%",
+  },
+};
+
 export default function EmployeeDashboard() {
   const { user } = useAuth();
   const firstName = user?.name?.split(" ")[0] || "Employee";
@@ -40,9 +75,17 @@ export default function EmployeeDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeMeeting, setActiveMeeting] = useState<TeamsMeeting | null>(null);
 
   // Global persistent timer — provided by AttendanceTimerProvider at root layout level
-  const { seconds, isActive, isPunching, handlePunchIn: ctxPunchIn, handlePunchOut: ctxPunchOut } = useAttendanceTimer();
+  const {
+    seconds,
+    isActive,
+    isPunching,
+    hasCompletedToday,
+    handlePunchIn: ctxPunchIn,
+    handlePunchOut: ctxPunchOut,
+  } = useAttendanceTimer();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -53,15 +96,19 @@ export default function EmployeeDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsResponse, tasksResponse] = await Promise.all([
+      const [statsResponse, tasksResponse, meetingResponse] = await Promise.all([
         fetchEmployeeDashboard(),
         getMyTasks(),
+        getActiveMeeting(),
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
+      }
+      if (meetingResponse.data !== undefined) {
+        setActiveMeeting(meetingResponse.data);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -163,11 +210,21 @@ export default function EmployeeDashboard() {
               ) : (
                 <button
                   onClick={handlePunchIn}
-                  disabled={isPunching}
-                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-primary-light px-5 py-2 text-sm font-bold text-white hover:from-primary-light hover:to-primary-glow transition-all transform hover:scale-105 shadow-lg shadow-primary/50 hover:shadow-xl hover:shadow-primary/60 disabled:opacity-50 disabled:hover:scale-100"
+                  disabled={isPunching || hasCompletedToday}
+                  className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold transition-all transform shadow-lg disabled:hover:scale-100 ${
+                    hasCompletedToday
+                      ? "bg-gradient-to-r from-emerald-200 via-teal-200 to-cyan-200 text-emerald-900 border border-emerald-300/80 shadow-[0_10px_24px_-14px_rgba(16,185,129,0.65)] ring-1 ring-white/70 cursor-not-allowed opacity-95 dark:bg-gradient-to-r dark:from-emerald-500/35 dark:via-teal-500/30 dark:to-cyan-500/35 dark:text-emerald-100 dark:border-emerald-300/35 dark:shadow-emerald-500/30 dark:ring-0"
+                      : "bg-gradient-to-r from-primary to-primary-light text-white hover:from-primary-light hover:to-primary-glow hover:scale-105 shadow-primary/50 hover:shadow-xl hover:shadow-primary/60"
+                  } ${isPunching ? "opacity-50" : ""}`}
                 >
-                  {isPunching ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Play size={14} className="glow-icon" />}
-                  Punch In
+                  {isPunching ? (
+                    <Loader2 size={14} className="animate-spin glow-icon" />
+                  ) : hasCompletedToday ? (
+                    <CheckCircle size={14} className="text-emerald-700 drop-shadow-[0_0_6px_rgba(16,185,129,0.35)] dark:text-emerald-200 dark:drop-shadow-[0_0_8px_rgba(16,185,129,0.55)]" />
+                  ) : (
+                    <Play size={14} className="glow-icon" />
+                  )}
+                  {hasCompletedToday ? "Completed Today" : "Punch In"}
                 </button>
               )}
             </div>
@@ -178,18 +235,20 @@ export default function EmployeeDashboard() {
             <StatCard
               icon={Clock}
               label="Current Session"
-              value={isWorking ? formatDuration(seconds) : (dashboardStats?.current_session ? formatDuration(seconds) : "--")}
+              value={isWorking || hasCompletedToday ? formatDuration(seconds) : "--"}
               subtitle={
-                isWorking 
-                  ? "Active session" 
-                  : dashboardStats?.current_session 
-                    ? "Completed today" 
+                isWorking
+                  ? "Active session"
+                  : hasCompletedToday
+                    ? "Completed today"
                     : "Not clocked in"
               }
-              trend={isWorking ? "LIVE" : dashboardStats?.current_session ? "Done" : undefined}
+              trend={isWorking ? "LIVE" : hasCompletedToday ? "Done" : undefined}
               trendType={isWorking ? "up" : "stable"}
-              iconColor="bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/50"
+              iconColor="dark:bg-pink-500 dark:text-white dark:drop-shadow-[0_0_24px_rgba(236,72,153,0.9)] bg-pink-500 text-white drop-shadow-[0_0_16px_rgba(236,72,153,0.7)]"
               href="/attendance"
+              enablePremiumHover
+              hoverAccentStyle={employeeCardAccentStyles.session}
             />
             <StatCard
               icon={AlertCircle}
@@ -198,8 +257,10 @@ export default function EmployeeDashboard() {
               subtitle="Projects due today"
               trend={tasksDueToday > 0 ? "Attention" : "Good"}
               trendType={tasksDueToday > 0 ? "down" : "up"}
-              iconColor="bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/50"
+              iconColor="dark:bg-orange-400 dark:text-white dark:drop-shadow-[0_0_24px_rgba(251,146,60,0.9)] bg-orange-500 text-white drop-shadow-[0_0_16px_rgba(251,146,60,0.7)]"
               href="/project-management"
+              enablePremiumHover
+              hoverAccentStyle={employeeCardAccentStyles.attention}
             />
             <StatCard
               icon={Zap}
@@ -208,8 +269,10 @@ export default function EmployeeDashboard() {
               subtitle={`${tasksCompleted} completed`}
               trend={productivityScore >= 50 ? "Great" : "Keep going"}
               trendType={productivityScore >= 50 ? "up" : "stable"}
-              iconColor="bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/50"
+              iconColor="dark:bg-yellow-300 dark:text-white dark:drop-shadow-[0_0_24px_rgba(250,204,21,0.9)] bg-yellow-400 text-white drop-shadow-[0_0_16px_rgba(250,204,21,0.7)]"
               href="/project-management"
+              enablePremiumHover
+              hoverAccentStyle={employeeCardAccentStyles.productivity}
             />
             <StatCard
               icon={Building2}
@@ -218,41 +281,67 @@ export default function EmployeeDashboard() {
               subtitle="In progress"
               trend={activeProjects > 0 ? "Working" : "None"}
               trendType={activeProjects > 0 ? "up" : "stable"}
-              iconColor="bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/50"
+              iconColor="dark:bg-blue-400 dark:text-white dark:drop-shadow-[0_0_24px_rgba(59,130,246,0.9)] bg-blue-500 text-white drop-shadow-[0_0_16px_rgba(59,130,246,0.7)]"
               href="/project-management"
+              enablePremiumHover
+              hoverAccentStyle={employeeCardAccentStyles.projects}
             />
           </div>
 
-          {/* Leave Balance Card */}
+          {/* Teams Meeting Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <StatCard
-              icon={Calendar}
-              label="Leave Balance"
-              value={leaveBalance}
-              subtitle="Days remaining"
-              trend={leaveBalance > 10 ? "Healthy" : leaveBalance > 5 ? "Moderate" : "Low"}
-              trendType={leaveBalance > 10 ? "up" : leaveBalance > 5 ? "stable" : "down"}
-              iconColor="bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/50"
-              href="/requests"
-            />
-            <StatCard
-              icon={Clock}
-              label="Pending Requests"
-              value={pendingLeaveRequests}
-              subtitle="Leave requests"
-              trend={pendingLeaveRequests > 0 ? "Pending" : "None"}
-              trendType="stable"
-              iconColor="bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/50"
-              href="/requests"
-            />
+            {activeMeeting ? (
+              <div
+                className="admin-dashboard-card col-span-full rounded-xl glass-card glow-sm p-5 border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-transparent to-transparent"
+                style={employeeCardAccentStyles.meeting}
+              >
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="admin-dashboard-card-icon shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/40">
+                      <Video className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-0.5">Teams Meeting</p>
+                      <p className="font-bold text-foreground truncate">{activeMeeting.title}</p>
+                      <p className="text-xs text-muted-foreground">Shared by {activeMeeting.creator_name}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={activeMeeting.meeting_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-500/30 shrink-0"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Join Meeting
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="admin-dashboard-card col-span-full rounded-xl glass-card p-5 border border-border/40 flex items-center gap-3 text-muted-foreground"
+                style={employeeCardAccentStyles.neutral}
+              >
+                <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary/50">
+                  <Video className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">No active Teams meeting</p>
+                  <p className="text-xs">Your admin hasn&apos;t shared a meeting link yet.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Active Projects */}
-          <div className="rounded-xl glass-card glow-sm">
+          <div
+            className="admin-dashboard-card rounded-xl glass-card glow-sm"
+            style={employeeCardAccentStyles.projects}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-card-foreground flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50">
+                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50">
                     <Building2 size={18} className="text-white glow-icon" />
                   </div>
                   Active Projects

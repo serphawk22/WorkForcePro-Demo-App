@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,12 +12,10 @@ import {
   Users,
   UserCheck,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
   User,
+  Pin,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getUnreadNotificationCount } from "@/lib/api";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
@@ -45,18 +43,24 @@ interface SidebarProps {
 
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(72);
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(72);
   const { user, logout } = useAuth();
   const links = role === "admin" ? adminLinks : employeeLinks;
   const [pendingCount, setPendingCount] = useState(0);
+  const isOpen = isHovered || isPinned;
+  const effectiveWidth = isDragging ? sidebarWidth : (isOpen ? 240 : 72);
 
-  // Debug: Log when user changes
   useEffect(() => {
     console.log('[AppSidebar] User state changed:', user?.email || 'null');
     console.log('[AppSidebar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
   }, [user]);
 
-  // Fetch pending registration count for admin badge
   useEffect(() => {
     if (role !== "admin") return;
     const fetchPending = async () => {
@@ -71,46 +75,93 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     return () => clearInterval(interval);
   }, [role]);
 
-  // Use data from AuthContext if available
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-width', `${effectiveWidth}px`);
+  }, [effectiveWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = e.clientX - dragStartX.current;
+      const newWidth = Math.min(240, Math.max(60, dragStartWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = isOpen ? 240 : 72;
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    e.preventDefault();
+  }, [isOpen]);
+
   const displayName = user?.name || userName;
   const displayHandle = user?.email || userHandle;
   const profilePicture = user?.profile_picture;
 
   const getProfilePictureUrl = () => {
     if (!profilePicture) return null;
-    // If it's a data URI (base64), return it directly
     if (profilePicture.startsWith("data:")) return profilePicture;
-    // Otherwise treat as URL
     if (profilePicture.startsWith("http")) return profilePicture;
     return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${profilePicture}`;
   };
 
   return (
     <aside
-      className={`glass-sidebar flex flex-col transition-all duration-300 ${
-        collapsed ? "w-[72px]" : "w-[240px]"
-      } min-h-screen`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`glass-sidebar fixed left-0 top-0 h-screen flex flex-col z-40 ${
+        isDragging ? "" : "transition-[width] duration-300 ease-in-out"
+      }`}
+      style={{ width: effectiveWidth }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
           W
         </div>
-        {!collapsed && (
-          <span className="text-sidebar-foreground font-semibold text-base tracking-tight">
-            WorkForce Pro
-          </span>
-        )}
+        <span className={`text-sidebar-foreground font-semibold text-base tracking-tight whitespace-nowrap transition-all duration-200 ${
+          isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
+        }`}>
+          WorkForce Pro
+        </span>
+        {/* Pin button — visible when sidebar is open */}
+        <button
+          onClick={() => setIsPinned((prev) => !prev)}
+          title={isPinned ? "Unpin sidebar" : "Pin sidebar open"}
+          className={`ml-auto shrink-0 rounded p-1 transition-all duration-200 ${
+            isOpen
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none"
+          } ${
+            isPinned
+              ? "text-sidebar-primary"
+              : "text-sidebar-foreground/40 hover:text-sidebar-foreground"
+          }`}
+        >
+          <Pin size={13} className={`transition-transform duration-200 ${isPinned ? "-rotate-45" : "rotate-0"}`} />
+        </button>
       </div>
 
       {/* Section label */}
-      {!collapsed && (
-        <div className="px-4 pt-6 pb-2">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/50">
-            {role === "admin" ? "Admin Controls" : "Employee Menu"}
-          </span>
-        </div>
-      )}
+      <div className="px-4 pt-6 pb-2 overflow-hidden">
+        <span className={`text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/50 whitespace-nowrap transition-all duration-200 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}>
+          {role === "admin" ? "Admin Controls" : "Employee Menu"}
+        </span>
+      </div>
 
       {/* Nav links */}
       <nav className="flex-1 flex flex-col gap-1 px-3 py-2">
@@ -121,40 +172,64 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
               ? pathname.startsWith("/my-space")
               : pathname === link.path;
           const showBadge = (link as any).badgeKey === "pending" && pendingCount > 0;
+
           return (
-            <Link
-              key={link.path}
-              href={link.path}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-              }`}
-            >
-              <link.icon size={18} className="shrink-0" />
-              {!collapsed && <span className="flex-1">{link.label}</span>}
-              {!collapsed && showBadge && (
-                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
-                  {pendingCount}
+            <div key={link.path} className="relative group/item">
+              <Link
+                href={link.path}
+                className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                {/* Active left indicator bar */}
+                <span className={`sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-sidebar-primary transition-all duration-300 ${
+                  isActive ? "h-5 opacity-100" : "h-0 opacity-0"
+                }`} />
+
+                <link.icon
+                  size={18}
+                  className={`shrink-0 transition-transform duration-200 ${
+                    isActive ? "scale-110" : "group-hover/item:scale-110"
+                  }`}
+                />
+
+                <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
+                  isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
+                }`}>
+                  {link.label}
                 </span>
+
+                {isOpen && showBadge && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+                {!isOpen && showBadge && (
+                  <span className="absolute left-8 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* Tooltip — only visible when sidebar is collapsed */}
+              {!isOpen && (
+                <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 delay-150">
+                  <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-lg border border-border whitespace-nowrap">
+                    {link.label}
+                    {showBadge && (
+                      <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
-              {collapsed && showBadge && (
-                <span className="absolute left-8 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
-                  {pendingCount}
-                </span>
-              )}
-            </Link>
+            </div>
           );
         })}
       </nav>
-
-        {/* Collapse toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="mx-3 mb-2 flex items-center justify-center rounded-lg p-2 text-sidebar-foreground/50 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground transition-colors"
-      >
-        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </button>
 
       {/* User section */}
       <div className="border-t border-sidebar-border px-3 py-4">
@@ -170,28 +245,37 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
               displayName[0]
             )}
           </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
-              <p className="text-xs text-sidebar-foreground/50 truncate">{displayHandle}</p>
-            </div>
-          )}
-          {!collapsed && (
-            <button 
-              onClick={logout}
-              className="text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-              title="Logout"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
+          <div className={`min-w-0 overflow-hidden transition-all duration-200 ${
+            isOpen ? "flex-1 opacity-100 max-w-[120px]" : "flex-none opacity-0 max-w-0"
+          }`}>
+            <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
+            <p className="text-xs text-sidebar-foreground/50 truncate">{displayHandle}</p>
+          </div>
+          <button
+            onClick={logout}
+            title="Logout"
+            className={`shrink-0 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-all duration-200 ${
+              isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+            }`}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
-        {!collapsed && (
-          <span className="mt-2 inline-block rounded-md bg-sidebar-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-accent-foreground">
+        <div className={`overflow-hidden transition-all duration-200 ${
+          isOpen ? "max-h-10 opacity-100 mt-2" : "max-h-0 opacity-0"
+        }`}>
+          <span className="inline-block rounded-md bg-sidebar-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-accent-foreground">
             {role}
           </span>
-        )}
+        </div>
       </div>
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleResizeMouseDown}
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-50 hover:bg-sidebar-primary/20 transition-colors"
+      />
     </aside>
   );
 }
+

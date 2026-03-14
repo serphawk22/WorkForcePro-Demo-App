@@ -96,8 +96,8 @@ export function NotificationDropdown() {
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
+        <button className="topbar-icon-btn relative outline-none border-0 bg-transparent shadow-none">
+          <Bell className="h-[15px] w-[15px]" />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
@@ -106,7 +106,7 @@ export function NotificationDropdown() {
               {unreadCount > 9 ? "9+" : unreadCount}
             </Badge>
           )}
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
         <div className="flex items-center justify-between px-2 py-2">

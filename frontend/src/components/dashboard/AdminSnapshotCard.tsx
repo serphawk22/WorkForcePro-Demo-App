@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { LucideIcon, ArrowUpRight } from "lucide-react";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 interface AdminSnapshotCardProps {
   title: string;
@@ -49,6 +49,33 @@ const arrowBgGradients = {
   purple: "from-purple-600/30 to-violet-500/10",
 };
 
+const hoverAccentVars: Record<AdminSnapshotCardProps["gradientVariant"], CSSProperties> = {
+  primary: {
+    "--admin-card-accent": "272 91% 65%",
+    "--admin-card-accent-secondary": "328 75% 62%",
+  } as CSSProperties,
+  green: {
+    "--admin-card-accent": "142 71% 45%",
+    "--admin-card-accent-secondary": "164 84% 39%",
+  } as CSSProperties,
+  red: {
+    "--admin-card-accent": "0 84% 60%",
+    "--admin-card-accent-secondary": "345 83% 61%",
+  } as CSSProperties,
+  blue: {
+    "--admin-card-accent": "217 91% 60%",
+    "--admin-card-accent-secondary": "191 91% 55%",
+  } as CSSProperties,
+  yellow: {
+    "--admin-card-accent": "45 93% 58%",
+    "--admin-card-accent-secondary": "38 92% 50%",
+  } as CSSProperties,
+  purple: {
+    "--admin-card-accent": "262 83% 67%",
+    "--admin-card-accent-secondary": "228 92% 66%",
+  } as CSSProperties,
+};
+
 export default function AdminSnapshotCard({
   title,
   value,
@@ -79,14 +106,15 @@ export default function AdminSnapshotCard({
           handleClick();
         }
       }}
+      style={hoverAccentVars[gradientVariant]}
       className={`
-        group relative overflow-hidden rounded-xl glass-card p-5 
+        admin-dashboard-card group relative overflow-hidden rounded-xl glass-card p-5 
         cursor-pointer select-none
-        transition-all duration-200 ease-out
-        hover:-translate-y-2 hover:scale-[1.04] hover:shadow-2xl ${glowColors[gradientVariant]}
+        transition-all duration-300 ease-out
+        ${glowColors[gradientVariant]}
         focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
         active:scale-95 active:translate-y-0.5 active:duration-75
-        hover:glow-md
+        dark:hover:glow-md
         ${isClicked ? "scale-95 translate-y-0.5" : ""}
       `}
     >
@@ -114,7 +142,9 @@ export default function AdminSnapshotCard({
 
       {/* Card content - ENHANCED */}
       <div className="relative">
-        <Icon className={`h-6 w-6 ${iconColors[gradientVariant]} mb-3 transition-all duration-200 group-hover:scale-130 group-hover:-rotate-6 group-hover:drop-shadow-none`} />
+        <div className="admin-dashboard-card-icon dashboard-card-icon-shell mb-3 inline-flex rounded-xl p-1.5">
+          <Icon className={`h-6 w-6 ${iconColors[gradientVariant]}`} />
+        </div>
         <div className="text-3xl font-bold text-foreground transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
           {value}
         </div>

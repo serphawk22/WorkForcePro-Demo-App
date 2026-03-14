@@ -27,6 +27,12 @@ import { toast } from "sonner";
 const LS_PUNCH_IN_KEY = "wfp_punch_in_iso"; // ISO string of punch-in time
 const LS_TIMER_START_KEY = "wfp_timer_start"; // Browser timestamp when we started counting
 const LS_BASE_ELAPSED_KEY = "wfp_base_elapsed"; // Base elapsed seconds at timer start
+const LS_ATTENDANCE_DAY_KEY = "wfp_attendance_day"; // YYYY-MM-DD local day key
+const LS_ATTENDANCE_STATUS_KEY = "wfp_attendance_status"; // not_started | working | completed
+const LS_PUNCH_OUT_KEY = "wfp_punch_out_iso"; // ISO string of punch-out time
+const LS_COMPLETED_SECONDS_KEY = "wfp_completed_seconds"; // Final seconds for completed session
+
+type AttendanceDayStatus = "not_started" | "working" | "completed";
 
 // ── Module-level timer state (survives React remounts) ────────────────────────
 // This is the SOURCE OF TRUTH for whether timer is running
@@ -35,6 +41,9 @@ const moduleState = {
   timerStart: null as number | null,
   baseElapsed: 0,
   punchInISO: null as string | null,
+  punchOutISO: null as string | null,
+  status: "not_started" as AttendanceDayStatus,
+  completedSeconds: 0,
   intervalId: null as ReturnType<typeof setInterval> | null,
 };
 
@@ -72,6 +81,63 @@ function clearStoredPunchIn(): void {
   localStorage.removeItem("workforce_timer_state");
 }
 
+function getTodayKey(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getStoredStatus(): AttendanceDayStatus {
+  if (typeof window === "undefined") return "not_started";
+  const raw = localStorage.getItem(LS_ATTENDANCE_STATUS_KEY);
+  return raw === "working" || raw === "completed" ? raw : "not_started";
+}
+
+function getStoredCompletedSeconds(): number {
+  if (typeof window === "undefined") return 0;
+  const raw = localStorage.getItem(LS_COMPLETED_SECONDS_KEY);
+  return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0;
+}
+
+function getStoredPunchOut(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LS_PUNCH_OUT_KEY);
+}
+
+function setStoredStatus(status: AttendanceDayStatus): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_ATTENDANCE_STATUS_KEY, status);
+}
+
+function setStoredCompletedSession(finalSeconds: number, punchOutISO?: string | null): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_COMPLETED_SECONDS_KEY, String(Math.max(0, Math.floor(finalSeconds))));
+  if (punchOutISO) {
+    localStorage.setItem(LS_PUNCH_OUT_KEY, punchOutISO);
+  }
+}
+
+function clearStoredCompletedSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LS_PUNCH_OUT_KEY);
+  localStorage.removeItem(LS_COMPLETED_SECONDS_KEY);
+}
+
+function ensureTodayStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  const today = getTodayKey();
+  const storedDay = localStorage.getItem(LS_ATTENDANCE_DAY_KEY);
+  if (storedDay !== today) {
+    localStorage.setItem(LS_ATTENDANCE_DAY_KEY, today);
+    clearStoredPunchIn();
+    clearStoredCompletedSession();
+    setStoredStatus("not_started");
+    return true;
+  }
+  return false;
+}
+
 export function formatTimerDisplay(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
@@ -86,6 +152,10 @@ interface AttendanceTimerContextValue {
   seconds: number;
   /** True while a session is in progress */
   isActive: boolean;
+  /** Current attendance status for the day */
+  attendanceStatus: AttendanceDayStatus;
+  /** True when user already punched out today */
+  hasCompletedToday: boolean;
   /** True while punching in or out */
   isPunching: boolean;
   /** ISO punch-in timestamp (null when not working) */
@@ -112,6 +182,7 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceDayStatus>("not_started");
   const [isPunching, setIsPunching] = useState(false);
   const [punchInTime, setPunchInTime] = useState<string | null>(null);
 
@@ -152,14 +223,20 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
       moduleState.timerStart = now;
       moduleState.baseElapsed = serverElapsed;
       moduleState.punchInISO = punchInISO;
+      moduleState.punchOutISO = null;
+      moduleState.status = "working";
+      moduleState.completedSeconds = 0;
       
       // Persist to localStorage
       setStoredTimer(punchInISO, now, serverElapsed);
+      setStoredStatus("working");
+      clearStoredCompletedSession();
       
       // Update React state for UI
       setPunchInTime(punchInISO);
       setSeconds(serverElapsed);
       setIsActive(true);
+      setAttendanceStatus("working");
       
       // Start ticking
       startModuleTick(setSeconds);
@@ -168,14 +245,18 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
   );
 
   const deactivate = useCallback(
-    (finalSeconds?: number) => {
-      console.log(`[TIMER DEACTIVATE] finalSeconds=${finalSeconds}`);
+    (opts?: { finalSeconds?: number; completed?: boolean; punchOutISO?: string | null }) => {
+      const finalSeconds = opts?.finalSeconds;
+      const completed = opts?.completed ?? false;
+      console.log(`[TIMER DEACTIVATE] finalSeconds=${finalSeconds}, completed=${completed}`);
       
       // Clear module state FIRST
       moduleState.isRunning = false;
       moduleState.timerStart = null;
       moduleState.baseElapsed = 0;
-      moduleState.punchInISO = null;
+      moduleState.punchOutISO = opts?.punchOutISO ?? null;
+      moduleState.status = completed ? "completed" : "not_started";
+      moduleState.completedSeconds = completed ? Math.max(0, finalSeconds ?? seconds) : 0;
       if (moduleState.intervalId) {
         clearInterval(moduleState.intervalId);
         moduleState.intervalId = null;
@@ -183,17 +264,52 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
       
       // Clear localStorage
       clearStoredPunchIn();
+      if (completed) {
+        setStoredStatus("completed");
+        setStoredCompletedSession(moduleState.completedSeconds, opts?.punchOutISO);
+      } else {
+        setStoredStatus("not_started");
+        clearStoredCompletedSession();
+      }
       
       // Update React state
-      setPunchInTime(null);
+      if (!completed) {
+        setPunchInTime(null);
+      }
       setIsActive(false);
-      if (finalSeconds !== undefined) setSeconds(finalSeconds);
+      setAttendanceStatus(completed ? "completed" : "not_started");
+      if (completed) {
+        setSeconds(moduleState.completedSeconds);
+      } else if (finalSeconds !== undefined) {
+        setSeconds(finalSeconds);
+      } else {
+        setSeconds(0);
+      }
     },
-    []
+    [seconds]
   );
 
   // ── Server sync ───────────────────────────────────────────────────────────
   const syncNow = useCallback(async () => {
+    const wasReset = ensureTodayStorage();
+    if (wasReset) {
+      if (moduleState.intervalId) {
+        clearInterval(moduleState.intervalId);
+        moduleState.intervalId = null;
+      }
+      moduleState.isRunning = false;
+      moduleState.timerStart = null;
+      moduleState.baseElapsed = 0;
+      moduleState.punchInISO = null;
+      moduleState.punchOutISO = null;
+      moduleState.status = "not_started";
+      moduleState.completedSeconds = 0;
+      setSeconds(0);
+      setPunchInTime(null);
+      setIsActive(false);
+      setAttendanceStatus("not_started");
+    }
+
     // Never call the API when unauthenticated — avoids 401 → redirect flicker
     if (!getToken()) return;
     
@@ -236,11 +352,29 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
           activate(punch_in, serverElapsed);
         }
       } else if (status === "completed") {
-        deactivate(Math.max(0, elapsed_seconds ?? 0));
+        const finalSeconds = Math.max(
+          0,
+          elapsed_seconds ?? (result.data.total_hours != null ? Math.round(result.data.total_hours * 3600) : 0)
+        );
+        setPunchInTime(punch_in);
+        deactivate({
+          finalSeconds,
+          completed: true,
+          punchOutISO: result.data.punch_out,
+        });
       } else {
         // not_started
         if (moduleState.isRunning) {
-          deactivate(0);
+          deactivate({ finalSeconds: 0, completed: false });
+        } else if (moduleState.status !== "not_started") {
+          setSeconds(0);
+          setPunchInTime(null);
+          setIsActive(false);
+          setAttendanceStatus("not_started");
+          moduleState.status = "not_started";
+          moduleState.completedSeconds = 0;
+          clearStoredCompletedSession();
+          setStoredStatus("not_started");
         }
       }
     } catch {
@@ -250,30 +384,49 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
   // ── Bootstrap on mount ────────────────────────────────────────────────────
   useEffect(() => {
+    const dayReset = ensureTodayStorage();
+    if (dayReset) {
+      moduleState.isRunning = false;
+      moduleState.timerStart = null;
+      moduleState.baseElapsed = 0;
+      moduleState.punchInISO = null;
+      moduleState.punchOutISO = null;
+      moduleState.status = "not_started";
+      moduleState.completedSeconds = 0;
+    }
+
     // 1. If module timer is already running (e.g., from a previous mount), just sync UI
     if (moduleState.isRunning) {
       console.log(`[TIMER BOOTSTRAP] Module timer already running - syncing UI`);
       setPunchInTime(moduleState.punchInISO);
       setIsActive(true);
+      setAttendanceStatus("working");
       // Start ticking to update React state
       startModuleTick(setSeconds);
     } else {
       // 2. Check localStorage for persisted timer
+      const storedStatus = getStoredStatus();
       const storedPunchIn = getStoredPunchIn();
       const storedStart = getStoredTimerStart();
       const storedBase = getStoredBaseElapsed();
+      const storedPunchOut = getStoredPunchOut();
+      const storedCompletedSeconds = getStoredCompletedSeconds();
       
-      if (storedPunchIn && storedStart) {
+      if (storedStatus === "working" && storedPunchIn && storedStart) {
         console.log(`[TIMER BOOTSTRAP] Restoring from localStorage`);
         // Set module state from localStorage
         moduleState.isRunning = true;
         moduleState.timerStart = storedStart;
         moduleState.baseElapsed = storedBase;
         moduleState.punchInISO = storedPunchIn;
+        moduleState.punchOutISO = null;
+        moduleState.status = "working";
+        moduleState.completedSeconds = 0;
         
         // Update React state
         setPunchInTime(storedPunchIn);
         setIsActive(true);
+        setAttendanceStatus("working");
         
         // Calculate and display current elapsed
         const delta = Math.max(0, Math.floor((Date.now() - storedStart) / 1000));
@@ -283,6 +436,22 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
         
         // Start ticking
         startModuleTick(setSeconds);
+      } else if (storedStatus === "completed") {
+        moduleState.isRunning = false;
+        moduleState.timerStart = null;
+        moduleState.baseElapsed = 0;
+        moduleState.punchInISO = storedPunchIn;
+        moduleState.punchOutISO = storedPunchOut;
+        moduleState.status = "completed";
+        moduleState.completedSeconds = storedCompletedSeconds;
+
+        setPunchInTime(storedPunchIn);
+        setIsActive(false);
+        setAttendanceStatus("completed");
+        setSeconds(storedCompletedSeconds);
+      } else {
+        setAttendanceStatus("not_started");
+        setSeconds(0);
       }
     }
 
@@ -293,8 +462,31 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
     // 4. Periodic server sync every 60 s — skip silently when not authenticated
     const syncInterval = setInterval(() => {
+      ensureTodayStorage();
       if (getToken()) syncNow();
     }, 60_000);
+
+    const dayInterval = setInterval(() => {
+      const changed = ensureTodayStorage();
+      if (changed) {
+        if (moduleState.intervalId) {
+          clearInterval(moduleState.intervalId);
+          moduleState.intervalId = null;
+        }
+        moduleState.isRunning = false;
+        moduleState.timerStart = null;
+        moduleState.baseElapsed = 0;
+        moduleState.punchInISO = null;
+        moduleState.punchOutISO = null;
+        moduleState.status = "not_started";
+        moduleState.completedSeconds = 0;
+        setSeconds(0);
+        setPunchInTime(null);
+        setIsActive(false);
+        setAttendanceStatus("not_started");
+        if (getToken()) syncNow();
+      }
+    }, 30_000);
 
     // 5. Re-sync when tab becomes visible
     const onVisible = () => {
@@ -312,6 +504,7 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
     return () => {
       clearInterval(syncInterval);
+      clearInterval(dayInterval);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("storage", onStorage);
       // Note: We do NOT stop module timer on unmount - it persists across remounts
@@ -331,7 +524,27 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
   // ── Punch-in handler ──────────────────────────────────────────────────────
   const handlePunchIn = useCallback(async () => {
-    if (moduleState.isRunning) return;
+    const dayChanged = ensureTodayStorage();
+    if (dayChanged) {
+      moduleState.isRunning = false;
+      moduleState.timerStart = null;
+      moduleState.baseElapsed = 0;
+      moduleState.punchInISO = null;
+      moduleState.punchOutISO = null;
+      moduleState.status = "not_started";
+      moduleState.completedSeconds = 0;
+      setSeconds(0);
+      setPunchInTime(null);
+      setIsActive(false);
+      setAttendanceStatus("not_started");
+    }
+
+    if (moduleState.isRunning || moduleState.status === "completed") {
+      if (moduleState.status === "completed") {
+        toast.info("Session already completed for today.");
+      }
+      return;
+    }
     setIsPunching(true);
     try {
       const result = await apiPunchIn();
@@ -355,6 +568,7 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
 
   // ── Punch-out handler ─────────────────────────────────────────────────────
   const handlePunchOut = useCallback(async () => {
+    ensureTodayStorage();
     if (!moduleState.isRunning) return;
     setIsPunching(true);
     try {
@@ -367,7 +581,11 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
       const finalSeconds = result.data?.total_hours != null
         ? Math.round(result.data.total_hours * 3600)
         : undefined;
-      deactivate(finalSeconds);
+      deactivate({
+        finalSeconds,
+        completed: true,
+        punchOutISO: result.data?.punch_out,
+      });
       toast.success("Punched out successfully!");
     } finally {
       setIsPunching(false);
@@ -379,6 +597,8 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
       value={{
         seconds,
         isActive,
+        attendanceStatus,
+        hasCompletedToday: attendanceStatus === "completed",
         isPunching,
         punchInTime,
         handlePunchIn,

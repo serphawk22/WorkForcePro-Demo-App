@@ -1,5 +1,11 @@
 import { LucideIcon, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import type { CSSProperties } from "react";
+
+type DashboardHoverAccentStyle = CSSProperties & {
+  "--admin-card-accent"?: string;
+  "--admin-card-accent-secondary"?: string;
+};
 
 interface StatCardProps {
   icon: LucideIcon;
@@ -10,6 +16,8 @@ interface StatCardProps {
   trendType?: "up" | "down" | "stable";
   iconColor?: string;
   href?: string;
+  enablePremiumHover?: boolean;
+  hoverAccentStyle?: DashboardHoverAccentStyle;
 }
 
 const trendColors = {
@@ -18,16 +26,30 @@ const trendColors = {
   stable: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
 };
 
-export default function StatCard({ icon: Icon, label, value, subtitle, trend, trendType = "stable", iconColor, href }: StatCardProps) {
+export default function StatCard({
+  icon: Icon,
+  label,
+  value,
+  subtitle,
+  trend,
+  trendType = "stable",
+  iconColor,
+  href,
+  enablePremiumHover = false,
+  hoverAccentStyle,
+}: StatCardProps) {
   const inner = (
-    <div className={`group relative rounded-xl glass-card glass-card-hover p-5 transition-all duration-300 overflow-hidden hover:scale-[1.02] glow-sm hover:glow-md ${href ? "cursor-pointer active:scale-[0.97]" : ""}`}>
+    <div
+      className={`group relative rounded-xl glass-card ${enablePremiumHover ? "admin-dashboard-card" : "glass-card-hover"} p-5 transition-all duration-300 overflow-hidden glow-sm ${enablePremiumHover ? "dark:hover:glow-md" : "hover:scale-[1.02] hover:glow-md"} ${href ? "cursor-pointer active:scale-[0.97]" : ""}`}
+      style={hoverAccentStyle}
+    >
       {/* Gradient overlay on hover */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       {/* Enhanced glow effect */}
       <div className="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
       <div className="relative flex items-start justify-between mb-4">
-        <div className={`rounded-xl p-3 backdrop-blur-sm ${iconColor || "bg-gradient-to-br from-secondary/80 to-accent/60 text-white shadow-lg"} group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-primary/50 transition-all duration-300`}>
+        <div className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-primary/50"} dashboard-card-icon-shell rounded-xl p-3 backdrop-blur-sm ${iconColor || "bg-gradient-to-br from-secondary/80 to-accent/60 text-white shadow-lg"} transition-all duration-300`}>
           <Icon size={20} className="glow-icon" />
         </div>
         <div className="flex items-center gap-2">
@@ -37,7 +59,7 @@ export default function StatCard({ icon: Icon, label, value, subtitle, trend, tr
             </span>
           )}
           {href && (
-            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white/10 text-white/50 group-hover:bg-primary/40 group-hover:text-white group-hover:shadow-lg group-hover:shadow-primary/40 group-hover:animate-bounce group-active:scale-75 transition-all duration-200">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary/50 group-hover:bg-primary/20 group-hover:text-primary group-hover:shadow-md group-hover:shadow-primary/25 dark:bg-white/10 dark:text-white/50 dark:group-hover:bg-primary/40 dark:group-hover:text-white dark:group-hover:shadow-lg dark:group-hover:shadow-primary/40 group-hover:animate-bounce group-active:scale-75 transition-all duration-200">
               <ArrowUpRight size={14} />
             </span>
           )}

@@ -65,16 +65,16 @@
     --gradient-primary:     linear-gradient(135deg, hsl(289 36% 26%), hsl(266 62% 18%));
     --gradient-primary-btn: linear-gradient(135deg, hsl(289 36% 26%), hsl(266 62% 18%));
     --gradient-card:        linear-gradient(145deg, hsl(0 0% 100%), hsl(22 85% 95%));
-    --shadow-card:          0 4px 24px -4px hsl(289 36% 26% / 0.12), 0 1px 4px hsl(289 36% 26% / 0.06);
-    --shadow-primary:       0 8px 32px -8px hsl(289 36% 26% / 0.4);
-    --shadow-glow:          0 0 40px hsl(328 26% 42% / 0.25);
+    --shadow-card:          0 1px 3px hsl(268 60% 64% / 0.14), 0 4px 20px -3px hsl(268 55% 62% / 0.24), 0 18px 52px -8px hsl(268 50% 66% / 0.16);
+    --shadow-primary:       0 4px 20px -4px hsl(289 40% 34% / 0.36), 0 10px 40px -8px hsl(268 50% 50% / 0.22);
+    --shadow-glow:          0 0 32px hsl(268 55% 68% / 0.28);
 
     /* Sidebar */
     --sidebar-background:  22 85% 91%;      /* #FBE4D8 */
     --sidebar-foreground:  300 100% 5%;     /* #190019 */
     --sidebar-primary:     289 36% 26%;     /* #522B5B */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent:      5 38% 79%;       /* #DFB6B2 */
+    --sidebar-accent:      289 28% 88%;      /* soft lavender-purple for active menu highlight */
     --sidebar-accent-foreground: 289 36% 26%;
     --sidebar-border:      5 38% 79%;       /* #DFB6B2 */
     --sidebar-ring:        289 36% 26%;
@@ -259,6 +259,117 @@
     border: 1px solid hsl(var(--border) / 0.3);
     box-shadow: inset 0 2px 4px hsl(var(--primary) / 0.05);
   }
+
+  .admin-dashboard-card {
+    --admin-card-accent: var(--primary);
+    --admin-card-accent-secondary: 220 90% 65%;
+    position: relative;
+    transform: translate3d(0, 0, 0);
+    will-change: transform, box-shadow, filter;
+    transition:
+      transform 0.28s ease,
+      box-shadow 0.28s ease,
+      filter 0.28s ease,
+      border-color 0.28s ease;
+  }
+
+  .admin-dashboard-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--admin-card-accent) / 0.55),
+      hsl(var(--admin-card-accent-secondary) / 0.28),
+      transparent 72%
+    );
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s ease;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+
+  .admin-dashboard-card::after {
+    content: "";
+    position: absolute;
+    inset: -24%;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(
+        115deg,
+        transparent 10%,
+        hsl(var(--admin-card-accent-secondary) / 0.18) 42%,
+        hsl(var(--admin-card-accent) / 0.24) 56%,
+        transparent 80%
+      ),
+      radial-gradient(
+        circle at top right,
+        hsl(var(--admin-card-accent) / 0.2),
+        transparent 58%
+      );
+    background-size: 220% 220%, 100% 100%;
+    background-position: 0% 40%, 100% 0%;
+    filter: blur(20px);
+    opacity: 0.22;
+    will-change: opacity, filter, background-position;
+    animation: admin-card-gradient-flow 9s linear infinite;
+    transition: opacity 0.28s ease, filter 0.28s ease;
+  }
+
+  .admin-dashboard-card-icon {
+    position: relative;
+    z-index: 1;
+    transform: translate3d(0, 0, 0);
+    will-change: transform, filter;
+    transition: transform 0.28s ease, filter 0.28s ease;
+  }
+
+  .dark .admin-dashboard-card:hover,
+  .dark .admin-dashboard-card:focus-within {
+    transform: translate3d(0, -5px, 0);
+    box-shadow:
+      0 22px 40px -24px hsl(var(--admin-card-accent) / 0.7),
+      0 16px 32px -24px hsl(var(--admin-card-accent-secondary) / 0.4),
+      inset 0 1px 0 hsl(0 0% 100% / 0.08);
+    filter: saturate(1.04) brightness(1.02);
+  }
+
+  .dark .admin-dashboard-card:hover::before,
+  .dark .admin-dashboard-card:focus-within::before,
+  .dark .admin-dashboard-card:hover::after,
+  .dark .admin-dashboard-card:focus-within::after {
+    opacity: 1;
+  }
+
+  .dark .admin-dashboard-card:hover::after,
+  .dark .admin-dashboard-card:focus-within::after {
+    opacity: 0.55;
+    filter: blur(26px);
+  }
+
+  .dark .admin-dashboard-card:hover .admin-dashboard-card-icon,
+  .dark .admin-dashboard-card:focus-within .admin-dashboard-card-icon {
+    transform: scale(1.07);
+    filter: drop-shadow(0 0 12px hsl(var(--admin-card-accent) / 0.42));
+  }
+
+  @keyframes admin-card-gradient-flow {
+    0% {
+      background-position: 0% 40%, 100% 0%;
+    }
+    50% {
+      background-position: 100% 60%, 100% 0%;
+    }
+    100% {
+      background-position: 0% 40%, 100% 0%;
+    }
+  }
   
   .glass-input:focus {
     background: hsl(var(--background) / 0.8);
@@ -282,6 +393,79 @@
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     border-bottom: 1px solid hsl(var(--border) / 0.15);
     box-shadow: 0 4px 24px hsl(var(--primary) / 0.06);
+  }
+
+  /* Pill navbar */
+  .topbar-pill-border {
+    padding: 1.5px;
+    border-radius: 40px;
+    background: linear-gradient(
+      120deg,
+      hsl(22 85% 80%),
+      hsl(328 30% 60%),
+      hsl(289 36% 40%),
+      hsl(266 50% 35%)
+    );
+    box-shadow:
+      0 4px 20px hsl(289 36% 26% / 0.15),
+      0 1px 6px hsl(22 85% 80% / 0.2);
+  }
+
+  .dark .topbar-pill-border {
+    background: linear-gradient(
+      120deg,
+      hsl(328 55% 62%),
+      hsl(289 55% 52%),
+      hsl(260 65% 58%),
+      hsl(210 70% 58%)
+    );
+    box-shadow:
+      /* tight purple glow */
+      0 0 18px  hsl(289 55% 50% / 0.55),
+      /* wide atmospheric bloom */
+      0 0 52px  hsl(289 50% 48% / 0.32),
+      /* soft blue accent bloom */
+      0 0 80px  hsl(260 60% 54% / 0.18),
+      /* downward floating shadow */
+      0 8px 32px hsl(266 62% 14% / 0.60);
+  }
+
+  .topbar-pill-inner {
+    border-radius: 38px;
+    background: hsl(var(--card) / 0.88);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.18), inset 0 -1px 0 hsl(289 36% 26% / 0.06);
+  }
+
+  .dark .topbar-pill-inner {
+    background: hsl(var(--card) / 0.78);
+    backdrop-filter: blur(48px) saturate(200%);
+    -webkit-backdrop-filter: blur(48px) saturate(200%);
+    box-shadow:
+      /* top-edge highlight */
+      inset 0 1.5px 0 hsl(0 0% 100% / 0.12),
+      /* bottom interior shadow */
+      inset 0 -1px 0 hsl(289 40% 22% / 0.25),
+      /* inner purple sheen */
+      inset 0 0 32px hsl(289 45% 40% / 0.06);
+  }
+
+  .topbar-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 5px;
+    color: hsl(var(--muted-foreground));
+    transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .topbar-icon-btn:hover {
+    color: hsl(var(--foreground));
+    background: hsl(var(--primary) / 0.1);
+    transform: scale(1.1);
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.2);
   }
   
   .glass-modal {
@@ -398,6 +582,7 @@
   .shadow-card       { box-shadow: var(--shadow-card); }
   .shadow-primary    { box-shadow: var(--shadow-primary); }
   .shadow-glow       { box-shadow: var(--shadow-glow); }
+
   .text-gradient-primary {
     background: var(--gradient-primary);
     -webkit-background-clip: text;
@@ -541,4 +726,399 @@
     background: hsl(266 55% 22%);
     color: hsl(290 55% 78%);
   }
+
+  /* ═══════════════════════════════════════════════════════
+     LIGHT MODE UI ENHANCEMENTS — html:not(.dark) scoped
+     Dark mode is 100% unchanged.
+     ═══════════════════════════════════════════════════════ */
+
+  /* ── 1. BACKGROUND: warm beige → peach → lavender layered gradient ── */
+  .dashboard-root {
+    background: hsl(var(--background));
+    position: relative;
+  }
+
+  /* ── DARK: sidebar active item — glowing left indicator bar ── */
+  .dark .sidebar-active-bar {
+    box-shadow:
+      0 0 6px  hsl(328 50% 60% / 0.90),
+      0 0 14px hsl(289 50% 55% / 0.55),
+      0 0 28px hsl(289 45% 52% / 0.30);
+    background: linear-gradient(
+      180deg,
+      hsl(328 50% 65%),
+      hsl(289 50% 55%)
+    ) !important;
+  }
+
+  /* ── DARK: premium card depth — inner highlight + purple border glow + layered shadow ── */
+  .dark .glass-card {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--card) / 0.98) 0%,
+      hsl(var(--card) / 0.88) 100%
+    );
+    border: 1px solid hsl(289 40% 55% / 0.22);
+    box-shadow:
+      0 0 0 1px hsl(289 45% 58% / 0.10),
+      0 4px 16px -4px hsl(266 62% 14% / 0.55),
+      0 12px 40px -8px hsl(266 55% 12% / 0.50),
+      0 24px 64px -12px hsl(266 50% 10% / 0.40),
+      inset 0 1.5px 0 hsl(0 0% 100% / 0.08),
+      inset 0 -1px 0 hsl(289 36% 20% / 0.30);
+    transition:
+      transform     0.25s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow    0.25s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color  0.25s ease;
+  }
+
+  .dark .glass-card-hover:hover {
+    border-color: hsl(289 48% 62% / 0.42);
+    box-shadow:
+      /* widened outer glow */
+      0 0 0 1px hsl(289 52% 64% / 0.22),
+      0 0 28px -4px hsl(289 52% 52% / 0.26),
+      /* lifted elevation shadows */
+      0 8px 24px -4px hsl(266 62% 14% / 0.65),
+      0 20px 56px -8px hsl(266 55% 12% / 0.58),
+      0 36px 80px -12px hsl(266 50% 10% / 0.48),
+      /* brighter inner highlight */
+      inset 0 1.5px 0 hsl(0 0% 100% / 0.14),
+      inset 0 -1px 0 hsl(289 36% 20% / 0.38);
+    transform: translateY(-4px);
+  }
+
+  /* ── DARK: atmospheric radial lighting behind dashboard content ── */
+  .dark .dashboard-root::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(
+        ellipse 72% 60% at 48% 40%,
+        hsl(289 55% 45% / 0.07) 0%,
+        hsl(266 62% 38% / 0.04) 45%,
+        transparent 72%
+      ),
+      radial-gradient(
+        ellipse 50% 44% at 82% 18%,
+        hsl(240 65% 50% / 0.06) 0%,
+        transparent 60%
+      );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .dark .dashboard-root::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(
+        ellipse 42% 38% at 14% 78%,
+        hsl(266 55% 42% / 0.05) 0%,
+        transparent 58%
+      );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── DARK: ambient orb tints ── */
+  .dark .lm-orb:nth-child(1) {
+    background: hsl(289 50% 50% / 0.07) !important;
+  }
+  .dark .lm-orb:nth-child(2) {
+    background: hsl(240 60% 48% / 0.06) !important;
+  }
+
+  html:not(.dark) .dashboard-root {
+    background: linear-gradient(
+      178deg,
+      hsl(28 92% 95%) 0%,
+      hsl(20 82% 92%) 32%,
+      hsl(10 62% 91%) 58%,
+      hsl(272 36% 92%) 100%
+    ) !important;
+    position: relative;
+  }
+
+  /* ── 2. RADIAL DEPTH: faint lavender center glow behind content ── */
+  html:not(.dark) .dashboard-root::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(
+      ellipse 72% 60% at 52% 34%,
+      hsl(268 55% 78% / 0.16) 0%,
+      hsl(289 40% 72% / 0.09) 42%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── 3. AMBIENT ORBS ── */
+  html:not(.dark) .lm-orb:nth-child(1) {
+    background: hsl(268 50% 70% / 0.12) !important;
+  }
+  html:not(.dark) .lm-orb:nth-child(2) {
+    background: hsl(328 45% 68% / 0.10) !important;
+  }
+
+  /* ── 4. CARDS: pure white surface elevated above warm background ── */
+  html:not(.dark) .glass-card {
+    background: linear-gradient(
+      145deg,
+      hsl(0 0% 100%) 0%,
+      hsl(22 65% 99%) 42%,
+      hsl(268 50% 98%) 100%
+    );
+    border: 1px solid hsl(268 42% 82% / 0.52);
+    box-shadow:
+      0 2px 6px hsl(18 40% 68% / 0.10),
+      0 10px 26px -6px hsl(268 48% 62% / 0.24),
+      0 26px 62px -14px hsl(268 42% 66% / 0.20),
+      inset 0 1.5px 0 hsl(0 0% 100%),
+      inset 0 -1px 0 hsl(268 45% 78% / 0.12);
+  }
+
+  html:not(.dark) .glass-card-hover:hover {
+    box-shadow:
+      0 3px 10px hsl(18 40% 68% / 0.12),
+      0 14px 34px -8px hsl(268 55% 60% / 0.30),
+      0 28px 64px -10px hsl(268 50% 64% / 0.24),
+      inset 0 1.5px 0 hsl(0 0% 100%);
+    border-color: hsl(268 48% 74% / 0.62);
+    transform: translateY(-2px);
+  }
+
+  /* ── 5. PANEL: slightly translucent white, lavender border ── */
+  html:not(.dark) .glass-panel {
+    background: linear-gradient(
+      148deg,
+      hsl(0 0% 100% / 0.98) 0%,
+      hsl(22 48% 98% / 0.94) 48%,
+      hsl(268 40% 99% / 0.90) 100%
+    );
+    border: 1px solid hsl(268 42% 82% / 0.46);
+    box-shadow:
+      0 4px 12px hsl(22 32% 70% / 0.10),
+      0 12px 36px -8px hsl(268 50% 64% / 0.20),
+      inset 0 1.5px 0 hsl(0 0% 100%);
+  }
+
+  /* ── 6. SIDEBAR: structured deeper beige → lavender vertical gradient ── */
+  html:not(.dark) .glass-sidebar {
+    background: linear-gradient(
+      180deg,
+      hsl(24 68% 87%) 0%,
+      hsl(14 56% 85%) 44%,
+      hsl(289 26% 85%) 100%
+    );
+    border-right: 1px solid hsl(268 42% 76% / 0.46);
+    box-shadow:
+      8px 0 28px hsl(268 42% 58% / 0.16),
+      2px 0 8px hsl(268 45% 65% / 0.10);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html:not(.dark) .glass-sidebar a.bg-sidebar-accent {
+    background: linear-gradient(135deg, hsl(274 50% 90%), hsl(289 42% 88%)) !important;
+    color: hsl(289 36% 24%) !important;
+    box-shadow:
+      0 0 0 1px hsl(274 40% 72% / 0.42) inset,
+      0 6px 16px -8px hsl(274 55% 56% / 0.42);
+  }
+
+  html:not(.dark) .glass-sidebar a.bg-sidebar-accent .sidebar-active-bar {
+    box-shadow:
+      0 0 6px hsl(274 62% 56% / 0.45),
+      0 0 12px hsl(274 56% 60% / 0.22);
+  }
+
+  /* ── 7. NAVBAR: tamed glass, soft gradient border, clean drop shadow ── */
+  html:not(.dark) .topbar-pill-border {
+    background: linear-gradient(
+      120deg,
+      hsl(26 90% 80%),
+      hsl(338 38% 68%),
+      hsl(289 38% 50%),
+      hsl(266 48% 42%)
+    );
+    box-shadow:
+      0 2px 8px hsl(268 50% 60% / 0.16),
+      0 8px 28px hsl(268 48% 58% / 0.22),
+      0 16px 44px -8px hsl(289 36% 36% / 0.14);
+  }
+
+  html:not(.dark) .topbar-pill-inner {
+    background: linear-gradient(135deg, hsl(0 0% 100% / 0.96), hsl(24 60% 98% / 0.93));
+    backdrop-filter: blur(44px) saturate(240%);
+    -webkit-backdrop-filter: blur(44px) saturate(240%);
+    box-shadow:
+      inset 0 1.5px 0 hsl(0 0% 100%),
+      inset 0 -1px 0 hsl(268 40% 80% / 0.10),
+      0 6px 16px hsl(268 50% 62% / 0.10);
+  }
+
+  /* ── 8. ICON GLOW FILTERS ── */
+  html:not(.dark) .icon-glow-purple {
+    filter: drop-shadow(0 0 5px hsl(289 40% 42% / 0.38))
+            drop-shadow(0 0 12px hsl(289 40% 50% / 0.22));
+  }
+  html:not(.dark) .icon-glow-orange {
+    filter: drop-shadow(0 0 5px hsl(22 88% 52% / 0.44))
+            drop-shadow(0 0 12px hsl(30 80% 58% / 0.24));
+  }
+  html:not(.dark) .icon-glow-blue {
+    filter: drop-shadow(0 0 5px hsl(210 90% 52% / 0.40))
+            drop-shadow(0 0 12px hsl(210 80% 60% / 0.22));
+  }
+  html:not(.dark) .icon-glow-green {
+    filter: drop-shadow(0 0 5px hsl(142 65% 42% / 0.38))
+            drop-shadow(0 0 12px hsl(142 58% 50% / 0.20));
+  }
+  html:not(.dark) .icon-glow-pink {
+    filter: drop-shadow(0 0 5px hsl(328 48% 52% / 0.40))
+            drop-shadow(0 0 12px hsl(328 42% 58% / 0.22));
+  }
+
+  /* ── 9. ICON HALO BACKGROUNDS ── */
+  html:not(.dark) .icon-halo-purple {
+    background: linear-gradient(135deg, hsl(268 55% 72% / 0.22), hsl(289 45% 76% / 0.10));
+    box-shadow: 0 0 18px hsl(268 55% 66% / 0.22);
+  }
+  html:not(.dark) .icon-halo-blue {
+    background: linear-gradient(135deg, hsl(210 90% 62% / 0.20), hsl(200 80% 68% / 0.09));
+    box-shadow: 0 0 18px hsl(210 84% 60% / 0.22);
+  }
+  html:not(.dark) .icon-halo-orange {
+    background: linear-gradient(135deg, hsl(28 92% 62% / 0.20), hsl(38 80% 68% / 0.09));
+    box-shadow: 0 0 18px hsl(28 88% 58% / 0.22);
+  }
+  html:not(.dark) .icon-halo-green {
+    background: linear-gradient(135deg, hsl(142 65% 50% / 0.18), hsl(142 58% 58% / 0.08));
+    box-shadow: 0 0 18px hsl(142 65% 48% / 0.20);
+  }
+  html:not(.dark) .icon-halo-pink {
+    background: linear-gradient(135deg, hsl(328 55% 62% / 0.20), hsl(328 46% 68% / 0.09));
+    box-shadow: 0 0 18px hsl(328 50% 58% / 0.22);
+  }
+
+  html:not(.dark) .dashboard-card-icon-shell {
+    background: linear-gradient(135deg, hsl(var(--admin-card-accent, 268 55% 58%) / 0.16), hsl(var(--admin-card-accent-secondary, 210 82% 62%) / 0.10));
+    box-shadow:
+      0 0 0 1px hsl(var(--admin-card-accent, 268 55% 58%) / 0.16),
+      0 8px 18px -10px hsl(var(--admin-card-accent, 268 55% 58%) / 0.40),
+      0 0 20px hsl(var(--admin-card-accent-secondary, 210 82% 62%) / 0.20);
+  }
+
+  /* ── 10. BUTTONS: tactile gradient + elevation ── */
+  html:not(.dark) button[class*="bg-primary"] {
+    background: linear-gradient(135deg, hsl(289 42% 30%), hsl(266 62% 22%)) !important;
+    box-shadow:
+      0 1px 3px  hsl(268 55% 40% / 0.20),
+      0 4px 18px hsl(289 45% 34% / 0.28) !important;
+  }
+
+  html:not(.dark) .glass-button {
+    background: linear-gradient(135deg, hsl(289 42% 32%), hsl(266 58% 26%));
+    box-shadow:
+      0 2px 8px hsl(268 55% 40% / 0.22),
+      0 8px 24px -8px hsl(289 45% 34% / 0.34),
+      inset 0 1px 0 hsl(0 0% 100% / 0.22);
+  }
+
+  html:not(.dark) .glass-button:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 12px hsl(268 55% 40% / 0.24),
+      0 14px 32px -10px hsl(289 45% 34% / 0.40),
+      inset 0 1px 0 hsl(0 0% 100% / 0.26);
+  }
+
+  html:not(.dark) button[class*="bg-primary"]:hover:not(:disabled) {
+    background: linear-gradient(135deg, hsl(289 46% 34%), hsl(266 60% 27%)) !important;
+    box-shadow:
+      0 2px 6px  hsl(268 55% 40% / 0.26),
+      0 8px 28px hsl(289 48% 36% / 0.34),
+      0 0 0 1px hsl(268 50% 60% / 0.12) inset !important;
+    transform: translateY(-1px) scale(1.015);
+  }
+
+  /* ── 11. GLOW UTILITIES (lavender-tinted in light mode) ── */
+  html:not(.dark) .glow-sm {
+    box-shadow: 0 0 14px hsl(268 55% 66% / 0.20), 0 4px 12px hsl(268 50% 62% / 0.12);
+  }
+  html:not(.dark) .glow-md {
+    box-shadow: 0 0 24px hsl(268 55% 64% / 0.26), 0 6px 20px hsl(268 50% 62% / 0.16);
+  }
+  html:not(.dark) .glow-primary {
+    box-shadow:
+      0 0 20px hsl(268 55% 62% / 0.28),
+      0 0 44px hsl(268 50% 66% / 0.16),
+      0 4px 16px hsl(289 40% 40% / 0.20);
+  }
+}
+
+/* Ensure light mode icons have the same styles as dark mode */
+html:not(.dark) .icon-glow-purple {
+  filter: drop-shadow(0 0 5px hsl(289 40% 42% / 0.38))
+          drop-shadow(0 0 12px hsl(289 40% 50% / 0.22));
+}
+
+html:not(.dark) .icon-glow-orange {
+  filter: drop-shadow(0 0 5px hsl(22 88% 52% / 0.44))
+          drop-shadow(0 0 12px hsl(30 80% 58% / 0.24));
+}
+
+html:not(.dark) .icon-glow-blue {
+  filter: drop-shadow(0 0 5px hsl(210 90% 52% / 0.40))
+          drop-shadow(0 0 12px hsl(210 80% 60% / 0.22));
+}
+
+html:not(.dark) .icon-glow-green {
+  filter: drop-shadow(0 0 5px hsl(142 65% 42% / 0.38))
+          drop-shadow(0 0 12px hsl(142 58% 50% / 0.20));
+}
+
+html:not(.dark) .icon-glow-pink {
+  filter: drop-shadow(0 0 5px hsl(328 48% 52% / 0.40))
+          drop-shadow(0 0 12px hsl(328 42% 58% / 0.22));
+}
+
+html:not(.dark) .icon-halo-purple {
+  background: hsl(268 55% 72%);
+  color: hsl(268 55% 62%);
+  border-radius: 50%;
+}
+html:not(.dark) .icon-halo-blue {
+  background: hsl(210 90% 62%);
+  color: hsl(210 90% 52%);
+  border-radius: 50%;
+}
+html:not(.dark) .icon-halo-orange {
+  background: hsl(28 92% 62%);
+  color: hsl(28 88% 58%);
+  border-radius: 50%;
+}
+html:not(.dark) .icon-halo-green {
+  background: hsl(142 65% 50%);
+  color: hsl(142 65% 48%);
+  border-radius: 50%;
+}
+html:not(.dark) .icon-halo-pink {
+  background: hsl(328 55% 62%);
+  color: hsl(328 48% 58%);
+  border-radius: 50%;
+}
+
+/* Enhance icon glow for dashboard icons in dark mode */
+.dark .dashboard-card-icon-shell {
+  background: none;
+  box-shadow: none;
+}
+.dark .glow-icon {
+  filter: drop-shadow(0 0 8px hsl(var(--primary) / 0.6)) drop-shadow(0 0 4px hsl(var(--primary) / 0.4));
 }

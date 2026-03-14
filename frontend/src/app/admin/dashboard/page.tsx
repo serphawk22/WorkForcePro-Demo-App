@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import AdminSnapshotCard from "@/components/dashboard/AdminSnapshotCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { 
   Users, UserCheck, UserX, Calendar, Clock, AlertCircle, 
-  ListTodo, Target, CalendarDays, Loader2, Award, Copy
+  ListTodo, Target, CalendarDays, Loader2, Award, Copy,
+  Video, Link2, Trash2, Send
 } from "lucide-react";
-import { fetchAdminDashboard, getTaskStats, AdminDashboardStats, TaskStats } from "@/lib/api";
+import { fetchAdminDashboard, getTaskStats, AdminDashboardStats, TaskStats, shareMeetingLink, getActiveMeeting, removeMeetingLink, TeamsMeeting } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -20,6 +21,22 @@ const priorityColors: Record<string, string> = {
   low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30 shadow-lg shadow-green-500/20",
 };
 
+type AdminCardAccentStyle = CSSProperties & {
+  "--admin-card-accent": string;
+  "--admin-card-accent-secondary": string;
+};
+
+const adminCardAccentStyles: Record<"primary" | "blue", AdminCardAccentStyle> = {
+  primary: {
+    "--admin-card-accent": "328 60% 60%",
+    "--admin-card-accent-secondary": "228 92% 66%",
+  },
+  blue: {
+    "--admin-card-accent": "217 91% 60%",
+    "--admin-card-accent-secondary": "191 91% 55%",
+  },
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const router = useRouter();
@@ -27,12 +44,20 @@ export default function AdminDashboard() {
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Teams meeting state
+  const [activeMeeting, setActiveMeeting] = useState<TeamsMeeting | null>(null);
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
+  const [isSharingMeeting, setIsSharingMeeting] = useState(false);
+  const [isRemovingMeeting, setIsRemovingMeeting] = useState(false);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dashboardResult, taskResult] = await Promise.all([
+      const [dashboardResult, taskResult, meetingResult] = await Promise.all([
         fetchAdminDashboard(),
-        getTaskStats()
+        getTaskStats(),
+        getActiveMeeting(),
       ]);
       
       if (dashboardResult.data) {
@@ -41,12 +66,51 @@ export default function AdminDashboard() {
       if (taskResult.data) {
         setTaskStats(taskResult.data);
       }
+      if (meetingResult.data !== undefined) {
+        setActiveMeeting(meetingResult.data);
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  const handleShareMeeting = async () => {
+    if (!meetingTitle.trim() || !meetingLink.trim()) {
+      toast.error("Please enter both a title and a meeting link.");
+      return;
+    }
+    setIsSharingMeeting(true);
+    try {
+      const result = await shareMeetingLink({ title: meetingTitle.trim(), meeting_link: meetingLink.trim() });
+      if (result.data) {
+        setActiveMeeting(result.data);
+        setMeetingTitle("");
+        setMeetingLink("");
+        toast.success("Teams meeting link shared with all employees!");
+      } else {
+        toast.error(result.error || "Failed to share meeting link.");
+      }
+    } finally {
+      setIsSharingMeeting(false);
+    }
+  };
+
+  const handleRemoveMeeting = async () => {
+    setIsRemovingMeeting(true);
+    try {
+      const result = await removeMeetingLink();
+      if (result.data) {
+        setActiveMeeting(null);
+        toast.success("Meeting link removed.");
+      } else {
+        toast.error(result.error || "Failed to remove meeting link.");
+      }
+    } finally {
+      setIsRemovingMeeting(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -187,10 +251,15 @@ export default function AdminDashboard() {
             {/* 🔷 2-COLUMN GRID */}
             <div className="space-y-6">
                 {/* Task Completion Overview */}
-                <div className="rounded-2xl glass-card glow-sm p-6">
+                <div
+                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm p-6"
+                  style={adminCardAccentStyles.primary}
+                >
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2">
-                      <Target className="h-5 w-5 text-primary" />
+                      <span className="admin-dashboard-card-icon">
+                        <Target className="h-5 w-5 text-primary" />
+                      </span>
                       <h3 className="font-bold text-foreground">Task Completion</h3>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
@@ -236,10 +305,15 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Upcoming Deadlines — real tasks */}
-                <div className="rounded-2xl glass-card glow-sm overflow-hidden">
+                <div
+                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm overflow-hidden"
+                  style={adminCardAccentStyles.blue}
+                >
                   <div className="bg-gradient-to-r from-primary-light/10 to-transparent p-5 border-b border-border/30">
                     <div className="flex items-center gap-2 mb-1">
-                      <Clock className="h-5 w-5 text-primary-light" />
+                      <span className="admin-dashboard-card-icon">
+                        <Clock className="h-5 w-5 text-primary-light" />
+                      </span>
                       <h3 className="font-bold text-foreground">Upcoming Deadlines</h3>
                     </div>
                     <p className="text-xs text-muted-foreground">Active projects nearest to due date</p>
@@ -299,11 +373,88 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* Teams Meeting Link */}
+                <div
+                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm p-6"
+                  style={adminCardAccentStyles.blue}
+                >
+                  <div className="flex items-center gap-2 mb-5">
+                    <span className="admin-dashboard-card-icon">
+                      <Video className="h-5 w-5 text-blue-400" />
+                    </span>
+                    <h3 className="font-bold text-foreground">Teams Meeting</h3>
+                  </div>
+
+                  {/* Active meeting banner */}
+                  {activeMeeting && (
+                    <div className="mb-4 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-blue-300 truncate">{activeMeeting.title}</p>
+                        <a
+                          href={activeMeeting.meeting_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
+                        >
+                          {activeMeeting.meeting_link}
+                        </a>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Shared by {activeMeeting.creator_name} · {new Date(activeMeeting.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleRemoveMeeting}
+                        disabled={isRemovingMeeting}
+                        className="shrink-0 p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors disabled:opacity-50"
+                        title="Remove meeting link"
+                      >
+                        {isRemovingMeeting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Share form */}
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Meeting title (e.g. Weekly Standup)"
+                      value={meetingTitle}
+                      onChange={(e) => setMeetingTitle(e.target.value)}
+                      className="w-full rounded-lg bg-secondary/40 border border-border/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    />
+                    <div className="flex gap-2">
+                      <div className="flex-1 flex items-center gap-2 rounded-lg bg-secondary/40 border border-border/60 px-3 py-2">
+                        <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <input
+                          type="url"
+                          placeholder="Paste Teams meeting link"
+                          value={meetingLink}
+                          onChange={(e) => setMeetingLink(e.target.value)}
+                          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        onClick={handleShareMeeting}
+                        disabled={isSharingMeeting || !meetingTitle.trim() || !meetingLink.trim()}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                      >
+                        {isSharingMeeting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        {activeMeeting ? "Update" : "Share"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Performance Score */}
-                <div className="rounded-2xl glass-card glow-primary p-6">
+                <div
+                  className="admin-dashboard-card group rounded-2xl glass-card glow-primary p-6"
+                  style={adminCardAccentStyles.primary}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
+                      <span className="admin-dashboard-card-icon">
+                        <Award className="h-5 w-5 text-primary" />
+                      </span>
                       <h3 className="font-bold text-foreground">Overall Performance</h3>
                     </div>
                   </div>

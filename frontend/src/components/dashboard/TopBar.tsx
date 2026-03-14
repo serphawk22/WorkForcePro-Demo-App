@@ -45,51 +45,56 @@ export default function TopBar() {
   };
 
   return (
-    <header className="flex items-center justify-between glass-nav px-6 py-3">
-      {/* Time & Date */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-foreground text-lg">{time}</span>
-        </div>
-        <span className="text-xs tracking-wide">{date}</span>
-      </div>
+    <div className="flex justify-center items-center px-4 pt-2.5 pb-1">
+      {/* Gradient border wrapper — centered pill */}
+      <div className="topbar-pill-border w-full max-w-[820px]">
+        <header className="topbar-pill-inner flex items-center justify-between px-6 py-3">
+          {/* Left: time + date */}
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-foreground text-sm tabular-nums tracking-tight">{time}</span>
+            <span className="hidden sm:block w-px h-3.5 bg-border/50" />
+            <span className="hidden sm:block text-[10px] tracking-widest text-muted-foreground font-medium">{date}</span>
+          </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        {mounted && (
-          <button
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            className="rounded-lg p-2 text-muted-foreground glass-light hover:text-foreground transition-colors"
-          >
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-        )}
-        <NotificationDropdown />
-        <button 
-          onClick={() => router.push("/profile")}
-          className="rounded-lg p-1.5 text-muted-foreground glass-light hover:text-foreground transition-colors"
-          title="Profile"
-        >
-          {getProfilePictureUrl() ? (
-            <img
-              src={getProfilePictureUrl()!}
-              alt={user?.name || "User"}
-              className="h-7 w-7 rounded-full object-cover"
-            />
-          ) : (
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold">
-              {user?.name?.[0] || <User size={18} />}
-            </div>
-          )}
-        </button>
-        <button 
-          onClick={logout}
-          className="rounded-lg p-2 text-muted-foreground glass-light hover:bg-destructive/10 hover:text-destructive transition-colors"
-          title="Logout"
-        >
-          <LogOut size={18} />
-        </button>
+          {/* Right: actions */}
+          <div className="flex items-center gap-0.5">
+            {mounted && (
+              <button
+                onClick={() => setTheme(isDark ? "light" : "dark")}
+                className="topbar-icon-btn"
+                title={isDark ? "Switch to light" : "Switch to dark"}
+              >
+                {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
+            )}
+            <NotificationDropdown />
+            <button
+              onClick={() => router.push("/profile")}
+              className="topbar-icon-btn"
+              title="Profile"
+            >
+              {getProfilePictureUrl() ? (
+                <img
+                  src={getProfilePictureUrl()!}
+                  alt={user?.name || "User"}
+                  className="h-6 w-6 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-semibold">
+                  {user?.name?.[0] || <User size={14} />}
+                </div>
+              )}
+            </button>
+            <button
+              onClick={logout}
+              className="topbar-icon-btn hover:!text-destructive hover:!bg-destructive/10"
+              title="Logout"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </header>
       </div>
-    </header>
+    </div>
   );
 }

@@ -412,6 +412,7 @@ class LeaveRequestWithUser(LeaveRequestRead):
     """Leave request with user info."""
     user_name: Optional[str] = None
     user_email: Optional[str] = None
+    user_profile_picture: Optional[str] = None
 
 
 # ==================== NOTIFICATION MODELS ====================
@@ -651,3 +652,34 @@ class PersonalProjectRead(SQLModel):
     title: str
     tag: Optional[str]
     created_at: datetime
+
+
+# ==================== TEAMS MEETING MODELS ====================
+
+class TeamsMeeting(SQLModel, table=True):
+    """Teams meeting link shared by admin for all employees."""
+    __tablename__ = "teams_meetings"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str = Field(max_length=200)
+    meeting_link: str = Field(max_length=1000)
+    created_by: int = Field(foreign_key="users.id")
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TeamsMeetingCreate(SQLModel):
+    title: str = Field(max_length=200)
+    meeting_link: str = Field(max_length=1000)
+
+
+class TeamsMeetingRead(SQLModel):
+    id: int
+    title: str
+    meeting_link: str
+    created_by: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    creator_name: Optional[str] = None

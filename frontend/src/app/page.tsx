@@ -13,7 +13,7 @@ export default function Home() {
     const token = localStorage.getItem("token");
     const role = localStorage.getItem("role");
     if (token && role) {
-      window.location.replace(role === "admin" ? "/admin/dashboard" : "/employee/dashboard");
+      window.location.replace(role === "admin" ? "/admin/dashboard" : "/employee-dashboard");
     }
   }, []);
 

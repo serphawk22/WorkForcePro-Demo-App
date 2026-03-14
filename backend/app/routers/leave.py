@@ -268,3 +268,50 @@ async def get_leave_stats(
         "approved": approved,
         "rejected": rejected
     }
+
+
+@router.get("/{leave_id}", response_model=LeaveRequestWithUser)
+async def get_leave_request_by_id(
+    leave_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a specific leave request by ID (owner or admin)."""
+    statement = select(LeaveRequest).where(LeaveRequest.id == leave_id)
+    leave_request = session.exec(statement).first()
+
+    if not leave_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Leave request not found"
+        )
+
+    # Only owner or admin may view
+    if current_user.role != UserRole.admin and leave_request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this request"
+        )
+
+    user_stmt = select(User).where(User.id == leave_request.user_id)
+    user = session.exec(user_stmt).first()
+
+    return LeaveRequestWithUser(
+        id=leave_request.id,
+        user_id=leave_request.user_id,
+        reason=leave_request.reason,
+        start_date=leave_request.start_date,
+        end_date=leave_request.end_date,
+        leave_type=leave_request.leave_type,
+        status=leave_request.status,
+        admin_comment=leave_request.admin_comment,
+        reviewed_by=leave_request.reviewed_by,
+        created_at=leave_request.created_at,
+        reviewed_at=leave_request.reviewed_at,
+        document_data=leave_request.document_data,
+        document_filename=leave_request.document_filename,
+        user_name=user.name if user else None,
+        user_email=user.email if user else None,
+        user_profile_picture=user.profile_picture if user else None,
+    )

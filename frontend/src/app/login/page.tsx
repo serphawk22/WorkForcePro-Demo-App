@@ -27,7 +27,7 @@ export default function LoginPage() {
       if (role === "admin") {
         window.location.href = "/admin/dashboard";
       } else {
-        window.location.href = "/employee/dashboard";
+        window.location.href = "/employee-dashboard";
       }
     }
   }, []);
@@ -134,7 +134,7 @@ export default function LoginPage() {
         window.location.href = "/admin/dashboard";
       } else {
         console.log("Redirecting to employee dashboard");
-        window.location.href = "/employee/dashboard";
+        window.location.href = "/employee-dashboard";
       }
       
     } catch (err: any) {

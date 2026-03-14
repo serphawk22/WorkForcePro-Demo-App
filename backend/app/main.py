@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams
 
 load_dotenv()
 
@@ -97,6 +97,16 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
         # Subtask parent_subtask_id column
         'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',
+        # Teams meeting table
+        '''CREATE TABLE IF NOT EXISTS teams_meetings (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(200) NOT NULL,
+            meeting_link VARCHAR(1000) NOT NULL,
+            created_by INTEGER REFERENCES users(id),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )''',
     ]
     for migration_sql in additional_migrations:
         try:
@@ -205,6 +215,7 @@ app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(myspace.router)
 app.include_router(chatbot.router)
+app.include_router(teams.router)
 
 
 @app.get("/")

@@ -59,7 +59,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       console.log(`[PROTECTED ROUTE] Role mismatch - User: ${userRole}, Allowed: ${allowedRoles.join(', ')}`);
       
       // Redirect to appropriate dashboard based on role
-      const targetPath = userRole === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+      const targetPath = userRole === "admin" ? "/admin/dashboard" : "/employee-dashboard";
       
       // Only redirect if not already on target path
       if (pathname !== targetPath) {

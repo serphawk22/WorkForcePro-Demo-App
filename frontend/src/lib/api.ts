@@ -152,6 +152,7 @@ export interface LeaveRequest {
   reviewed_at: string | null;
   user_name?: string;
   user_email?: string;
+  user_profile_picture?: string | null;
   document_data?: string | null;
   document_filename?: string | null;
 }
@@ -1012,6 +1013,12 @@ export async function getPendingLeaveRequests(): Promise<
   return apiFetch<LeaveRequest[]>("/leave/pending");
 }
 
+export async function getLeaveRequestById(
+  id: number
+): Promise<ApiResponse<LeaveRequest>> {
+  return apiFetch<LeaveRequest>(`/leave/${id}`);
+}
+
 /**
  * Review a leave request (admin only).
  */
@@ -1550,5 +1557,48 @@ export async function submitPersonalProject(data: {
 
 export async function getMyPersonalProjects(limit = 30): Promise<ApiResponse<PersonalProjectEntry[]>> {
   return apiFetch<PersonalProjectEntry[]>(`/my-space/personal-project/me?limit=${limit}`);
+}
+
+// ==================== TEAMS MEETINGS ====================
+
+export interface TeamsMeeting {
+  id: number;
+  title: string;
+  meeting_link: string;
+  created_by: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  creator_name: string | null;
+}
+
+/** Admin: share (create/replace) a Teams meeting link. */
+export async function shareMeetingLink(data: {
+  title: string;
+  meeting_link: string;
+}): Promise<ApiResponse<TeamsMeeting>> {
+  clearCache("teams");
+  return apiFetch<TeamsMeeting>("/teams/meeting", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** All users: get the active Teams meeting link. */
+export async function getActiveMeeting(): Promise<ApiResponse<TeamsMeeting | null>> {
+  const cacheKey = "teams-meeting";
+  const cached = getCached<TeamsMeeting | null>(cacheKey);
+  if (cached !== null) return { data: cached };
+  const result = await apiFetch<TeamsMeeting | null>("/teams/meeting");
+  if (result.data !== undefined) {
+    setCached(cacheKey, result.data);
+  }
+  return result;
+}
+
+/** Admin: remove the active Teams meeting link. */
+export async function removeMeetingLink(): Promise<ApiResponse<{ message: string }>> {
+  clearCache("teams");
+  return apiFetch<{ message: string }>("/teams/meeting", { method: "DELETE" });
 }
 
