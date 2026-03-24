@@ -82,7 +82,7 @@ async def get_all_employees(
 ):
     """
     Get all employees (admin only).
-    
+
     Returns a list of all users with role='employee'.
     Requires admin authentication.
     """

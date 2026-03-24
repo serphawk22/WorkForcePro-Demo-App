@@ -42,7 +42,7 @@ async def create_subtask(
     
     Rules:
     - Admin can create subtask on any task
-    - Employee can only create subtask on tasks assigned to them
+    - Employee can create subtask on any task (for better collaboration)
     - Cannot create subtask on approved tasks
     """
     # Verify parent task exists
@@ -55,12 +55,8 @@ async def create_subtask(
             detail="Parent task not found"
         )
     
-    # Check permission: must be assigned to task or be admin
-    if current_user.role != UserRole.admin and task.assigned_to != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only create subtasks on tasks assigned to you"
-        )
+    # Permission: anyone can create subtasks as long as they are authenticated
+    # (Removed restriction: must be assigned to task or be admin)
     
     # Prevent creating subtask on approved tasks
     if task.status == TaskStatus.approved:
@@ -72,13 +68,6 @@ async def create_subtask(
     # Verify assignee exists if provided
     assignee = None
     if subtask_data.assigned_to:
-        # Prevent assigning to self
-        if subtask_data.assigned_to == current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot assign subtask to yourself"
-            )
-        
         assignee_stmt = select(User).where(User.id == subtask_data.assigned_to)
         assignee = session.exec(assignee_stmt).first()
         if not assignee:
@@ -95,6 +84,8 @@ async def create_subtask(
         description=subtask_data.description,
         assigned_to=subtask_data.assigned_to,
         assigned_by=current_user.id,
+        priority=subtask_data.priority,
+        due_date=subtask_data.due_date,
         public_id=generate_public_id(session, Subtask)
     )
     
@@ -145,12 +136,8 @@ async def get_task_subtasks(
     
     result = []
     for subtask in subtasks:
-        # Check permission
-        if current_user.role != UserRole.admin:
-            # Allow if user is parent task assignee or subtask assignee
-            if task.assigned_to != current_user.id and subtask.assigned_to != current_user.id:
-                continue
-        
+        # All authenticated users can see all subtasks — universal visibility across dashboards.
+
         assignee = None
         if subtask.assigned_to:
             assignee_stmt = select(User).where(User.id == subtask.assigned_to)
@@ -168,6 +155,8 @@ async def get_task_subtasks(
             parent_subtask_id=subtask.parent_subtask_id,
             title=subtask.title,
             description=subtask.description,
+            priority=subtask.priority,
+            due_date=subtask.due_date,
             assigned_to=subtask.assigned_to,
             assigned_by=subtask.assigned_by,
             status=subtask.status,
@@ -232,6 +221,8 @@ async def get_task_subtasks_hierarchy(
             parent_subtask_id=subtask.parent_subtask_id,
             title=subtask.title,
             description=subtask.description,
+            priority=subtask.priority,
+            due_date=subtask.due_date,
             assigned_to=subtask.assigned_to,
             assigned_by=subtask.assigned_by,
             status=subtask.status,
@@ -357,6 +348,9 @@ async def update_subtask(
                 detail="You can only update subtasks on your tasks"
             )
     
+    # Track original assignee for notification logic
+    original_assignee_id = subtask.assigned_to
+
     # Update fields
     update_data = subtask_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -366,7 +360,19 @@ async def update_subtask(
     session.add(subtask)
     session.commit()
     session.refresh(subtask)
+
+    # If assignee changed, send notification to the new assignee
+    if subtask.assigned_to and subtask.assigned_to != original_assignee_id:
+        create_notification(
+            session=session,
+            user_id=subtask.assigned_to,
+            type=NotificationType.SUBTASK_ASSIGNED,
+            message=f"New subtask assigned: '{subtask.title}' (Reassigned by {current_user.name})",
+            task_id=subtask.parent_task_id
+        )
     
+    # Reload and refresh to ensure all fields are correctly populated for response
+    session.refresh(subtask)
     return subtask
 
 

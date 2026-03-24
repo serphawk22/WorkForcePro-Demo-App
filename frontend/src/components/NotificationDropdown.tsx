@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/api";
 
 export function NotificationDropdown() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -140,6 +142,14 @@ export function NotificationDropdown() {
                   !notification.is_read ? "bg-muted/50" : ""
                 }`}
                 onClick={() => {
+                  if (notification.type === "weekly_progress_comment") {
+                    if (!notification.is_read) {
+                      handleMarkAsRead(notification.id);
+                    }
+                    setIsOpen(false);
+                    router.push("/weekly-progress");
+                    return;
+                  }
                   if (!notification.is_read) {
                     handleMarkAsRead(notification.id);
                   }

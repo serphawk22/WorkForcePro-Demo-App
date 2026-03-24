@@ -6,12 +6,12 @@ import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Plus, Search, Circle, Loader2, X, CheckCircle2, Clock, AlertCircle,
-  Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy,
+  Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy, Repeat,
 } from "lucide-react";
 import {
-  getAllTasks, getMyTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
-  deleteTask, fetchEmployees, getAllEmployees, createSubtask, getTaskSubtasks,
-  updateSubtaskStatus, deleteSubtask, searchByPublicId,
+  getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
+  deleteTask, getAssignableUsers, createSubtask, getTaskSubtasks,
+  updateSubtaskStatus, deleteSubtask, searchByPublicId, updateSubtask,
   Task, TaskCreate, Subtask, SubtaskCreate, User,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -31,6 +31,11 @@ const statusColors: Record<string, string> = {
   submitted: "text-yellow-400", reviewing: "text-amber-400",
   approved: "text-green-400", rejected: "text-red-400",
 };
+
+function assigneeOptionLabel(u: User) {
+  const roleLabel = u.role === "admin" ? "Admin" : "Employee";
+  return `${u.name} (${roleLabel})`;
+}
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -57,7 +62,26 @@ export default function ProjectsPage() {
   const [newTask, setNewTask] = useState<TaskCreate>({
     title: "", description: "", priority: "medium",
     assigned_to: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
+    is_recurring: false,
+    recurrence_type: "weekly",
+    recurrence_interval: 1,
+    repeat_days: [],
+    recurrence_start_date: undefined,
+    recurrence_end_date: undefined,
+    monthly_day: undefined,
   });
+
+  const WEEKDAY_OPTS = [
+    { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
+    { v: 4, l: "Fri" }, { v: 5, l: "Sat" }, { v: 6, l: "Sun" },
+  ];
+
+  const toggleRepeatDay = (d: number) => {
+    const cur = new Set(newTask.repeat_days || []);
+    if (cur.has(d)) cur.delete(d);
+    else cur.add(d);
+    setNewTask({ ...newTask, repeat_days: Array.from(cur).sort((a, b) => a - b) });
+  };
   const [newSubtask, setNewSubtask] = useState<SubtaskCreate>({
     title: "", description: "", assigned_to: undefined,
   });
@@ -80,28 +104,77 @@ export default function ProjectsPage() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [searchQuery, router]);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    const tasksResult = isAdmin ? await getAllTasks(statusFilter || undefined) : await getMyTasks(statusFilter || undefined);
+  // Track which task rows are currently loading their subtasks
+  const [loadingSubtasksFor, setLoadingSubtasksFor] = useState<Set<number>>(new Set());
+
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
+    const [tasksResult, empResult] = await Promise.all([
+      getAllTasks(statusFilter || undefined),   // all users see all tasks
+      getAssignableUsers(),
+    ]);
     if (tasksResult.data) setTasks(tasksResult.data);
-    const empResult = isAdmin ? await fetchEmployees() : await getAllEmployees();
     if (empResult.data) setEmployees(empResult.data);
-    setIsLoading(false);
-  }, [isAdmin, statusFilter]);
+    if (!silent) setIsLoading(false);
+    // Pre-fetch subtasks for every task so they're ready on expand (and the count badge shows)
+    if (tasksResult.data) {
+      tasksResult.data.forEach(task => loadSubtasksQuietly(task.id));
+    }
+  // loadSubtasksQuietly is stable (defined below with useCallback + no deps)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Keep a stable ref to expandedTasks so the event listener always sees the latest value
+  const expandedTasksRef = React.useRef(expandedTasks);
+  useEffect(() => { expandedTasksRef.current = expandedTasks; }, [expandedTasks]);
+
+  // Silent background fetch — no spinner, just updates state
+  const loadSubtasksQuietly = useCallback(async (taskId: number) => {
+    const result = await getTaskSubtasks(taskId);
+    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
+  }, []);
+
+  // Visible fetch — shows spinner inside the expansion panel
+  const loadSubtasks = useCallback(async (taskId: number) => {
+    setLoadingSubtasksFor((prev) => {
+      const next = new Set(prev);
+      next.add(taskId);
+      return next;
+    });
+    const result = await getTaskSubtasks(taskId);
+    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
+    setLoadingSubtasksFor(prev => { const next = new Set(prev); next.delete(taskId); return next; });
+  }, []);
+
+  useEffect(() => {
+    const handleRefresh = async () => {
+      // Silent reload — keeps the table visible so expandedTasks state stays intact
+      await loadData(true);
+      // Reload subtasks for every currently expanded task (no spinner — already visible)
+      expandedTasksRef.current.forEach((taskId) => loadSubtasksQuietly(taskId));
+    };
+    window.addEventListener("refresh-tasks", handleRefresh);
+    return () => window.removeEventListener("refresh-tasks", handleRefresh);
+  }, [loadData, loadSubtasksQuietly]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim()) { toast.error("Task title is required"); return; }
-    if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to an employee"); return; }
+    if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to a team member"); return; }
     setIsCreating(true);
     const result = await createTask(newTask);
     if (result.error) toast.error(result.error);
     else {
       toast.success("Project created!");
       setShowCreateModal(false);
-      setNewTask({ title: "", description: "", priority: "medium", assigned_to: undefined, due_date: undefined });
+      setNewTask({
+        title: "", description: "", priority: "medium",
+        assigned_to: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
+        is_recurring: false, recurrence_type: "weekly", recurrence_interval: 1, repeat_days: [],
+        recurrence_start_date: undefined, recurrence_end_date: undefined, monthly_day: undefined,
+      });
       loadData();
     }
     setIsCreating(false);
@@ -119,6 +192,18 @@ export default function ProjectsPage() {
     const result = await updateTaskStatus(taskId, backendStatus as any);
     if (result.error) toast.error(result.error);
     else { toast.success(selectedStatus === "done" ? "Task submitted for review!" : "Status updated!"); loadData(); }
+  };
+
+  const handleAssigneeChange = async (taskId: number, userId: number) => {
+    const result = await updateTask(taskId, { assigned_to: userId });
+    if (result.error) toast.error(result.error);
+    else { toast.success("Assignee updated!"); loadData(); }
+  };
+
+  const handleSubtaskAssigneeChange = async (subtaskId: number, taskId: number, userId: number) => {
+    const result = await updateSubtask(subtaskId, { assigned_to: userId });
+    if (result.error) toast.error(result.error);
+    else { toast.success("Subtask assignee updated!"); await loadSubtasks(taskId); }
   };
 
   const handleDeleteTask = async (taskId: number) => {
@@ -146,29 +231,46 @@ export default function ProjectsPage() {
 
   const toggleExpandTask = async (taskId: number) => {
     const newExpanded = new Set(expandedTasks);
-    if (newExpanded.has(taskId)) { newExpanded.delete(taskId); }
-    else { newExpanded.add(taskId); if (!taskSubtasks[taskId]) await loadSubtasks(taskId); }
+    if (newExpanded.has(taskId)) {
+      newExpanded.delete(taskId);
+    } else {
+      newExpanded.add(taskId);
+      await loadSubtasks(taskId); // Always reload — ensures newly created subtasks are shown
+    }
     setExpandedTasks(newExpanded);
-  };
-
-  const loadSubtasks = async (taskId: number) => {
-    const result = await getTaskSubtasks(taskId);
-    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
   };
 
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubtask.title.trim()) { toast.error("Subtask title is required"); return; }
-    if (!selectedTaskForSubtask) { toast.error("No task selected"); return; }
+    // Capture immediately so closures stay valid after state resets
+    const taskId = selectedTaskForSubtask;
+    if (!taskId) { toast.error("No task selected"); return; }
     setIsCreatingSubtask(true);
-    const result = await createSubtask(selectedTaskForSubtask, newSubtask);
-    if (result.error) toast.error(result.error);
-    else {
+    const result = await createSubtask(taskId, newSubtask);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
       toast.success("Subtask created!");
+      // Optimistically add the returned subtask immediately — no need to wait for a reload
+      if (result.data) {
+        setTaskSubtasks(prev => ({
+          ...prev,
+          [taskId]: [...(prev[taskId] ?? []), result.data!],
+        }));
+      }
+      // Ensure the task row is expanded so the subtask is visible
+      setExpandedTasks((prev) => {
+        const next = new Set(prev);
+        next.add(taskId);
+        return next;
+      });
+      // Reset modal state
       setShowSubtaskModal(false);
       setNewSubtask({ title: "", description: "", assigned_to: undefined });
       setSelectedTaskForSubtask(null);
-      await loadSubtasks(selectedTaskForSubtask);
+      // Sync with server in the background to get latest data (assignee names, etc.)
+      loadSubtasks(taskId);
     }
     setIsCreatingSubtask(false);
   };
@@ -264,7 +366,7 @@ export default function ProjectsPage() {
                   <th className="py-3 text-left font-semibold">Status</th>
                   <th className="py-3 text-left font-semibold">Start Date</th>
                   <th className="py-3 text-left font-semibold">Due Date</th>
-                  {isAdmin && <th className="py-3 text-left font-semibold">Assignee</th>}
+                  <th className="py-3 text-left font-semibold">Assignee</th>
                   <th className="py-3 text-left font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -299,6 +401,11 @@ export default function ProjectsPage() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-card-foreground">{task.title}</span>
+                            {task.is_recurring && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400" title="Recurring task">
+                                <Repeat size={10} /> Recurring
+                              </span>
+                            )}
                             {(isAdmin || task.assigned_to === user?.id) && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setSelectedTaskForSubtask(task.id); setShowSubtaskModal(true); }}
@@ -370,20 +477,33 @@ export default function ProjectsPage() {
                       <td className="py-3.5 text-card-foreground text-xs font-medium">
                         {task.due_date ? new Date(task.due_date).toLocaleDateString("en-IN") : "--"}
                       </td>
-                      {isAdmin && (
-                        <td className="py-3.5">
-                          {task.assignee_name ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold shadow-sm" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
-                                {task.assignee_name.split(" ").map(n => n[0]).join("")}
-                              </div>
-                              <span className="text-sm font-medium text-card-foreground">{task.assignee_name}</span>
-                            </div>
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
+                            {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
+                          </div>
+                          {isAdmin ? (
+                            <select
+                              value={task.assigned_to || ""}
+                              onChange={(e) => handleAssigneeChange(task.id, Number(e.target.value))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-sm font-medium text-card-foreground bg-transparent border-none focus:outline-none cursor-pointer hover:underline underline-offset-4"
+                            >
+                              <option value="">Unassigned</option>
+                              {employees.map(emp => (
+                                <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>
+                              ))}
+                            </select>
                           ) : (
-                            <span className="inline-flex items-center rounded-full bg-gray-500/10 px-2.5 py-1 text-xs font-medium text-gray-500">Unassigned</span>
+                            <span className="text-sm font-medium text-card-foreground">
+                              {task.assignee_name || "Unassigned"}
+                              {task.assigned_to === user?.id && (
+                                <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
+                              )}
+                            </span>
                           )}
-                        </td>
-                      )}
+                        </div>
+                      </td>
                       <td className="py-3.5">
                         {isAdmin && (
                           <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
@@ -394,65 +514,145 @@ export default function ProjectsPage() {
                     {/* Subtasks expansion */}
                     {expandedTasks.has(task.id) && (
                       <tr>
-                        <td colSpan={isAdmin ? 9 : 8} className="py-0 px-0" style={{ background: "hsl(5 38% 79% / 0.1)" }}>
+                        <td colSpan={9} className="py-0 px-0 bg-primary/[0.04] dark:bg-white/[0.02]">
                           <div className="px-12 py-4">
-                            {taskSubtasks[task.id]?.length > 0 ? (
+                            {loadingSubtasksFor.has(task.id) ? (
+                              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                                <Loader2 size={13} className="animate-spin" /> Loading subtasks…
+                              </div>
+                            ) : taskSubtasks[task.id]?.length > 0 ? (
                               <div className="space-y-2.5">
                                 {taskSubtasks[task.id].map((subtask) => (
-                                  <div key={subtask.id} className="relative rounded-xl p-4 flex items-center justify-between transition-all duration-200 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:rounded-l-xl shadow-sm" style={{ background: "rgba(255,255,255,0.6)", border: "1px solid hsl(5 38% 79% / 0.4)" }}>
-                                    <div className="flex-1 ml-2">
-                                      <div className="flex items-center gap-2">
-                                        <ListTree size={14} style={{ color: "#522B5B" }} />
+                                  <div
+                                    key={subtask.id}
+                                    className="relative rounded-xl p-4 flex items-center justify-between transition-all duration-200 shadow-sm bg-card border border-border hover:border-primary/30"
+                                  >
+                                    {/* Left accent stripe coloured by status */}
+                                    <span className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
+                                      subtask.status === "completed" || subtask.status === "approved" ? "bg-green-500" :
+                                      subtask.status === "in_progress" ? "bg-blue-500" :
+                                      subtask.status === "reviewing" ? "bg-amber-500" :
+                                      subtask.status === "rejected" ? "bg-red-500" :
+                                      "bg-primary/40"
+                                    }`} />
+
+                                    <div className="flex-1 ml-3">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <ListTree size={14} className="text-primary shrink-0" />
                                         {subtask.public_id && (
                                           <>
-                                            <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded select-all tracking-wider" style={{ background: "hsl(289 36% 26% / 0.1)", color: "#522B5B" }}>
+                                            <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded select-all tracking-wider bg-primary/10 text-primary border border-primary/20">
                                               {subtask.public_id}
                                             </span>
-                                            <button onClick={(e) => handleCopyRefId(e, subtask.public_id)} className="text-muted-foreground hover:text-purple-500 transition-colors">
+                                            <button onClick={(e) => handleCopyRefId(e, subtask.public_id)} className="text-muted-foreground hover:text-primary transition-colors">
                                               <Copy size={10} />
                                             </button>
                                           </>
                                         )}
                                         <span className="text-sm font-medium text-card-foreground">{subtask.title}</span>
                                       </div>
-                                      {subtask.assignee_name && (
+
+                                      {/* Assignee row */}
+                                      {(isAdmin || task.assigned_to === user?.id) ? (
                                         <div className="flex items-center gap-2 mt-2 ml-6">
-                                          <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B" }}>
+                                          <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold bg-primary/15 text-primary border border-primary/20">
+                                            {subtask.assignee_name ? subtask.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
+                                          </div>
+                                          <select
+                                            value={subtask.assigned_to || ""}
+                                            onChange={(e) => handleSubtaskAssigneeChange(subtask.id, task.id, Number(e.target.value))}
+                                            className="text-xs font-medium text-muted-foreground bg-transparent border-none focus:outline-none cursor-pointer hover:underline underline-offset-2"
+                                          >
+                                            <option value="">Unassigned</option>
+                                            {employees.map(emp => (
+                                              <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      ) : subtask.assignee_name && (
+                                        <div className="flex items-center gap-2 mt-2 ml-6">
+                                          <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold bg-primary/15 text-primary border border-primary/20">
                                             {subtask.assignee_name.split(" ").map(n => n[0]).join("")}
                                           </div>
                                           <span className="text-xs font-medium text-muted-foreground">{subtask.assignee_name}</span>
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-3">
+
+                                    <div className="flex items-center gap-3 shrink-0">
+                                      {/* ── Status control — role-split ── */}
                                       {isAdmin ? (
-                                        <select value={subtask.status} onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)} className="text-xs rounded-lg px-3 py-1.5 font-medium focus:outline-none" style={{ border: "1px solid #DFB6B2", background: "rgba(255,255,255,0.7)" }}>
-                                          <option value="reviewing">Reviewing</option>
-                                          <option value="approved">Approved</option>
-                                          <option value="rejected">Rejected</option>
-                                        </select>
+                                        // Workflow: todo/in_progress → read-only (not ready); completed → admin can review; reviewing/approved/rejected → admin can update
+                                        subtask.status === "todo" || subtask.status === "in_progress" ? (
+                                          // Not ready for review — show status only
+                                          <span className={`text-xs rounded-lg px-3 py-1.5 font-semibold border ${
+                                            subtask.status === "in_progress"
+                                              ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
+                                              : "bg-muted border-border text-muted-foreground"
+                                          }`}>
+                                            {subtask.status === "in_progress" ? "In Progress" : "To Do"}
+                                          </span>
+                                        ) : subtask.status === "completed" ? (
+                                          // Employee completed — admin can now start review
+                                          <select
+                                            defaultValue=""
+                                            onChange={(e) => { if (e.target.value) handleSubtaskStatusChange(subtask.id, task.id, e.target.value); }}
+                                            className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-400 focus:outline-none focus:ring-1 focus:ring-green-500/40 cursor-pointer"
+                                          >
+                                            <option value="" disabled>Completed — Review…</option>
+                                            <option value="reviewing">Reviewing</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                          </select>
+                                        ) : (
+                                          // Already in admin phase — can update freely
+                                          <select
+                                            value={subtask.status}
+                                            onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
+                                            className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
+                                          >
+                                            <option value="reviewing">Reviewing</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                          </select>
+                                        )
                                       ) : (
-                                        <select value={subtask.status} onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)} disabled={subtask.assigned_to !== user?.id} className="text-xs rounded-lg px-3 py-1.5 font-medium focus:outline-none disabled:opacity-50" style={{ border: "1px solid #DFB6B2", background: "rgba(255,255,255,0.7)" }}>
-                                          {["reviewing","approved","rejected"].includes(subtask.status) ? (
-                                            <option value={subtask.status}>{subtask.status}</option>
-                                          ) : (
-                                            <>
-                                              <option value="todo">To Do</option>
-                                              <option value="in_progress">In Progress</option>
-                                              <option value="completed">Completed</option>
-                                            </>
-                                          )}
-                                        </select>
+                                        // Employee sees admin-phase status as read-only, otherwise picks their 3 options
+                                        ["reviewing","approved","rejected"].includes(subtask.status) ? (
+                                          <span className={`text-xs rounded-lg px-3 py-1.5 font-semibold border ${
+                                            subtask.status === "approved" ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400" :
+                                            subtask.status === "rejected" ? "bg-red-500/10 border-red-500/30 text-red-500" :
+                                            "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                          }`}>
+                                            {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
+                                          </span>
+                                        ) : (
+                                          <select
+                                            value={subtask.status}
+                                            onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
+                                            disabled={subtask.assigned_to !== user?.id}
+                                            className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            <option value="todo">To Do</option>
+                                            <option value="in_progress">In Progress</option>
+                                            <option value="completed">Completed</option>
+                                          </select>
+                                        )
                                       )}
                                       {(isAdmin || task.assigned_to === user?.id) && (
-                                        <button onClick={() => handleDeleteSubtask(subtask.id, task.id)} className="text-red-500 hover:text-red-600 text-xs font-medium">Delete</button>
+                                        <button
+                                          onClick={() => handleDeleteSubtask(subtask.id, task.id)}
+                                          className="text-xs font-medium text-red-500 hover:text-red-400 border border-red-500/30 hover:border-red-400/50 rounded-lg px-2.5 py-1.5 transition-colors"
+                                        >
+                                          Delete
+                                        </button>
                                       )}
                                     </div>
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-center text-muted-foreground text-xs py-4">No subtasks yet. Click &ldquo;Subtask&rdquo; to create one.</p>
+                              <p className="text-center text-muted-foreground text-xs py-4">No subtasks yet. Click &ldquo;+&rdquo; next to the task name to create one.</p>
                             )}
                           </div>
                         </td>
@@ -462,7 +662,7 @@ export default function ProjectsPage() {
                 ))}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={isAdmin ? 9 : 8} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-10 text-center text-muted-foreground">
                       {searchQuery ? "No projects match your search" : "No projects yet"}
                     </td>
                   </tr>
@@ -476,7 +676,7 @@ export default function ProjectsPage() {
       {/* ── Create Project Modal ── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl bg-card border border-border">
+          <div className="rounded-2xl p-6 w-full max-w-lg mx-4 shadow-2xl bg-card border border-border max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 Create New Project
@@ -514,9 +714,107 @@ export default function ProjectsPage() {
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
                   <select value={newTask.assigned_to || ""} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
-                    <option value="" disabled>Select employee</option>
-                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                    <option value="" disabled>Select team member</option>
+                    {employees.map(emp => <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>)}
                   </select>
+                </div>
+              )}
+              {isAdmin && (
+                <div className="rounded-xl border border-border/80 bg-primary/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!newTask.is_recurring}
+                      onChange={e => setNewTask({ ...newTask, is_recurring: e.target.checked })}
+                      className="rounded border-border"
+                    />
+                    <Repeat size={16} className="text-amber-500" />
+                    Repeat task (recurring)
+                  </label>
+                  {newTask.is_recurring && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Frequency</label>
+                          <select
+                            value={newTask.recurrence_type || "weekly"}
+                            onChange={e => setNewTask({ ...newTask, recurrence_type: e.target.value as TaskCreate["recurrence_type"] })}
+                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                          >
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Every (interval)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={52}
+                            value={newTask.recurrence_interval || 1}
+                            onChange={e => setNewTask({ ...newTask, recurrence_interval: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                          />
+                        </div>
+                      </div>
+                      {newTask.recurrence_type === "weekly" && (
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-2">On weekdays</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {WEEKDAY_OPTS.map(({ v, l }) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => toggleRepeatDay(v)}
+                                className={`px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                                  (newTask.repeat_days || []).includes(v)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background border-border text-muted-foreground hover:border-primary/40"
+                                }`}
+                              >
+                                {l}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {newTask.recurrence_type === "monthly" && (
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Day of month (1–31)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={31}
+                            value={newTask.monthly_day ?? ""}
+                            placeholder="e.g. 15"
+                            onChange={e => setNewTask({ ...newTask, monthly_day: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                          />
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Series start</label>
+                          <input
+                            type="date"
+                            value={newTask.recurrence_start_date || newTask.due_date || ""}
+                            onChange={e => setNewTask({ ...newTask, recurrence_start_date: e.target.value || undefined })}
+                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Series end (optional)</label>
+                          <input
+                            type="date"
+                            value={newTask.recurrence_end_date || ""}
+                            onChange={e => setNewTask({ ...newTask, recurrence_end_date: e.target.value || undefined })}
+                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
@@ -552,8 +850,8 @@ export default function ProjectsPage() {
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
                 <select value={newSubtask.assigned_to || ""} onChange={e => setNewSubtask({ ...newSubtask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
-                  <option value="">Select employee</option>
-                  {employees.filter(e => e.id !== user?.id).map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                  <option value="">Select team member</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>)}
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">

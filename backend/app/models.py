@@ -4,6 +4,7 @@ Database models using SQLModel.
 from datetime import datetime, timezone
 from datetime import date as DateType
 from typing import Optional, List
+from sqlalchemy import Column, Text
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 from pydantic import BaseModel
@@ -33,6 +34,20 @@ class TaskPriority(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
+
+
+class RecurrenceType(str, Enum):
+    """How a task repeats."""
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+
+
+class TaskInstanceStatus(str, Enum):
+    """Per-occurrence status for recurring tasks."""
+    todo = "todo"
+    in_progress = "in_progress"
+    completed = "completed"
 
 
 class SubtaskStatus(str, Enum):
@@ -71,6 +86,7 @@ class NotificationType(str, Enum):
     NEW_REGISTRATION = "new_registration"
     USER_APPROVED = "user_approved"
     USER_REJECTED = "user_rejected"
+    WEEKLY_PROGRESS_COMMENT = "weekly_progress_comment"
 
 
 # ==================== USER MODELS ====================
@@ -221,6 +237,14 @@ class Task(TaskBase, table=True):
     start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))  # Auto-recorded start date
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Recurring task rule (Jira-style template; occurrences live in task_instances)
+    is_recurring: bool = Field(default=False)
+    recurrence_type: Optional[str] = Field(default=None, max_length=20)  # daily | weekly | monthly
+    recurrence_interval: int = Field(default=1, ge=1)  # every N days/weeks/months
+    repeat_days: Optional[str] = Field(default=None, max_length=64)  # JSON array of weekday 0=Mon..6=Sun
+    recurrence_start_date: Optional[DateType] = Field(default=None)
+    recurrence_end_date: Optional[DateType] = Field(default=None)
+    monthly_day: Optional[int] = Field(default=None, ge=1, le=31)  # for monthly: day-of-month
 
 
 class TaskCreate(TaskBase):
@@ -228,6 +252,14 @@ class TaskCreate(TaskBase):
     assigned_to: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
+    # Recurrence (optional)
+    is_recurring: bool = False
+    recurrence_type: Optional[str] = None  # daily | weekly | monthly
+    recurrence_interval: int = 1
+    repeat_days: Optional[List[int]] = None  # weekdays 0=Mon .. 6=Sun for weekly
+    recurrence_start_date: Optional[DateType] = None
+    recurrence_end_date: Optional[DateType] = None
+    monthly_day: Optional[int] = None
 
 
 class TaskUpdate(SQLModel):
@@ -237,8 +269,16 @@ class TaskUpdate(SQLModel):
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
+    assigned_to: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    recurrence_type: Optional[str] = None
+    recurrence_interval: Optional[int] = None
+    repeat_days: Optional[List[int]] = None
+    recurrence_start_date: Optional[DateType] = None
+    recurrence_end_date: Optional[DateType] = None
+    monthly_day: Optional[int] = None
 
 
 class TaskRead(TaskBase):
@@ -254,6 +294,13 @@ class TaskRead(TaskBase):
     start_date: datetime
     created_at: datetime
     updated_at: datetime
+    is_recurring: bool = False
+    recurrence_type: Optional[str] = None
+    recurrence_interval: int = 1
+    repeat_days: Optional[str] = None
+    recurrence_start_date: Optional[DateType] = None
+    recurrence_end_date: Optional[DateType] = None
+    monthly_day: Optional[int] = None
 
 
 class TaskWithAssignee(TaskRead):
@@ -262,6 +309,35 @@ class TaskWithAssignee(TaskRead):
     assignee_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
     progress: Optional[int] = None  # Task completion progress (0-100)
+
+
+class TaskInstance(SQLModel, table=True):
+    """Single occurrence of a recurring parent task."""
+    __tablename__ = "task_instances"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="tasks.id", index=True)
+    instance_date: DateType = Field(index=True)
+    status: TaskInstanceStatus = Field(default=TaskInstanceStatus.todo)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TaskInstanceRead(SQLModel):
+    """API: one instance row."""
+    id: int
+    task_id: int
+    instance_date: DateType
+    status: TaskInstanceStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskInstanceWithTask(TaskInstanceRead):
+    """Instance with parent task title / ref for dashboards."""
+    task_title: Optional[str] = None
+    public_id: Optional[str] = None
+    priority: Optional[TaskPriority] = None
 
 
 # ==================== TASK COMMENT MODELS ====================
@@ -315,6 +391,8 @@ class Subtask(SQLModel, table=True):
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id", index=True)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    due_date: Optional[DateType] = None
     status: SubtaskStatus = Field(default=SubtaskStatus.todo)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -325,6 +403,8 @@ class SubtaskCreate(SQLModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: Optional[int] = None
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    due_date: Optional[DateType] = None
     parent_subtask_id: Optional[int] = None  # For creating nested subtasks
 
 
@@ -333,6 +413,8 @@ class SubtaskUpdate(SQLModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = None
     status: Optional[SubtaskStatus] = None
+    priority: Optional[TaskPriority] = None
+    due_date: Optional[DateType] = None
     assigned_to: Optional[int] = None
 
 
@@ -344,6 +426,8 @@ class SubtaskRead(SQLModel):
     parent_subtask_id: Optional[int]
     title: str
     description: Optional[str]
+    priority: TaskPriority
+    due_date: Optional[DateType]
     assigned_to: Optional[int]
     assigned_by: int
     status: SubtaskStatus
@@ -426,6 +510,7 @@ class Notification(SQLModel, table=True):
     type: NotificationType = Field(default=NotificationType.TASK_ASSIGNED)
     message: str = Field(max_length=500)
     task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")
+    weekly_progress_id: Optional[int] = Field(default=None, foreign_key="weekly_progress.id")
     is_read: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -437,6 +522,7 @@ class NotificationRead(SQLModel):
     type: NotificationType
     message: str
     task_id: Optional[int]
+    weekly_progress_id: Optional[int] = None
     is_read: bool
     created_at: datetime
 
@@ -447,6 +533,77 @@ class NotificationCreate(SQLModel):
     type: NotificationType
     message: str
     task_id: Optional[int] = None
+    weekly_progress_id: Optional[int] = None
+
+
+# ==================== WEEKLY PROGRESS ====================
+
+class WeeklyProgress(SQLModel, table=True):
+    """One weekly status update per employee per week (week anchored on Monday)."""
+    __tablename__ = "weekly_progress"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    week_start_date: DateType = Field(index=True)  # Monday of the ISO week
+    description: str = Field(sa_column=Column(Text, nullable=False))
+    github_link: Optional[str] = Field(default=None, max_length=500)
+    deployed_link: Optional[str] = Field(default=None, max_length=500)
+    last_seen_comments_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WeeklyComment(SQLModel, table=True):
+    """Admin feedback on a weekly progress entry."""
+    __tablename__ = "weekly_comments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    weekly_progress_id: int = Field(foreign_key="weekly_progress.id", index=True)
+    admin_id: int = Field(foreign_key="users.id", index=True)
+    comment: str = Field(sa_column=Column(Text, nullable=False))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WeeklyProgressCreate(SQLModel):
+    week_start_date: DateType
+    description: str = Field(min_length=10, max_length=8000)
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
+
+
+class WeeklyProgressUpdate(SQLModel):
+    description: Optional[str] = Field(default=None, min_length=10, max_length=8000)
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
+
+
+class WeeklyCommentCreate(SQLModel):
+    comment: str = Field(min_length=1, max_length=4000)
+
+
+class WeeklyCommentRead(SQLModel):
+    id: int
+    weekly_progress_id: int
+    admin_id: int
+    comment: str
+    created_at: datetime
+    admin_name: Optional[str] = None
+
+
+class WeeklyProgressRead(SQLModel):
+    id: int
+    user_id: int
+    week_start_date: DateType
+    description: str
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
+    last_seen_comments_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    comments: List["WeeklyCommentRead"] = Field(default_factory=list)
+    has_unread_comments: bool = False
+    employee_name: Optional[str] = None
+    employee_email: Optional[str] = None
 
 
 # ==================== DASHBOARD STATS ====================

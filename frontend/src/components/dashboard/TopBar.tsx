@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
+import { getApiBaseUrl } from "@/lib/api";
 
 export default function TopBar() {
   const { theme, setTheme } = useTheme();
@@ -41,7 +42,7 @@ export default function TopBar() {
     if (user.profile_picture.startsWith("data:")) return user.profile_picture;
     // Otherwise treat as URL
     if (user.profile_picture.startsWith("http")) return user.profile_picture;
-    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${user.profile_picture}`;
+    return `${getApiBaseUrl()}${user.profile_picture}`;
   };
 
   return (

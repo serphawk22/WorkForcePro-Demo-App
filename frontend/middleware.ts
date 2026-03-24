@@ -4,14 +4,20 @@ import type { NextRequest } from "next/server";
 // 1️⃣ Define public routes (no auth required)
 const publicRoutes = ["/", "/login", "/signup"];
 
+/** Employee-only portal paths — must NOT use startsWith("/employee") (that matches /employees, /employee-handbook, etc.) */
+function isEmployeePortalRoute(pathname: string): boolean {
+  if (pathname === "/employee-dashboard" || pathname.startsWith("/employee-dashboard/")) return true;
+  if (pathname.startsWith("/employee/")) return true;
+  return false;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Skip middleware for Next.js internals and static files
+  // Skip middleware for Next.js internals (avoid pathname.includes(".") — breaks valid app routes)
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
-    pathname.includes(".") ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
@@ -39,7 +45,7 @@ export async function middleware(request: NextRequest) {
           }
           const isExpiredRoot = payload.exp * 1000 < Date.now();
           if (!isExpiredRoot && payload.role) {
-            const dashboardUrl = payload.role === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+            const dashboardUrl = payload.role === "admin" ? "/admin/dashboard" : "/employee-dashboard";
             return NextResponse.redirect(new URL(dashboardUrl, request.url));
           }
         } catch {
@@ -85,7 +91,7 @@ export async function middleware(request: NextRequest) {
   // 5️⃣ If user has valid token and visits /login, redirect to correct dashboard
   if (pathname === "/login") {
     if (cookieToken && !isExpired && userRole) {
-      const dashboardUrl = userRole === "admin" ? "/admin/dashboard" : "/employee/dashboard";
+      const dashboardUrl = userRole === "admin" ? "/admin/dashboard" : "/employee-dashboard";
       console.log('[MIDDLEWARE] Already authenticated, redirecting from login to:', dashboardUrl);
       return NextResponse.redirect(new URL(dashboardUrl, request.url));
     }
@@ -102,19 +108,19 @@ export async function middleware(request: NextRequest) {
       if (cookieToken) response.cookies.delete("access_token");
       return response;
     }
-    
+
     // Has token but not admin → redirect to employee dashboard
     if (userRole !== "admin") {
       console.log('[MIDDLEWARE] Non-admin accessing admin route, redirecting to employee dashboard');
-      return NextResponse.redirect(new URL("/employee/dashboard", request.url));
+      return NextResponse.redirect(new URL("/employee-dashboard", request.url));
     }
-    
+
     // Admin with valid token - allow
     return NextResponse.next();
   }
 
-  // 4️⃣ Check if route starts with /employee
-  if (pathname.startsWith("/employee")) {
+  // 4️⃣ Employee portal (/employee-dashboard, /employee/...) — not /employees
+  if (isEmployeePortalRoute(pathname)) {
     // No token or expired → redirect to login
     if (!cookieToken || isExpired) {
       console.log('[MIDDLEWARE] Employee route without valid token, redirecting to login');
@@ -134,7 +140,19 @@ export async function middleware(request: NextRequest) {
   }
 
   // Other protected routes (tasks, attendance, etc.)
-  const protectedRoutes = ["/dashboard", "/employees", "/tasks", "/attendance", "/requests", "/reports", "/payroll", "/profile"];
+  const protectedRoutes = [
+    "/dashboard",
+    "/employees",
+    "/tasks",
+    "/attendance",
+    "/requests",
+    "/reports",
+    "/payroll",
+    "/profile",
+    "/weekly-progress",
+    "/project-management",
+    "/my-space",
+  ];
   const isProtectedRoute = protectedRoutes.some(route => pathname === route || pathname.startsWith(route + "/"));
   
   if (isProtectedRoute) {
@@ -166,7 +184,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     * Include "/" explicitly — some setups omit the root from a single catch-all matcher.
      */
     "/((?!_next/static|_next/image|favicon.ico|public).*)",
+    "/",
   ],
 };

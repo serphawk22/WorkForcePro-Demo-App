@@ -4,6 +4,7 @@ User profile management routes.
 import base64
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -52,6 +53,26 @@ async def get_all_employees(
     employees = session.exec(statement).all()
     
     return employees
+
+
+@router.get("/assignable", response_model=List[UserRead])
+async def get_assignable_users(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Active admins and employees who can receive task/subtask assignments.
+    Accessible to any authenticated user (admin or employee).
+    """
+    statement = (
+        select(User)
+        .where(
+            User.is_active == True,
+            or_(User.role == UserRole.admin, User.role == UserRole.employee),
+        )
+        .order_by(User.name)
+    )
+    return list(session.exec(statement).all())
 
 
 @router.put("/me", response_model=UserRead)

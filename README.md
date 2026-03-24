@@ -2,6 +2,10 @@
 
 A modern, full-stack workforce management platform designed to streamline employee management, attendance tracking, task assignment, leave management, and payroll processing. Built with cutting-edge technologies for scalability, performance, and an exceptional user experience.
 
+> **Local dev:** `http://localhost:3000` shows **connection refused** until you **start the dev server** and **leave that terminal open**.  
+> **Mac:** double‑click **`Start WorkForce Pro.command`** in this folder, wait for **Ready**, then open the browser.  
+> Details: **[START.md](./START.md)**
+
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)
@@ -64,6 +68,41 @@ Before you begin, ensure you have the following installed:
 
 ## 🚀 Installation & Setup
 
+### ⚠️ “This site can’t be reached” / `ERR_CONNECTION_REFUSED`
+
+The browser shows this when **nothing is listening** on that port. You need **two** processes running locally:
+
+| URL | What must be running |
+|-----|----------------------|
+| **http://localhost:3000** | Next.js (`npm run dev` in `frontend/`) |
+| **http://127.0.0.1:8000** | FastAPI (`uvicorn` in `backend/`) |
+
+**Easiest fix — one command from the repo root** (starts API + web together via `scripts/dev-all.cjs` — no `npx`/`bash` in the middle):
+
+```bash
+cd WorkForcePro
+# Backend: first time only
+cd backend
+python3 -m venv venv          # Windows: py -m venv venv
+# macOS/Linux: source venv/bin/activate   |   Windows: venv\Scripts\activate
+./venv/bin/pip install -r requirements.txt   # Windows: venv\Scripts\pip install -r requirements.txt
+cp .env.example .env
+# Edit .env: set SQLITE_DEV=1 for SQLite, or set DATABASE_URL for PostgreSQL
+
+cd ..                         # back to WorkForcePro root
+npm install
+cd frontend && npm install && cd ..
+npm run dev                   # API :8000 + Next :3000 in one terminal
+```
+
+Then open **http://127.0.0.1:3000** or **http://localhost:3000** (not `:8000` for the website UI).
+
+If the browser still says **connection refused**, see **[DEV_TROUBLESHOOTING.md](./DEV_TROUBLESHOOTING.md)** (wrong folder, port not listening, or missing `npm install`).
+
+If you prefer **two terminals**: terminal 1 → backend `uvicorn`; terminal 2 → `frontend` `npm run dev`.
+
+---
+
 ### 1️⃣ Clone the Repository
 
 ```bash
@@ -106,30 +145,30 @@ CREATE DATABASE workforce_db;
 
 #### Configure Environment Variables
 
-Create a `.env` file in the `backend` directory:
+Copy the example file and edit:
+
+```bash
+cp .env.example .env
+```
+
+**Quick local setup without PostgreSQL:** in `backend/.env` set:
 
 ```env
-# Database Configuration
-DATABASE_URL=postgresql://postgres:your_password@localhost/workforce_db
-
-# JWT Configuration
-SECRET_KEY=your-secret-key-here-change-this-in-production
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# CORS Configuration
+SQLITE_DEV=1
+SECRET_KEY=change-me-in-production
 FRONTEND_URL=http://localhost:3000
 ```
 
-**Note**: Replace `your_password` and `your-secret-key-here-change-this-in-production` with your actual values.
+**Or** use PostgreSQL — set `DATABASE_URL` as in `.env.example` and **do not** set `SQLITE_DEV`.
 
 #### Run the Backend Server
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+# From backend/, with venv activated:
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The backend API will be available at `http://localhost:8000`
+The backend API will be available at **http://127.0.0.1:8000** (or `http://localhost:8000`).
 
 ### 3️⃣ Frontend Setup
 
@@ -147,13 +186,11 @@ npm install
 yarn install
 ```
 
-#### Configure Environment Variables
+#### Configure Environment Variables (optional locally)
 
-Create a `.env.local` file in the `frontend` directory:
+For **`npm run dev` in `frontend/`**, you usually **do not** need `frontend/.env.local`: the app proxies API calls to the backend via `/api` (see `frontend/next.config.js`).
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+Add `frontend/.env.local` only if you want to call the API **directly** (e.g. `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000`).
 
 #### Run the Frontend Development Server
 

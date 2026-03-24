@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import React, { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy, Video, ExternalLink } from "lucide-react";
-import { fetchEmployeeDashboard, getMyTasks, updateTaskStatus, Task, EmployeeDashboardStats, getActiveMeeting, TeamsMeeting } from "@/lib/api";
+import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy, Video, ExternalLink, ChevronRight, ChevronDown, ListTree, Repeat } from "lucide-react";
+import {
+  fetchEmployeeDashboard, getAllTasks, updateTaskStatus, getTaskSubtasks, updateSubtaskStatus,
+  getMyRecurringInstancesSummary, updateTaskInstanceStatus,
+  Task, Subtask, EmployeeDashboardStats, getActiveMeeting, TeamsMeeting,
+  RecurringInstancesSummary, TaskInstanceSummary,
+} from "@/lib/api";
+import WeeklyProgressEmployeeSection from "@/components/dashboard/WeeklyProgressEmployeeSection";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
@@ -39,7 +45,7 @@ type EmployeeCardAccentStyle = CSSProperties & {
 };
 
 const employeeCardAccentStyles: Record<
-  "session" | "attention" | "productivity" | "projects" | "meeting" | "neutral",
+  "session" | "attention" | "productivity" | "projects" | "meeting" | "neutral" | "recurring",
   EmployeeCardAccentStyle
 > = {
   session: {
@@ -66,6 +72,10 @@ const employeeCardAccentStyles: Record<
     "--admin-card-accent": "220 14% 55%",
     "--admin-card-accent-secondary": "262 18% 60%",
   },
+  recurring: {
+    "--admin-card-accent": "38 92% 50%",
+    "--admin-card-accent-secondary": "25 95% 53%",
+  },
 };
 
 export default function EmployeeDashboard() {
@@ -76,6 +86,10 @@ export default function EmployeeDashboard() {
   const [dashboardStats, setDashboardStats] = useState<EmployeeDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeMeeting, setActiveMeeting] = useState<TeamsMeeting | null>(null);
+  const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [taskSubtasks, setTaskSubtasks] = useState<Record<number, Subtask[]>>({});
+  const expandedTasksRef = useRef<Set<number>>(new Set());
+  const [recurringSummary, setRecurringSummary] = useState<RecurringInstancesSummary | null>(null);
 
   // Global persistent timer — provided by AttendanceTimerProvider at root layout level
   const {
@@ -96,30 +110,111 @@ export default function EmployeeDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsResponse, tasksResponse, meetingResponse] = await Promise.all([
+      const [statsResponse, tasksResponse, meetingResponse, recurringRes] = await Promise.all([
         fetchEmployeeDashboard(),
-        getMyTasks(),
+        getAllTasks(),   // all tasks are visible to everyone
         getActiveMeeting(),
+        getMyRecurringInstancesSummary(),
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
       }
       if (tasksResponse.data) {
         setTasks(tasksResponse.data);
+        // Pre-fetch subtasks for all tasks so they're visible on refresh
+        tasksResponse.data.forEach(task => loadSubtasks(task.id));
       }
       if (meetingResponse.data !== undefined) {
         setActiveMeeting(meetingResponse.data);
+      }
+      if (recurringRes.data) {
+        setRecurringSummary(recurringRes.data);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
+  // loadSubtasks is stable (useCallback with no deps)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Keep ref in sync so event listener always sees latest expanded set
+  useEffect(() => { expandedTasksRef.current = expandedTasks; }, [expandedTasks]);
+
+  const loadSubtasks = useCallback(async (taskId: number) => {
+    const result = await getTaskSubtasks(taskId);
+    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
+  }, []);
+
+  const toggleExpandTask = async (taskId: number) => {
+    const next = new Set(expandedTasks);
+    if (next.has(taskId)) {
+      next.delete(taskId);
+    } else {
+      next.add(taskId);
+      await loadSubtasks(taskId);
+    }
+    setExpandedTasks(next);
+  };
+
+  // Listen for AI assistant "refresh-tasks" events — reload data + all expanded subtasks
+  useEffect(() => {
+    const handleRefresh = async () => {
+      await fetchData();
+      // Re-fetch subtasks for any currently-expanded task rows
+      expandedTasksRef.current.forEach(taskId => loadSubtasks(taskId));
+    };
+    window.addEventListener("refresh-tasks", handleRefresh);
+    return () => window.removeEventListener("refresh-tasks", handleRefresh);
+  }, [fetchData, loadSubtasks]);
+
+
+  const handleSubtaskStatusChange = async (subtaskId: number, taskId: number, newStatus: string) => {
+    const result = await updateSubtaskStatus(subtaskId, newStatus);
+    if (result.error) toast.error(result.error);
+    else { toast.success("Subtask updated!"); await loadSubtasks(taskId); }
+  };
+
+  const handleRecurringInstanceStatus = async (
+    instanceId: number,
+    newStatus: "todo" | "in_progress" | "completed"
+  ) => {
+    const result = await updateTaskInstanceStatus(instanceId, newStatus);
+    if (result.error) toast.error(result.error);
+    else {
+      toast.success("Occurrence updated");
+      const r = await getMyRecurringInstancesSummary();
+      if (r.data) setRecurringSummary(r.data);
+    }
+  };
+
+  const renderRecurringRow = (row: TaskInstanceSummary) => (
+    <div
+      key={row.id}
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 bg-card/60 border border-border/50 shadow-sm"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-card-foreground truncate">{row.task_title}</p>
+        <p className="text-[10px] text-muted-foreground font-mono">
+          {row.public_id} · {new Date(row.instance_date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+        </p>
+      </div>
+      <select
+        value={row.status}
+        onChange={(e) => handleRecurringInstanceStatus(row.id, e.target.value as "todo" | "in_progress" | "completed")}
+        className="text-[10px] rounded-md px-2 py-1 bg-secondary border border-border cursor-pointer shrink-0"
+      >
+        <option value="todo">To Do</option>
+        <option value="in_progress">In Progress</option>
+        <option value="completed">Completed</option>
+      </select>
+    </div>
+  );
 
   // Punch in/out — delegate to global context, then reload dashboard stats
   const handlePunchIn = async () => {
@@ -245,7 +340,8 @@ export default function EmployeeDashboard() {
               }
               trend={isWorking ? "LIVE" : hasCompletedToday ? "Done" : undefined}
               trendType={isWorking ? "up" : "stable"}
-              iconColor="dark:bg-pink-500 dark:text-white dark:drop-shadow-[0_0_24px_rgba(236,72,153,0.9)] bg-pink-500 text-white drop-shadow-[0_0_16px_rgba(236,72,153,0.7)]"
+              iconColor="bg-pink-500"
+              shadowColor="rgba(236, 72, 153, 0.25)"
               href="/attendance"
               enablePremiumHover
               hoverAccentStyle={employeeCardAccentStyles.session}
@@ -257,7 +353,8 @@ export default function EmployeeDashboard() {
               subtitle="Projects due today"
               trend={tasksDueToday > 0 ? "Attention" : "Good"}
               trendType={tasksDueToday > 0 ? "down" : "up"}
-              iconColor="dark:bg-orange-400 dark:text-white dark:drop-shadow-[0_0_24px_rgba(251,146,60,0.9)] bg-orange-500 text-white drop-shadow-[0_0_16px_rgba(251,146,60,0.7)]"
+              iconColor="bg-orange-500"
+              shadowColor="rgba(251, 146, 60, 0.25)"
               href="/project-management"
               enablePremiumHover
               hoverAccentStyle={employeeCardAccentStyles.attention}
@@ -269,7 +366,8 @@ export default function EmployeeDashboard() {
               subtitle={`${tasksCompleted} completed`}
               trend={productivityScore >= 50 ? "Great" : "Keep going"}
               trendType={productivityScore >= 50 ? "up" : "stable"}
-              iconColor="dark:bg-yellow-300 dark:text-white dark:drop-shadow-[0_0_24px_rgba(250,204,21,0.9)] bg-yellow-400 text-white drop-shadow-[0_0_16px_rgba(250,204,21,0.7)]"
+              iconColor="bg-yellow-400"
+              shadowColor="rgba(250, 204, 21, 0.25)"
               href="/project-management"
               enablePremiumHover
               hoverAccentStyle={employeeCardAccentStyles.productivity}
@@ -281,7 +379,8 @@ export default function EmployeeDashboard() {
               subtitle="In progress"
               trend={activeProjects > 0 ? "Working" : "None"}
               trendType={activeProjects > 0 ? "up" : "stable"}
-              iconColor="dark:bg-blue-400 dark:text-white dark:drop-shadow-[0_0_24px_rgba(59,130,246,0.9)] bg-blue-500 text-white drop-shadow-[0_0_16px_rgba(59,130,246,0.7)]"
+              iconColor="bg-blue-500"
+              shadowColor="rgba(59, 130, 246, 0.25)"
               href="/project-management"
               enablePremiumHover
               hoverAccentStyle={employeeCardAccentStyles.projects}
@@ -297,9 +396,9 @@ export default function EmployeeDashboard() {
               >
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="admin-dashboard-card-icon shrink-0 p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/40">
-                      <Video className="h-5 w-5 text-white" />
-                    </div>
+                    <div className="admin-dashboard-card-icon shrink-0 p-2.5 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/40">
+                    <Video className="h-5 w-5 text-white" />
+                  </div>
                     <div className="min-w-0">
                       <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-0.5">Teams Meeting</p>
                       <p className="font-bold text-foreground truncate">{activeMeeting.title}</p>
@@ -322,8 +421,8 @@ export default function EmployeeDashboard() {
                 className="admin-dashboard-card col-span-full rounded-xl glass-card p-5 border border-border/40 flex items-center gap-3 text-muted-foreground"
                 style={employeeCardAccentStyles.neutral}
               >
-                <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary/50">
-                  <Video className="h-5 w-5" />
+                <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary">
+                  <Video className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">No active Teams meeting</p>
@@ -333,6 +432,69 @@ export default function EmployeeDashboard() {
             )}
           </div>
 
+          {/* Recurring task occurrences */}
+          <div
+            className="admin-dashboard-card rounded-xl glass-card glow-sm"
+            style={employeeCardAccentStyles.recurring}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-card-foreground flex items-center gap-2">
+                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-amber-500 shadow-lg shadow-amber-500/40">
+                    <Repeat size={18} className="text-white" />
+                  </div>
+                  Recurring tasks
+                </h3>
+                <Link href="/project-management" className="text-sm font-semibold text-primary hover:text-primary-light transition-colors px-3 py-1.5 rounded-lg glass-light hover:glow-sm">
+                  Projects
+                </Link>
+              </div>
+              {!recurringSummary ||
+              (recurringSummary.today.length === 0 &&
+                recurringSummary.upcoming.length === 0 &&
+                recurringSummary.completed_recent.length === 0) ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No recurring occurrences yet. When your admin assigns a repeating task, scheduled dates will show here.
+                </p>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Today</p>
+                    <div className="space-y-2">
+                      {recurringSummary.today.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Nothing due today</p>
+                      ) : (
+                        recurringSummary.today.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Upcoming</p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {recurringSummary.upcoming.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No upcoming</p>
+                      ) : (
+                        recurringSummary.upcoming.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2 tracking-wider">Recently completed</p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {recurringSummary.completed_recent.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">None yet</p>
+                      ) : (
+                        recurringSummary.completed_recent.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <WeeklyProgressEmployeeSection />
+
           {/* Active Projects */}
           <div
             className="admin-dashboard-card rounded-xl glass-card glow-sm"
@@ -341,8 +503,8 @@ export default function EmployeeDashboard() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-card-foreground flex items-center gap-2">
-                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50">
-                    <Building2 size={18} className="text-white glow-icon" />
+                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-purple-500 shadow-lg shadow-purple-500/50">
+                    <Building2 size={18} className="text-white" />
                   </div>
                   Active Projects
                 </h3>
@@ -362,59 +524,167 @@ export default function EmployeeDashboard() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="pb-3 pl-1 text-left font-semibold w-6"></th>
                       <th className="pb-3 text-left font-semibold">Project</th>
                       <th className="pb-3 text-left font-semibold">Priority</th>
                       <th className="pb-3 text-left font-semibold">Status</th>
+                      <th className="pb-3 text-left font-semibold">Assignee</th>
                       <th className="pb-3 text-left font-semibold">Due Date</th>
                       <th className="pb-3 text-right font-semibold">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {activeTasks.slice(0, 5).map((task) => (
-                      <tr key={task.id} className="hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/10 transition-all">
-                        <td className="py-3.5">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50 animate-pulse" />
-                            <div>
-                              <p className="font-semibold text-card-foreground">{task.title}</p>
-                              {task.public_id && (
-                                <button
-                                  onClick={() => { navigator.clipboard.writeText(task.public_id!); toast.success("Ref ID copied!"); }}
-                                  className="inline-flex items-center gap-1 mt-0.5 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 border border-purple-400/30 hover:bg-gradient-to-r hover:from-purple-500/30 hover:to-pink-500/30 transition-all shadow-md shadow-purple-500/30 hover:shadow-lg hover:shadow-purple-500/40"
-                                >
-                                  {task.public_id}
-                                  <Copy size={10} className="glow-icon" />
-                                </button>
-                              )}
+                      <React.Fragment key={task.id}>
+                        <tr className="hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/10 transition-all">
+                          {/* Expand chevron */}
+                          <td className="py-3.5 pl-1">
+                            <button
+                              onClick={() => toggleExpandTask(task.id)}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                              title="Show subtasks"
+                            >
+                              {expandedTasks.has(task.id)
+                                ? <ChevronDown size={13} />
+                                : <ChevronRight size={13} />}
+                            </button>
+                          </td>
+                          <td className="py-3.5">
+                            <div className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50 animate-pulse" />
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-semibold text-card-foreground">{task.title}</p>
+                                  {/* Subtask count badge */}
+                                  {taskSubtasks[task.id]?.length > 0 && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary border border-primary/20">
+                                      <ListTree size={9} />
+                                      {taskSubtasks[task.id].filter(s => s.status === "completed").length}/{taskSubtasks[task.id].length}
+                                    </span>
+                                  )}
+                                </div>
+                                {task.public_id && (
+                                  <button
+                                    onClick={() => { navigator.clipboard.writeText(task.public_id!); toast.success("Ref ID copied!"); }}
+                                    className="inline-flex items-center gap-1 mt-0.5 rounded px-1.5 py-0.5 text-xs font-mono font-bold bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 border border-purple-400/30 hover:from-purple-500/30 hover:to-pink-500/30 transition-all shadow-md shadow-purple-500/30 hover:shadow-lg hover:shadow-purple-500/40"
+                                  >
+                                    {task.public_id}
+                                    <Copy size={10} className="glow-icon" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5">
-                          <span className={`inline-block rounded-lg px-3 py-1 text-xs font-bold capitalize ${priorityStyles[task.priority] || "bg-gray-500/20 text-gray-400 border border-gray-500/30"}`}>
-                            {task.priority}
-                          </span>
-                        </td>
-                        <td className="py-3.5">
-                          <span className={`flex items-center gap-1.5 text-xs font-bold ${statusStyles[task.status] || "text-muted-foreground"}`}>
-                            <Circle size={6} className="fill-current animate-pulse" /> {statusLabels[task.status] || task.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 text-muted-foreground">
-                          {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No deadline"}
-                        </td>
-                        <td className="py-3.5 text-right">
-                          <select
-                            value={task.status === "submitted" ? "done" : task.status}
-                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
-                            className="bg-secondary border border-border rounded px-2 py-1 text-xs cursor-pointer"
-                            disabled={task.status === "submitted" || task.status === "approved"}
-                          >
-                            <option value="todo">To Do</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="done">Done</option>
-                          </select>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="py-3.5">
+                            <span className={`inline-block rounded-lg px-3 py-1 text-xs font-bold capitalize ${priorityStyles[task.priority] || "bg-gray-500/20 text-gray-400 border border-gray-500/30"}`}>
+                              {task.priority}
+                            </span>
+                          </td>
+                          <td className="py-3.5">
+                            <span className={`flex items-center gap-1.5 text-xs font-bold ${statusStyles[task.status] || "text-muted-foreground"}`}>
+                              <Circle size={6} className="fill-current animate-pulse" /> {statusLabels[task.status] || task.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
+                                {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
+                              </div>
+                              <span className="text-xs text-card-foreground">
+                                {task.assigned_to === user?.id ? (
+                                  <span className="font-semibold text-primary">You</span>
+                                ) : (
+                                  task.assignee_name || "Unassigned"
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 text-muted-foreground text-xs">
+                            {task.due_date ? new Date(task.due_date).toLocaleDateString() : "No deadline"}
+                          </td>
+                          <td className="py-3.5 text-right">
+                            {task.assigned_to === user?.id ? (
+                              <select
+                                value={task.status === "submitted" ? "done" : task.status}
+                                onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
+                                className="bg-secondary border border-border rounded px-2 py-1 text-xs cursor-pointer"
+                                disabled={task.status === "submitted" || task.status === "approved"}
+                              >
+                                <option value="todo">To Do</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="done">Done</option>
+                              </select>
+                            ) : (
+                              <span className={`text-[10px] rounded-md px-2 py-1 font-semibold border ${
+                                task.status === "approved" ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400" :
+                                task.status === "submitted" ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400" :
+                                task.status === "in_progress" ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400" :
+                                "bg-secondary border-border text-muted-foreground"
+                              }`}>
+                                {task.status === "submitted" ? "In Review" : task.status === "in_progress" ? "In Progress" : task.status === "todo" ? "To Do" : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Subtask expansion rows */}
+                        {expandedTasks.has(task.id) && (
+                          <tr>
+                            <td colSpan={7} className="py-0 px-0 bg-primary/5">
+                              <div className="px-10 py-3">
+                                {!taskSubtasks[task.id] ? (
+                                  <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                                    <Loader2 size={12} className="animate-spin" /> Loading subtasks…
+                                  </div>
+                                ) : taskSubtasks[task.id].length === 0 ? (
+                                  <p className="text-xs text-muted-foreground py-2 text-center">
+                                    No subtasks yet. Use the AI assistant to create one!
+                                  </p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {taskSubtasks[task.id].map(subtask => (
+                                      <div key={subtask.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 bg-card/60 border border-border/50 shadow-sm gap-3">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <ListTree size={12} className="text-primary shrink-0" />
+                                          {subtask.public_id && (
+                                            <span className="font-mono text-[9px] font-semibold px-1.5 py-0.5 rounded tracking-wider bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                              {subtask.public_id}
+                                            </span>
+                                          )}
+                                          <span className="text-xs font-medium text-card-foreground truncate">{subtask.title}</span>
+                                          {subtask.assignee_name && (
+                                            <span className="text-[10px] text-muted-foreground shrink-0">→ {subtask.assignee_name}</span>
+                                          )}
+                                        </div>
+                                        {["reviewing","approved","rejected"].includes(subtask.status) ? (
+                                          <span className={`text-[10px] rounded-md px-2 py-1 font-semibold border shrink-0 ${
+                                            subtask.status === "approved" ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400" :
+                                            subtask.status === "rejected" ? "bg-red-500/10 border-red-500/30 text-red-500" :
+                                            "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                          }`}>
+                                            {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
+                                          </span>
+                                        ) : (
+                                          <select
+                                            value={subtask.status}
+                                            onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
+                                            disabled={subtask.assigned_to !== user?.id}
+                                            className="text-[10px] rounded-md px-2 py-1 bg-secondary border border-border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                                          >
+                                            <option value="todo">To Do</option>
+                                            <option value="in_progress">In Progress</option>
+                                            <option value="completed">Completed</option>
+                                          </select>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

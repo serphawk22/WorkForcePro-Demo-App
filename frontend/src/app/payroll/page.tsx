@@ -254,17 +254,17 @@ export default function PayrollPage() {
                     <td className="py-3.5 pr-5">
                       {row.status === "Pending" ? (
                         <button
-                          onClick={(e) => handleMarkPaid(e, row.id)}
-                          disabled={markingId === row.id}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                        >
-                          {markingId === row.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <CheckCircle2 size={12} />
-                          )}
-                          Mark Paid
-                        </button>
+                            onClick={(e) => handleMarkPaid(e, row.id)}
+                            disabled={markingId === row.id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-glow transition-all active:scale-95 disabled:opacity-50 shadow-sm"
+                          >
+                            {markingId === row.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-3 w-3" />
+                            )}
+                            Mark Paid
+                          </button>
                       ) : (
                         <span className="text-xs text-muted-foreground/50">—</span>
                       )}

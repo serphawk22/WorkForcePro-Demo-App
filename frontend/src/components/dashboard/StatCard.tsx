@@ -15,6 +15,7 @@ interface StatCardProps {
   trend?: string;
   trendType?: "up" | "down" | "stable";
   iconColor?: string;
+  shadowColor?: string;
   href?: string;
   enablePremiumHover?: boolean;
   hoverAccentStyle?: DashboardHoverAccentStyle;
@@ -34,6 +35,7 @@ export default function StatCard({
   trend,
   trendType = "stable",
   iconColor,
+  shadowColor,
   href,
   enablePremiumHover = false,
   hoverAccentStyle,
@@ -49,8 +51,13 @@ export default function StatCard({
       <div className="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
       <div className="relative flex items-start justify-between mb-4">
-        <div className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-primary/50"} dashboard-card-icon-shell rounded-xl p-3 backdrop-blur-sm ${iconColor || "bg-gradient-to-br from-secondary/80 to-accent/60 text-white shadow-lg"} transition-all duration-300`}>
-          <Icon size={20} className="glow-icon" />
+        <div 
+          className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110"} dashboard-card-icon-shell rounded-xl p-3 transition-all duration-300 ${iconColor}`}
+          style={{
+            boxShadow: `0 4px 14px ${shadowColor || 'rgba(0,0,0,0.25)'}, 0 8px 24px -4px ${shadowColor || 'rgba(0,0,0,0.15)'}`
+          }}
+        >
+          <Icon size={20} className="relative z-10 text-white" />
         </div>
         <div className="flex items-center gap-2">
           {trend && (

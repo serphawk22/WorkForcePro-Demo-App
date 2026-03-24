@@ -24,8 +24,6 @@ ENV/
 
 # Database
 *.db
-*.sqlite
-*.sqlite3
 
 # Node
 node_modules/

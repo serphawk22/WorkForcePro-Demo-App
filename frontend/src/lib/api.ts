@@ -3,10 +3,24 @@
  * Uses both localStorage (access token) and HTTP-only cookies for authentication.
  */
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * Resolve API origin (no trailing slash).
+ * - If NEXT_PUBLIC_API_URL is set → use it (production / custom backend).
+ * - In the browser during `next dev` → `/api` (proxied to FastAPI by next.config.js).
+ * - Server-side (RSC / SSR) → direct loopback URL.
+ */
+export function getApiBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    return "/api";
+  }
+  return "http://127.0.0.1:8000";
+}
 
-console.log("[API] Base URL:", API_BASE_URL);
+if (typeof window !== "undefined") {
+  console.log("[API] Base URL:", getApiBaseUrl());
+}
 
 // Simple cache to prevent redundant API calls
 interface CacheEntry<T> {
@@ -106,6 +120,8 @@ export interface AttendanceStatus {
   total_hours: number | null;
 }
 
+export type RecurrenceType = "daily" | "weekly" | "monthly";
+
 export interface Task {
   id: number;
   public_id: string;
@@ -126,6 +142,15 @@ export interface Task {
   assignee_email?: string;
   assigned_by_name?: string;
   progress?: number;  // Task completion progress (0-100)
+  /** Recurring task template fields */
+  is_recurring?: boolean;
+  recurrence_type?: RecurrenceType | string | null;
+  recurrence_interval?: number;
+  /** JSON string from API, e.g. "[1,3,5]" weekdays Mon=0 */
+  repeat_days?: string | null;
+  recurrence_start_date?: string | null;
+  recurrence_end_date?: string | null;
+  monthly_day?: number | null;
 }
 
 export interface TaskCreate {
@@ -136,6 +161,31 @@ export interface TaskCreate {
   assigned_to?: number;
   github_link?: string;
   deployed_link?: string;
+  is_recurring?: boolean;
+  recurrence_type?: RecurrenceType;
+  recurrence_interval?: number;
+  repeat_days?: number[];
+  recurrence_start_date?: string;
+  recurrence_end_date?: string;
+  monthly_day?: number;
+}
+
+export interface TaskInstanceSummary {
+  id: number;
+  task_id: number;
+  instance_date: string;
+  status: "todo" | "in_progress" | "completed";
+  created_at: string;
+  updated_at: string;
+  task_title?: string;
+  public_id?: string;
+  priority?: string;
+}
+
+export interface RecurringInstancesSummary {
+  today: TaskInstanceSummary[];
+  upcoming: TaskInstanceSummary[];
+  completed_recent: TaskInstanceSummary[];
 }
 
 export interface LeaveRequest {
@@ -256,8 +306,93 @@ export interface Notification {
   type: string;
   message: string;
   task_id: number | null;
+  weekly_progress_id?: number | null;
   is_read: boolean;
   created_at: string;
+}
+
+// ==================== WEEKLY PROGRESS ====================
+
+export interface WeeklyComment {
+  id: number;
+  weekly_progress_id: number;
+  admin_id: number;
+  comment: string;
+  created_at: string;
+  admin_name?: string | null;
+}
+
+export interface WeeklyProgressEntry {
+  id: number;
+  user_id: number;
+  week_start_date: string;
+  description: string;
+  github_link: string | null;
+  deployed_link: string | null;
+  last_seen_comments_at: string | null;
+  created_at: string;
+  updated_at: string;
+  comments: WeeklyComment[];
+  has_unread_comments: boolean;
+  employee_name?: string | null;
+  employee_email?: string | null;
+}
+
+export async function getMyWeeklyProgress(): Promise<ApiResponse<WeeklyProgressEntry[]>> {
+  return apiFetch<WeeklyProgressEntry[]>("/weekly-progress/me");
+}
+
+export async function upsertMyWeeklyProgress(data: {
+  week_start_date: string;
+  description: string;
+  github_link?: string;
+  deployed_link?: string;
+}): Promise<ApiResponse<WeeklyProgressEntry>> {
+  return apiFetch<WeeklyProgressEntry>("/weekly-progress/me", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateMyWeeklyProgress(
+  entryId: number,
+  data: { description?: string; github_link?: string; deployed_link?: string }
+): Promise<ApiResponse<WeeklyProgressEntry>> {
+  return apiFetch<WeeklyProgressEntry>(`/weekly-progress/me/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function markWeeklyCommentsSeen(entryId: number): Promise<ApiResponse<WeeklyProgressEntry>> {
+  return apiFetch<WeeklyProgressEntry>(`/weekly-progress/me/${entryId}/seen-comments`, {
+    method: "PATCH",
+  });
+}
+
+export async function getAdminWeeklyProgress(params?: {
+  week_start?: string;
+  employee_id?: number;
+}): Promise<ApiResponse<WeeklyProgressEntry[]>> {
+  const sp = new URLSearchParams();
+  if (params?.week_start) sp.append("week_start", params.week_start);
+  if (params?.employee_id != null) sp.append("employee_id", String(params.employee_id));
+  const q = sp.toString();
+  return apiFetch<WeeklyProgressEntry[]>(`/weekly-progress/admin${q ? `?${q}` : ""}`);
+}
+
+export async function getAdminWeeklyByEmployee(userId: number): Promise<ApiResponse<WeeklyProgressEntry[]>> {
+  return apiFetch<WeeklyProgressEntry[]>(`/weekly-progress/admin/employee/${userId}`);
+}
+
+export async function postAdminWeeklyComment(
+  entryId: number,
+  comment: string
+): Promise<ApiResponse<WeeklyComment>> {
+  return apiFetch<WeeklyComment>(`/weekly-progress/admin/${entryId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
 }
 
 export interface TaskComment {
@@ -409,7 +544,7 @@ async function apiFetch<T>(
       console.log(`[API] ${options.method || 'GET'} ${endpoint} - No token, skipping Authorization header`);
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
       ...options,
       credentials: "include", // Send cookies
       headers,
@@ -455,7 +590,7 @@ async function apiFetch<T>(
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
       console.error("[API] CORS or Network Error:", {
         endpoint,
-        apiBaseUrl: API_BASE_URL,
+        apiBaseUrl: getApiBaseUrl(),
         error: error.message
       });
       return { 
@@ -870,6 +1005,21 @@ export async function createTask(
   });
 }
 
+/** Today's / upcoming / recent completed recurring occurrences for the current user */
+export async function getMyRecurringInstancesSummary(): Promise<ApiResponse<RecurringInstancesSummary>> {
+  return apiFetch<RecurringInstancesSummary>("/tasks/recurring/my-summary");
+}
+
+export async function updateTaskInstanceStatus(
+  instanceId: number,
+  status: "todo" | "in_progress" | "completed"
+): Promise<ApiResponse<TaskInstanceSummary>> {
+  return apiFetch<TaskInstanceSummary>(`/tasks/recurring/instances/${instanceId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
 /**
  * Update a task (admin only).
  */
@@ -947,7 +1097,7 @@ export async function createLeaveRequest(
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/leave/`, {
+    const response = await fetch(`${getApiBaseUrl()}/leave/`, {
       method: "POST",
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1103,6 +1253,11 @@ export async function getAllEmployees(): Promise<ApiResponse<User[]>> {
   return apiFetch<User[]>("/users/employees");
 }
 
+/** Active admins + employees for task/subtask assignment (project management, AI, etc.) */
+export async function getAssignableUsers(): Promise<ApiResponse<User[]>> {
+  return apiFetch<User[]>("/users/assignable");
+}
+
 /**
  * Update current user's profile.
  */
@@ -1155,7 +1310,7 @@ export async function uploadProfilePicture(
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/users/me/upload-picture`, {
+    const response = await fetch(`${getApiBaseUrl()}/users/me/upload-picture`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1308,6 +1463,19 @@ export async function getTaskSubtasks(taskId: number): Promise<ApiResponse<Subta
 export async function updateSubtaskStatus(subtaskId: number, status: string): Promise<ApiResponse<Subtask>> {
   return apiFetch<Subtask>(`/tasks/subtasks/${subtaskId}/status?new_status=${status}`, {
     method: "PATCH",
+  });
+}
+
+/**
+ * Update a subtask (admin or assignee can update).
+ */
+export async function updateSubtask(
+  subtaskId: number,
+  subtaskData: Partial<SubtaskCreate> & { status?: string }
+): Promise<ApiResponse<Subtask>> {
+  return apiFetch<Subtask>(`/tasks/subtasks/${subtaskId}`, {
+    method: "PUT",
+    body: JSON.stringify(subtaskData),
   });
 }
 

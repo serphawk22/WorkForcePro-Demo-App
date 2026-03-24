@@ -166,6 +166,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     due_date: Optional[date] = None
+    assigned_to: Optional[int] = None
 
 
 class TaskRead(BaseModel):

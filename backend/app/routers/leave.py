@@ -5,6 +5,7 @@ import base64
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -15,6 +16,45 @@ from app.models import (
 from app.auth import get_current_user, get_current_admin_user
 
 router = APIRouter(prefix="/leave", tags=["Leave Requests"])
+
+
+# ── AI-created leave request (JSON body, no file upload) ──────────────────────
+
+class LeaveCreateAI(BaseModel):
+    reason: str
+    start_date: str       # YYYY-MM-DD
+    end_date: str         # YYYY-MM-DD
+    leave_type: str = "personal"
+
+
+@router.post("/ai-create", response_model=LeaveRequestRead, status_code=status.HTTP_201_CREATED)
+async def create_leave_request_from_ai(
+    data: LeaveCreateAI,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a leave request submitted via the AI assistant (JSON, no file upload)."""
+    from datetime import date as DateType
+    try:
+        start = DateType.fromisoformat(data.start_date)
+        end = DateType.fromisoformat(data.end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    if end < start:
+        raise HTTPException(status_code=400, detail="End date must be after start date.")
+
+    leave_request = LeaveRequest(
+        user_id=current_user.id,
+        reason=data.reason,
+        start_date=start,
+        end_date=end,
+        leave_type=data.leave_type,
+    )
+    session.add(leave_request)
+    session.commit()
+    session.refresh(leave_request)
+    return leave_request
 
 
 # Employee routes

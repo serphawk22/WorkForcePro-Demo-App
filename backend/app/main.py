@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import create_db_and_tables
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams
+from app.database import create_db_and_tables, engine
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress
 
 load_dotenv()
 
@@ -19,72 +19,82 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup: Create database tables
     create_db_and_tables()
-    
-    # Run database migrations to add any missing columns
-    from app.database import engine
-    from sqlalchemy import text
-    
-    with engine.connect() as conn:
-        try:
-            # Add approved_at column if it doesn't exist
-            conn.execute(text("""
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
-            """))
-            # Add approved_by column if it doesn't exist
-            conn.execute(text("""
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER;
-            """))
-            # Add public_id column to tasks table if it doesn't exist
-            conn.execute(text("""
-                ALTER TABLE tasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
-            """))
-            # Add public_id column to subtasks table if it doesn't exist
-            conn.execute(text("""
-                ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
-            """))
-            # Add USER_APPROVED to notification type enum if it doesn't exist
-            try:
-                conn.execute(text("""
-                    ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'USER_APPROVED';
-                """))
-            except Exception:
-                pass  # Enum value may already exist or not applicable
-            # Add 'submitted' and 'reviewing' to taskstatus enum if missing
-            try:
-                conn.execute(text("""
-                    ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'submitted';
-                """))
-            except Exception:
-                pass
-            try:
-                conn.execute(text("""
-                    ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'reviewing';
-                """))
-            except Exception:
-                pass
-            # Backfill public_id for existing tasks that have NULL
-            conn.execute(text("""
-                UPDATE tasks
-                SET public_id = UPPER(
-                    SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
-                )
-                WHERE public_id IS NULL;
-            """))
-            # Backfill public_id for existing subtasks that have NULL
-            conn.execute(text("""
-                UPDATE subtasks
-                SET public_id = UPPER(
-                    SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
-                )
-                WHERE public_id IS NULL;
-            """))
-            conn.commit()
-            print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
-        except Exception as e:
-            print(f"⚠️ Migration note: {e}")
 
-    # Additional migrations — each runs in its own connection so one failure doesn't abort others
-    additional_migrations = [
+    is_sqlite = engine.url.drivername == "sqlite"
+    if is_sqlite:
+        print("✅ SQLite dev: skipping PostgreSQL-only migrations (tables from SQLModel metadata)")
+    from sqlalchemy import text
+
+    if not is_sqlite:
+        # Run database migrations to add any missing columns (PostgreSQL specific)
+        with engine.connect() as conn:
+            try:
+                # Add approved_at column if it doesn't exist
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+                """))
+                # Add approved_by column if it doesn't exist
+                conn.execute(text("""
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER;
+                """))
+                # Add public_id column to tasks table if it doesn't exist
+                conn.execute(text("""
+                    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+                """))
+                # Add public_id column to subtasks table if it doesn't exist
+                conn.execute(text("""
+                    ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS public_id VARCHAR(10);
+                """))
+                # Add USER_APPROVED to notification type enum if it doesn't exist
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'USER_APPROVED';
+                    """))
+                except Exception:
+                    pass  # Enum value may already exist or not applicable
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'WEEKLY_PROGRESS_COMMENT';
+                    """))
+                except Exception:
+                    pass
+                # Add 'submitted' and 'reviewing' to taskstatus enum if missing
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'submitted';
+                    """))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'reviewing';
+                    """))
+                except Exception:
+                    pass
+                # Backfill public_id for existing tasks that have NULL
+                conn.execute(text("""
+                    UPDATE tasks
+                    SET public_id = UPPER(
+                        SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
+                    )
+                    WHERE public_id IS NULL;
+                """))
+                # Backfill public_id for existing subtasks that have NULL
+                conn.execute(text("""
+                    UPDATE subtasks
+                    SET public_id = UPPER(
+                        SUBSTRING(MD5(RANDOM()::TEXT || id::TEXT), 1, 6)
+                    )
+                    WHERE public_id IS NULL;
+                """))
+                conn.commit()
+                print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
+            except Exception as e:
+                print(f"⚠️ Migration note: {e}")
+
+    if not is_sqlite:
+        # Additional migrations — each runs in its own connection so one failure doesn't abort others
+        additional_migrations = [
         # Bank details columns on users table
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
@@ -97,25 +107,88 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
         # Subtask parent_subtask_id column
         'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',
-        # Teams meeting table
-        '''CREATE TABLE IF NOT EXISTS teams_meetings (
-            id SERIAL PRIMARY KEY,
-            title VARCHAR(200) NOT NULL,
-            meeting_link VARCHAR(1000) NOT NULL,
-            created_by INTEGER REFERENCES users(id),
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )''',
-    ]
-    for migration_sql in additional_migrations:
+        # Recurring task rule columns on tasks
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT FALSE',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(20)',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_interval INTEGER DEFAULT 1',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS repeat_days VARCHAR(64)',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_start_date DATE',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end_date DATE',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS monthly_day INTEGER',
+        ]
+
+        for migration in additional_migrations:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(migration))
+                    conn.commit()
+            except Exception:
+                pass  # Already exists or syntax error on non-Postgres
+        print("✅ Additional migrations complete")
+
+    if not is_sqlite:
+        # task_instances table (recurring occurrences)
         try:
             with engine.connect() as conn:
-                conn.execute(text(migration_sql))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS task_instances (
+                        id SERIAL PRIMARY KEY,
+                        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                        instance_date DATE NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'todo',
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                """))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uix_task_instance_date ON task_instances (task_id, instance_date);"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_task_instances_task_id ON task_instances (task_id);"
+                ))
                 conn.commit()
+            print("✅ task_instances table ready")
         except Exception as e:
-            print(f"⚠️ Migration skipped (may already exist): {e}")
-    print("✅ Additional migrations complete")
+            print(f"⚠️ task_instances migration note: {e}")
+
+        # weekly_progress + weekly_comments + notifications.weekly_progress_id
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS weekly_progress (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        week_start_date DATE NOT NULL,
+                        description TEXT NOT NULL,
+                        github_link VARCHAR(500),
+                        deployed_link VARCHAR(500),
+                        last_seen_comments_at TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uix_weekly_progress_user_week ON weekly_progress (user_id, week_start_date);"
+                ))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS weekly_comments (
+                        id SERIAL PRIMARY KEY,
+                        weekly_progress_id INTEGER NOT NULL REFERENCES weekly_progress(id) ON DELETE CASCADE,
+                        admin_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        comment TEXT NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_weekly_comments_progress ON weekly_comments (weekly_progress_id);"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS weekly_progress_id INTEGER REFERENCES weekly_progress(id) ON DELETE SET NULL;"
+                ))
+                conn.commit()
+            print("✅ weekly_progress tables ready")
+        except Exception as e:
+            print(f"⚠️ weekly_progress migration note: {e}")
     
     # Seed default admin account
     from app.models import User, UserRole
@@ -216,6 +289,8 @@ app.include_router(comments.router)
 app.include_router(myspace.router)
 app.include_router(chatbot.router)
 app.include_router(teams.router)
+app.include_router(ai_assistant.router)
+app.include_router(weekly_progress.router)
 
 
 @app.get("/")
@@ -224,11 +299,10 @@ async def root():
     return {
         "message": "WorkForce Pro API",
         "version": "1.0.0",
-        "docs": "/docs",
     }
 
 
 @app.get("/health")
-async def health_check():
+async def health():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    return {"status": "ok"}

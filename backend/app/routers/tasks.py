@@ -1,11 +1,13 @@
 """
 Task management routes with flat structure and deliverable tracking.
 """
+import json
 import random
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 
@@ -23,21 +25,44 @@ from app.database import get_session
 from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
-    SubtaskWithAssignee, TaskCommentWithUser
+    SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus,
 )
-from app.auth import get_current_user, get_current_admin_user
+from app.auth import get_current_user, get_current_admin_user, get_current_user_optional
 from app.routers.notifications import create_notification
+from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+
+def _recurrence_kwargs(task: Task) -> dict:
+    """Fields for TaskRead / TaskWithAssignee (backward compatible if columns missing)."""
+    return {
+        "is_recurring": bool(getattr(task, "is_recurring", False)),
+        "recurrence_type": getattr(task, "recurrence_type", None),
+        "recurrence_interval": getattr(task, "recurrence_interval", None) or 1,
+        "repeat_days": getattr(task, "repeat_days", None),
+        "recurrence_start_date": getattr(task, "recurrence_start_date", None),
+        "recurrence_end_date": getattr(task, "recurrence_end_date", None),
+        "monthly_day": getattr(task, "monthly_day", None),
+    }
 
 
 # Helper function to calculate task progress
 def calculate_task_progress(task: Task, session: Session) -> int:
     """
     Calculate task completion progress (0-100).
+    Recurring tasks: ratio of completed instances to all materialized instances.
     If task has subtasks: (completed subtasks / total subtasks) * 100
     If no subtasks: 100 if approved, 0 otherwise
     """
+    if getattr(task, "is_recurring", False):
+        inst_stmt = select(TaskInstance).where(TaskInstance.task_id == task.id)
+        instances = session.exec(inst_stmt).all()
+        if not instances:
+            return 0
+        done = sum(1 for i in instances if i.status == TaskInstanceStatus.completed)
+        return round(100 * done / len(instances))
+
     # Check if task has subtasks
     subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task.id)
     subtasks = session.exec(subtasks_stmt).all()
@@ -132,10 +157,134 @@ async def get_my_tasks(
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
             assigned_by_name=assigner.name if assigner else None,
-            progress=calculate_task_progress(task, session)
+            progress=calculate_task_progress(task, session),
+            **_recurrence_kwargs(task),
         ))
     
     return result
+
+
+class TaskInstanceStatusBody(BaseModel):
+    status: TaskInstanceStatus
+
+
+@router.get("/recurring/my-summary")
+async def get_my_recurring_instances_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Materialize instances for assigned recurring tasks, then return today's,
+    upcoming, and recently completed occurrences (employee-centric).
+    """
+    stmt = select(Task).where(
+        Task.is_recurring == True,  # noqa: E712
+        Task.assigned_to == current_user.id,
+    )
+    recurring_tasks = session.exec(stmt).all()
+    for t in recurring_tasks:
+        ensure_instances_for_task(session, t, horizon_days=120, past_days=14)
+
+    today = date.today()
+    past = today - timedelta(days=30)
+    future = today + timedelta(days=60)
+
+    inst_stmt = (
+        select(TaskInstance, Task)
+        .join(Task, TaskInstance.task_id == Task.id)
+        .where(
+            Task.is_recurring == True,  # noqa: E712
+            Task.assigned_to == current_user.id,
+            TaskInstance.instance_date >= past,
+            TaskInstance.instance_date <= future,
+        )
+        .order_by(TaskInstance.instance_date.asc())
+    )
+    rows = session.exec(inst_stmt).all()
+
+    def row_to_item(inst: TaskInstance, task: Task) -> dict:
+        return {
+            "id": inst.id,
+            "task_id": inst.task_id,
+            "instance_date": inst.instance_date,
+            "status": inst.status,
+            "created_at": inst.created_at,
+            "updated_at": inst.updated_at,
+            "task_title": task.title,
+            "public_id": task.public_id,
+            "priority": task.priority,
+        }
+
+    today_list, upcoming, completed_recent = [], [], []
+    for inst, task in rows:
+        item = row_to_item(inst, task)
+        if inst.instance_date == today:
+            today_list.append(item)
+        elif inst.instance_date > today and inst.status != TaskInstanceStatus.completed:
+            upcoming.append(item)
+        elif inst.status == TaskInstanceStatus.completed and inst.instance_date >= today - timedelta(days=14):
+            completed_recent.append(item)
+
+    upcoming.sort(key=lambda x: x["instance_date"])
+    completed_recent.sort(key=lambda x: x["instance_date"], reverse=True)
+
+    return {
+        "today": today_list,
+        "upcoming": upcoming[:25],
+        "completed_recent": completed_recent[:25],
+    }
+
+
+@router.patch("/recurring/instances/{instance_id}/status")
+async def update_task_instance_status(
+    instance_id: int,
+    body: TaskInstanceStatusBody,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Update status on a single recurring occurrence (assignee or admin)."""
+    inst = session.exec(select(TaskInstance).where(TaskInstance.id == instance_id)).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Task instance not found")
+    task = session.exec(select(Task).where(Task.id == inst.task_id)).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Parent task not found")
+    if current_user.role != UserRole.admin and task.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this instance")
+
+    inst.status = body.status
+    inst.updated_at = datetime.now(timezone.utc)
+    session.add(inst)
+    session.commit()
+    session.refresh(inst)
+    return {
+        "id": inst.id,
+        "task_id": inst.task_id,
+        "instance_date": inst.instance_date,
+        "status": inst.status,
+        "created_at": inst.created_at,
+        "updated_at": inst.updated_at,
+    }
+
+
+@router.post("/recurring/materialize")
+async def materialize_recurring_instances(
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    x_cron_secret: Optional[str] = Header(default=None, alias="X-Cron-Secret"),
+):
+    """
+    Generate missing TaskInstance rows for all recurring tasks.
+    Callable by admin (JWT), or by cron with header X-Cron-Secret matching CRON_SECRET.
+    """
+    import os
+    secret = os.getenv("CRON_SECRET", "")
+    cron_ok = bool(secret and x_cron_secret == secret)
+    admin_ok = current_user is not None and current_user.role == UserRole.admin
+    if not cron_ok and not admin_ok:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    n = materialize_all_recurring_tasks(session, horizon_days=180)
+    return {"materialized_new_rows": n, "message": "Recurring instances ensured"}
 
 
 @router.patch("/{task_id}/status", response_model=TaskRead)
@@ -312,7 +461,32 @@ async def create_task(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Deployed link must be a valid URL starting with http:// or https://"
         )
-    
+
+    is_rec = bool(getattr(task_data, "is_recurring", False))
+    repeat_days_str = None
+    recurrence_type = None
+    recurrence_interval = 1
+    recurrence_start = None
+    recurrence_end = None
+    monthly_day_val = None
+
+    if is_rec:
+        recurrence_type = task_data.recurrence_type
+        if recurrence_type not in ("daily", "weekly", "monthly"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="recurrence_type must be daily, weekly, or monthly",
+            )
+        recurrence_interval = max(1, task_data.recurrence_interval or 1)
+        recurrence_start = task_data.recurrence_start_date or task_data.due_date or date.today()
+        recurrence_end = task_data.recurrence_end_date
+        if task_data.repeat_days:
+            repeat_days_str = json.dumps(task_data.repeat_days)
+        elif recurrence_type == "weekly":
+            repeat_days_str = json.dumps([recurrence_start.weekday()])
+        if recurrence_type == "monthly":
+            monthly_day_val = task_data.monthly_day or recurrence_start.day
+
     task = Task(
         title=task_data.title,
         description=task_data.description,
@@ -322,13 +496,23 @@ async def create_task(
         assigned_by=admin.id,
         github_link=task_data.github_link,
         deployed_link=task_data.deployed_link,
-        public_id=generate_public_id(session, Task)
+        public_id=generate_public_id(session, Task),
+        is_recurring=is_rec,
+        recurrence_type=recurrence_type if is_rec else None,
+        recurrence_interval=recurrence_interval if is_rec else 1,
+        repeat_days=repeat_days_str,
+        recurrence_start_date=recurrence_start if is_rec else None,
+        recurrence_end_date=recurrence_end if is_rec else None,
+        monthly_day=monthly_day_val,
     )
-    
+
     session.add(task)
     session.commit()
     session.refresh(task)
-    
+
+    if is_rec:
+        ensure_instances_for_task(session, task, horizon_days=120, past_days=7)
+
     # Send notification to assigned employee
     if assignee:
         create_notification(
@@ -348,9 +532,9 @@ async def get_all_tasks(
     status_filter: Optional[TaskStatus] = None,
     assigned_to: Optional[int] = None,
     session: Session = Depends(get_session),
-    admin: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get all tasks (admin only)."""
+    """Get all tasks — visible to every authenticated user."""
     statement = select(Task)
     
     if status_filter:
@@ -392,7 +576,8 @@ async def get_all_tasks(
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
             assigned_by_name=assigner.name if assigner else None,
-            progress=calculate_task_progress(task, session)
+            progress=calculate_task_progress(task, session),
+            **_recurrence_kwargs(task),
         ))
     
     return result
@@ -446,7 +631,8 @@ async def get_task(
         assignee_name=assignee.name if assignee else None,
         assignee_email=assignee.email if assignee else None,
         assigned_by_name=None,  # Can be added if needed
-        progress=calculate_task_progress(task, session)
+        progress=calculate_task_progress(task, session),
+        **_recurrence_kwargs(task),
     )
 
 
@@ -509,7 +695,8 @@ async def get_task_details(
         "assignee_email": assignee.email if assignee else None,
         "assignee_profile_picture": assignee.profile_picture if assignee else None,
         "assigned_by_name": assigned_by_user.name if assigned_by_user else None,
-        "progress": calculate_task_progress(task, session)
+        "progress": calculate_task_progress(task, session),
+        **_recurrence_kwargs(task),
     }
     
     # Get all subtasks for this task
@@ -568,8 +755,14 @@ async def update_task(
             detail="Task not found"
         )
     
+    # Track original assignee for notification logic
+    original_assignee_id = task.assigned_to
+    
     # Update fields
     update_data = task_data.model_dump(exclude_unset=True)
+    if "repeat_days" in update_data and update_data["repeat_days"] is not None:
+        rd = update_data["repeat_days"]
+        update_data["repeat_days"] = json.dumps(rd) if isinstance(rd, list) else rd
     for key, value in update_data.items():
         setattr(task, key, value)
     
@@ -577,6 +770,19 @@ async def update_task(
     session.add(task)
     session.commit()
     session.refresh(task)
+
+    if getattr(task, "is_recurring", False):
+        ensure_instances_for_task(session, task, horizon_days=120, past_days=7)
+
+    # If assignee changed, send notification to the new assignee
+    if task.assigned_to and task.assigned_to != original_assignee_id:
+        create_notification(
+            session=session,
+            user_id=task.assigned_to,
+            type=NotificationType.TASK_ASSIGNED,
+            message=f"New task assigned: Task #{task.id} - {task.title} (Reassigned by {admin.name})",
+            task_id=task.id
+        )
     
     return task
 
@@ -599,7 +805,12 @@ async def delete_task(
         )
     
     # Delete related records first to avoid foreign key constraint violations
-    
+
+    # 0. Recurring task instances
+    inst_stmt = select(TaskInstance).where(TaskInstance.task_id == task_id)
+    for inst in session.exec(inst_stmt).all():
+        session.delete(inst)
+
     # 1. Delete all subtasks (including nested ones)
     subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task_id)
     subtasks = session.exec(subtasks_stmt).all()

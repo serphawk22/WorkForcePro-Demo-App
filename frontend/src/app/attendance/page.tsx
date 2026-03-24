@@ -369,25 +369,25 @@ export default function AttendancePage() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={setTodayFilter}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg glass-light hover:bg-primary/10 hover:text-primary transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary-glow transition-all active:scale-95 shadow-sm"
                           >
                             Today
                           </button>
                           <button
                             onClick={setYesterdayFilter}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg glass-light hover:bg-primary/10 hover:text-primary transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary-glow transition-all active:scale-95 shadow-sm"
                           >
                             Yesterday
                           </button>
                           <button
                             onClick={setThisWeekFilter}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg glass-light hover:bg-primary/10 hover:text-primary transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary-glow transition-all active:scale-95 shadow-sm"
                           >
                             This Week
                           </button>
                           <button
                             onClick={setThisMonthFilter}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg glass-light hover:bg-primary/10 hover:text-primary transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary-glow transition-all active:scale-95 shadow-sm"
                           >
                             This Month
                           </button>
@@ -418,13 +418,13 @@ export default function AttendancePage() {
                             onClick={() => {
                               setSortOrder(prev => prev === "desc" ? "asc" : "desc");
                             }}
-                            className="p-1.5 rounded-lg glass-light hover:bg-primary/10 transition-colors"
+                            className="p-1.5 rounded-lg bg-primary text-white hover:bg-primary-glow transition-all active:scale-95 shadow-sm"
                             title={sortOrder === "desc" ? "Newest First" : "Oldest First"}
                           >
                             {sortOrder === "desc" ? (
-                              <SortDesc className="h-4 w-4 text-primary" />
+                              <SortDesc className="h-4 w-4" />
                             ) : (
-                              <SortAsc className="h-4 w-4 text-primary" />
+                              <SortAsc className="h-4 w-4" />
                             )}
                           </button>
 

@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { getUserById, getLatestPayroll, updateEmployeeDateJoined, updateEmployeeBaseSalary, UserProfile, PayrollRecord } from "@/lib/api";
+import { getUserById, getLatestPayroll, updateEmployeeDateJoined, updateEmployeeBaseSalary, getApiBaseUrl, UserProfile, PayrollRecord } from "@/lib/api";
 import { ArrowLeft, Mail, Calendar, Github, Linkedin, User as UserIcon, Loader2, Shield, DollarSign, Briefcase, Pencil, Check, X, Building2, CreditCard, Hash, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,7 @@ export default function UserDetailPage() {
     if (employee.profile_picture.startsWith("data:")) return employee.profile_picture;
     // Otherwise treat as URL
     if (employee.profile_picture.startsWith("http")) return employee.profile_picture;
-    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${employee.profile_picture}`;
+    return `${getApiBaseUrl()}${employee.profile_picture}`;
   };
 
   if (loading) {

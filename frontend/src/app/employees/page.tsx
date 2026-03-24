@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { fetchEmployees, deleteUser, createEmployee, type User } from "@/lib/api";
+import { fetchEmployees, deleteUser, createEmployee, getApiBaseUrl, type User } from "@/lib/api";
 import { Search, Plus, Mail, UserCircle, Loader2, Github, Linkedin, Calendar, Trash2, X, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,7 +55,7 @@ export default function EmployeesPage() {
     if (profilePicture.startsWith("data:")) return profilePicture;
     // Otherwise treat as URL
     if (profilePicture.startsWith("http")) return profilePicture;
-    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${profilePicture}`;
+    return `${getApiBaseUrl()}${profilePicture}`;
   };
 
   const handleEmployeeClick = (empId: number) => {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Github, Linkedin, Mail, User as UserIcon, Upload, Camera, Building2, CreditCard, Hash, Landmark, Banknote, Briefcase, Clock, BadgeCheck, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/AuthProvider";
-import { getMyProfile, updateMyProfile, updateMyBankDetails, uploadProfilePicture, getMyPayroll, UserProfile, PayrollRecord } from "@/lib/api";
+import { getMyProfile, updateMyProfile, updateMyBankDetails, uploadProfilePicture, getMyPayroll, getApiBaseUrl, UserProfile, PayrollRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,7 +210,7 @@ export default function ProfilePage() {
     if (profile.profile_picture.startsWith("data:")) return profile.profile_picture;
     // Otherwise treat as URL
     if (profile.profile_picture.startsWith("http")) return profile.profile_picture;
-    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${profile.profile_picture}`;
+    return `${getApiBaseUrl()}${profile.profile_picture}`;
   };
 
   if (loading) {

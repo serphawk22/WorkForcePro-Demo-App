@@ -25,10 +25,8 @@ import {
   Mail,
   Timer,
 } from "lucide-react";
-import { getLeaveRequestById, reviewLeaveRequest, cancelLeaveRequest, LeaveRequest } from "@/lib/api";
+import { getLeaveRequestById, reviewLeaveRequest, cancelLeaveRequest, LeaveRequest, getApiBaseUrl } from "@/lib/api";
 import { toast } from "sonner";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const leaveTypeColors: Record<string, { bg: string; text: string; dot: string }> = {
   personal: { bg: "bg-blue-500/10", text: "text-blue-500", dot: "bg-blue-500" },
@@ -69,7 +67,7 @@ function Avatar({ name, picture }: { name?: string; picture?: string | null }) {
   const getUrl = () => {
     if (!picture) return null;
     if (picture.startsWith("data:") || picture.startsWith("http")) return picture;
-    return `${API_BASE}${picture}`;
+    return `${getApiBaseUrl()}${picture}`;
   };
 
   const url = getUrl();
@@ -218,7 +216,9 @@ export default function LeaveDetailPage() {
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <CalendarOff className="h-14 w-14 text-muted-foreground/40 mb-4" />
             <h2 className="text-lg font-semibold text-foreground mb-1">Request Not Found</h2>
-            <p className="text-muted-foreground text-sm">This leave request doesn't exist or you don't have permission to view it.</p>
+            <p className="text-muted-foreground text-sm">
+              This leave request doesn&apos;t exist or you don&apos;t have permission to view it.
+            </p>
           </div>
         ) : (() => {
           const sc = statusConfig[leave.status];
@@ -430,7 +430,9 @@ export default function LeaveDetailPage() {
                       <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
                         <MessageSquare size={13} /> Admin Comment
                       </h2>
-                      <p className="text-sm text-foreground leading-relaxed italic">"{leave.admin_comment}"</p>
+                      <p className="text-sm text-foreground leading-relaxed italic">
+                        &ldquo;{leave.admin_comment}&rdquo;
+                      </p>
                     </div>
                   )}
 

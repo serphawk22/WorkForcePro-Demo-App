@@ -12,13 +12,21 @@ from app.auth import get_current_user
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
-def create_notification(session: Session, user_id: int, type: NotificationType, message: str, task_id: int = None):
+def create_notification(
+    session: Session,
+    user_id: int,
+    type: NotificationType,
+    message: str,
+    task_id: int = None,
+    weekly_progress_id: int = None,
+):
     """Helper function to create a notification."""
     notification = Notification(
         user_id=user_id,
         type=type,
         message=message,
-        task_id=task_id
+        task_id=task_id,
+        weekly_progress_id=weekly_progress_id,
     )
     session.add(notification)
     session.commit()

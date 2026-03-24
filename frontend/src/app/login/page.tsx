@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Zap, Mail, Lock, ArrowRight, Loader2, ServerCrash } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBaseUrl } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,7 +39,7 @@ export default function LoginPage() {
       // Step 1: no-cors fire-and-forget to wake Railway without hitting CORS error
       // (Railway's sleeping proxy returns 502 with no CORS headers; no-cors ignores that)
       try {
-        await fetch(`${API_BASE_URL}/health`, { method: "GET", mode: "no-cors", cache: "no-store" });
+        await fetch(`${getApiBaseUrl()}/health`, { method: "GET", mode: "no-cors", cache: "no-store" });
       } catch {}
 
       // Step 2: poll with normal CORS fetch until FastAPI is actually up
@@ -48,7 +47,7 @@ export default function LoginPage() {
         if (cancelled) break;
         if (attempt === 1) setServerWaking(true); // show "waking up" banner after first retry
         try {
-          const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+          const res = await fetch(`${getApiBaseUrl()}/health`, { signal: AbortSignal.timeout(5000) });
           if (res.ok) { setServerWaking(false); return; }
         } catch {}
         await new Promise(r => setTimeout(r, 4000));
@@ -74,7 +73,7 @@ export default function LoginPage() {
       const t1 = setTimeout(() => controller.abort(), 35000);
       let res: Response;
       try {
-        res = await fetch(`${API_BASE_URL}/auth/login/json`, {
+        res = await fetch(`${getApiBaseUrl()}/auth/login/json`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
@@ -85,7 +84,7 @@ export default function LoginPage() {
         clearTimeout(t1);
         if (fetchErr.name === "AbortError") {
           // retry once for cold start
-          const res2 = await fetch(`${API_BASE_URL}/auth/login/json`, {
+          const res2 = await fetch(`${getApiBaseUrl()}/auth/login/json`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
@@ -139,7 +138,14 @@ export default function LoginPage() {
       
     } catch (err: any) {
       console.error("Login error:", err);
-      setError(err.message || "An unexpected error occurred");
+      const msg = err?.message || "";
+      if (msg === "Failed to fetch" || err?.name === "TypeError") {
+        setError(
+          "Cannot reach the API. In development, start the backend in another terminal: cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+        );
+      } else {
+        setError(msg || "An unexpected error occurred");
+      }
       setIsSubmitting(false);
     }
   };

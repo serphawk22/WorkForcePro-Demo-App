@@ -14,8 +14,10 @@ import {
   LogOut,
   User,
   Pin,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { getApiBaseUrl } from "@/lib/api";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
@@ -26,10 +28,12 @@ const adminLinks = [
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
   { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
+  { label: "Weekly Progress", icon: ClipboardList, path: "/admin/weekly-progress" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
+  { label: "Weekly Progress", icon: ClipboardList, path: "/weekly-progress" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
@@ -114,7 +118,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     if (!profilePicture) return null;
     if (profilePicture.startsWith("data:")) return profilePicture;
     if (profilePicture.startsWith("http")) return profilePicture;
-    return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${profilePicture}`;
+    return `${getApiBaseUrl()}${profilePicture}`;
   };
 
   return (
