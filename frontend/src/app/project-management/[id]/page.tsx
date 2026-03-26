@@ -6,9 +6,9 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { 
-  ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle, 
+  ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle,
   Github, ExternalLink, ListTree, MessageSquare, Send, Edit, Save, X,
-  ChevronDown, ChevronRight, Loader2, Copy
+  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent
 } from "lucide-react";
 import { 
   getProjectDetails, 
@@ -16,6 +16,9 @@ import {
   updateTaskStatus,
   createComment,
   updateSubtaskStatus,
+  getTaskRecurringInstances,
+  updateTaskInstanceStatus,
+  type TaskRecurringInstancesResponse,
   ProjectDetails,
   TaskComment
 } from "@/lib/api";
@@ -65,11 +68,43 @@ export default function ProjectDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
 
+  // Recurring task instances (only when task.is_recurring is true)
+  const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
+  const [isLoadingRecurringInstances, setIsLoadingRecurringInstances] = useState(false);
+  const [instanceActionLoadingId, setInstanceActionLoadingId] = useState<number | null>(null);
+
   useEffect(() => {
     if (taskId) {
       loadProjectDetails();
     }
   }, [taskId]);
+
+  useEffect(() => {
+    // Only fetch recurrence data when we have a loaded project for a recurring task.
+    if (!taskId) return;
+    if (!project?.task?.is_recurring) return;
+
+    let cancelled = false;
+    const loadRecurring = async () => {
+      setIsLoadingRecurringInstances(true);
+      try {
+        const res = await getTaskRecurringInstances(taskId, 10, 10);
+        if (cancelled) return;
+        if (res.data) setRecurringInstances(res.data);
+        else if (res.error) toast.error(res.error);
+      } catch (e) {
+        if (!cancelled) toast.error("Failed to load recurring task instances");
+        console.error(e);
+      } finally {
+        if (!cancelled) setIsLoadingRecurringInstances(false);
+      }
+    };
+
+    loadRecurring();
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, project?.task?.is_recurring]);
 
   const loadProjectDetails = async () => {
     if (!taskId) return;
@@ -179,6 +214,61 @@ export default function ProjectDetailPage() {
     } catch (error) {
       console.error("Error updating subtask:", error);
       toast.error("Failed to update subtask");
+    }
+  };
+
+  const handleRecurringInstanceAction = async (
+    instanceId: number,
+    nextStatus: "completed" | "skipped"
+  ) => {
+    if (!instanceId) return;
+    setInstanceActionLoadingId(instanceId);
+    try {
+      const res = await updateTaskInstanceStatus(instanceId, nextStatus);
+      if (!res.data) {
+        toast.error(res.error || "Failed to update instance");
+        return;
+      }
+
+      setRecurringInstances((prev) => {
+        if (!prev) return prev;
+
+        const existing =
+          prev.upcoming.find((i) => i.id === instanceId) ||
+          prev.history.find((i) => i.id === instanceId);
+
+        const enriched = {
+          ...res.data,
+          assigned_to: (existing as any)?.assigned_to ?? null,
+          assignee_name: (existing as any)?.assignee_name ?? null,
+        } as TaskRecurringInstancesResponse["upcoming"][number];
+
+        const nextUpcoming = prev.upcoming.filter((i) => i.id !== instanceId);
+        const nextHistory = [
+          enriched,
+          ...prev.history.filter((i) => i.id !== instanceId),
+        ].sort(
+          (a, b) =>
+            new Date(b.instance_date).getTime() -
+            new Date(a.instance_date).getTime()
+        );
+
+        return {
+          ...prev,
+          upcoming: nextUpcoming,
+          history: nextHistory,
+          next_occurrence_date: nextUpcoming[0]?.instance_date ?? null,
+        };
+      });
+
+      toast.success(
+        nextStatus === "completed" ? "Instance marked complete" : "Instance skipped"
+      );
+    } catch (e) {
+      console.error("Recurring instance update failed:", e);
+      toast.error("Failed to update instance");
+    } finally {
+      setInstanceActionLoadingId(null);
     }
   };
 
@@ -322,6 +412,59 @@ export default function ProjectDetailPage() {
 
   const { task, subtasks, comments } = project;
 
+  const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const parseRepeatDays = (raw: string | null | undefined): number[] => {
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+      }
+    } catch {
+      // Ignore malformed repeat_days payloads.
+    }
+    return [];
+  };
+
+  const repeatDaysNums = parseRepeatDays(task.repeat_days);
+  const repeatDaysLabel = repeatDaysNums.length ? repeatDaysNums.map((d) => WEEKDAYS[d]).join(", ") : null;
+
+  const recurrenceTypeLabel =
+    task.recurrence_type === "daily"
+      ? "Daily"
+      : task.recurrence_type === "weekly"
+      ? "Weekly"
+      : task.recurrence_type === "monthly"
+      ? "Monthly"
+      : task.recurrence_type || "Custom";
+
+  const recurrenceInterval = task.recurrence_interval ?? 1;
+  const recurrenceIntervalUnit =
+    task.recurrence_type === "daily"
+      ? "day(s)"
+      : task.recurrence_type === "weekly"
+      ? "week(s)"
+      : task.recurrence_type === "monthly"
+      ? "month(s)"
+      : "day(s)";
+
+  const recurrenceStartDate = task.recurrence_start_date || task.start_date;
+  const recurrenceEndDate = task.recurrence_end_date || null;
+
+  const upcomingInstances = recurringInstances?.upcoming ?? [];
+  const historyInstances = recurringInstances?.history ?? [];
+
+  const totalOccurrences = upcomingInstances.length + historyInstances.length;
+  const completedCount = historyInstances.filter((i) => i.status === "completed").length;
+  const skippedCount = historyInstances.filter((i) => i.status === "skipped").length;
+  const missedCount = historyInstances.filter((i) => i.status !== "completed" && i.status !== "skipped").length;
+  const completionPercent = totalOccurrences > 0 ? Math.round((completedCount / totalOccurrences) * 100) : 0;
+  const nextOccurrenceDateValue =
+    recurringInstances?.next_occurrence_date ?? upcomingInstances[0]?.instance_date ?? null;
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
@@ -425,6 +568,286 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Recurrence Details / Upcoming / History (Recurring tasks only) */}
+          {task.is_recurring && (
+            <div className="space-y-6">
+              {/* Recurrence Details Card */}
+              <div className="glass-card rounded-2xl border border-white/20 p-5 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <Repeat2 size={20} className="text-purple-500" />
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground">Recurrence Details</h2>
+                      <p className="text-xs text-muted-foreground">Configuration & next scheduled run</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <CalendarDays size={14} />
+                    <span className="font-medium">
+                      Next:{" "}
+                      {nextOccurrenceDateValue
+                        ? new Date(nextOccurrenceDateValue).toLocaleDateString("en-IN")
+                        : "--"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                    <Repeat2 size={18} className="text-primary" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Repeat Type</p>
+                      <p className="text-sm font-semibold text-foreground">{recurrenceTypeLabel}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                    <Repeat2 size={18} className="text-blue-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Interval</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Every {recurrenceInterval} {recurrenceIntervalUnit}
+                      </p>
+                    </div>
+                  </div>
+
+                  {task.recurrence_type === "weekly" && (
+                    <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                      <Repeat2 size={18} className="text-amber-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Days of Week</p>
+                        <p className="text-sm font-semibold text-foreground">
+                          {repeatDaysLabel ?? "--"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                    <Calendar size={18} className="text-blue-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Start Date</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {recurrenceStartDate
+                          ? new Date(recurrenceStartDate).toLocaleDateString("en-IN")
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                    <CalendarDays size={18} className="text-orange-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">End Date</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {recurrenceEndDate
+                          ? new Date(recurrenceEndDate).toLocaleDateString("en-IN")
+                          : "Open-ended"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-white/10">
+                    <Clock size={18} className="text-purple-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Next Occurrence</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {nextOccurrenceDateValue
+                          ? new Date(nextOccurrenceDateValue).toLocaleDateString("en-IN")
+                          : isLoadingRecurringInstances
+                          ? "Loading..."
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Upcoming Instances */}
+                  <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <CalendarDays size={20} className="text-primary" />
+                        <h3 className="text-lg font-semibold text-foreground">Upcoming Instances</h3>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {isLoadingRecurringInstances ? "Loading..." : `${upcomingInstances.length} items`}
+                      </div>
+                    </div>
+
+                    {upcomingInstances.length > 0 ? (
+                      <div className="space-y-3">
+                        {upcomingInstances.map((inst) => (
+                          <div
+                            key={inst.id}
+                            className="flex items-center justify-between gap-4 p-4 rounded-xl bg-secondary/30 border border-white/10 hover:bg-secondary/40 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-foreground">
+                                  {new Date(inst.instance_date).toLocaleDateString("en-IN")}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                                    inst.status === "in_progress"
+                                      ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
+                                      : "bg-purple-500/10 text-purple-500 border-purple-500/30"
+                                  }`}
+                                >
+                                  Pending
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 truncate">
+                                Assigned to:{" "}
+                                <span className="text-sm font-medium text-foreground">
+                                  {inst.assignee_name || task.assignee_name || "Unassigned"}
+                                </span>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                disabled={instanceActionLoadingId === inst.id}
+                                onClick={() => handleRecurringInstanceAction(inst.id, "completed")}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-60 transition-all"
+                              >
+                                <CheckCircle2 size={14} className="inline mr-1 -mt-[1px]" />
+                                Mark Complete
+                              </button>
+                              <button
+                                type="button"
+                                disabled={instanceActionLoadingId === inst.id}
+                                onClick={() => handleRecurringInstanceAction(inst.id, "skipped")}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:bg-secondary disabled:opacity-60 transition-all"
+                              >
+                                <SkipForward size={14} className="inline mr-1 -mt-[1px]" />
+                                Skip
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-8 text-center">No upcoming instances</p>
+                    )}
+                  </div>
+
+                  {/* Past Activity / History */}
+                  <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <ListTree size={20} className="text-primary" />
+                        <h3 className="text-lg font-semibold text-foreground">Past Activity</h3>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {isLoadingRecurringInstances ? "Loading..." : `${historyInstances.length} items`}
+                      </div>
+                    </div>
+
+                    {historyInstances.length > 0 ? (
+                      <div className="space-y-3">
+                        {historyInstances.map((inst) => {
+                          const isCompleted = inst.status === "completed";
+                          const isSkipped = inst.status === "skipped";
+                          const isMissed = !isCompleted && !isSkipped;
+                          const statusPill =
+                            isCompleted
+                              ? "bg-green-500/10 text-green-500 border-green-500/30"
+                              : isSkipped
+                              ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/30"
+                              : "bg-red-500/10 text-red-500 border-red-500/30";
+
+                          return (
+                            <div
+                              key={inst.id}
+                              className="flex items-start justify-between gap-4 p-4 rounded-xl bg-secondary/30 border border-white/10"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {new Date(inst.instance_date).toLocaleDateString("en-IN")}
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${statusPill}`}
+                                  >
+                                    {isCompleted ? "Completed" : isSkipped ? "Skipped" : "Missed"}
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  Completion time:{" "}
+                                  <span className="text-sm font-medium text-foreground">
+                                    {isCompleted ? new Date(inst.updated_at).toLocaleString("en-IN") : "--"}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground shrink-0">
+                                {inst.assignee_name ? (
+                                  <span className="block">
+                                    {inst.assignee_name === user?.name ? "You" : inst.assignee_name}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-8 text-center">No activity yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Completion Stats Card */}
+                <div className="lg:col-span-1">
+                  <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5 sticky top-24">
+                    <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Percent size={20} className="text-primary" />
+                      Completion Stats
+                    </h3>
+
+                    <div className="space-y-3 mb-5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Total occurrences</span>
+                        <span className="font-semibold text-foreground">{totalOccurrences}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-green-500">Completed</span>
+                        <span className="font-semibold text-foreground">{completedCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-red-500">Missed</span>
+                        <span className="font-semibold text-foreground">{missedCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-yellow-500">Skipped</span>
+                        <span className="font-semibold text-foreground">{skippedCount}</span>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-muted-foreground">Completion</span>
+                        <span className="text-sm font-bold text-purple-600">{completionPercent}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-600 transition-all duration-300"
+                          style={{ width: `${completionPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Track recurring performance at a glance.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Deployment Links Section */}
           <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">

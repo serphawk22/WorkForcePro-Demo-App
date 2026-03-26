@@ -220,7 +220,8 @@ async def get_my_recurring_instances_summary(
         item = row_to_item(inst, task)
         if inst.instance_date == today:
             today_list.append(item)
-        elif inst.instance_date > today and inst.status != TaskInstanceStatus.completed:
+        # Upcoming = future instances that are not done and not skipped.
+        elif inst.instance_date > today and inst.status not in (TaskInstanceStatus.completed, TaskInstanceStatus.skipped):
             upcoming.append(item)
         elif inst.status == TaskInstanceStatus.completed and inst.instance_date >= today - timedelta(days=14):
             completed_recent.append(item)
@@ -232,6 +233,95 @@ async def get_my_recurring_instances_summary(
         "today": today_list,
         "upcoming": upcoming[:25],
         "completed_recent": completed_recent[:25],
+    }
+
+
+@router.get("/recurring/tasks/{task_id}/instances")
+async def get_recurring_task_instances(
+    task_id: int,
+    upcoming_limit: int = 10,
+    history_limit: int = 10,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch recurring task instances for a single task (employee-centric + admin allowed).
+
+    - upcoming: next N instances with status todo/in_progress (not completed/skipped)
+    - history: last N items that are completed, skipped, or missed (overdue pending)
+    """
+    # Verify task exists + permission
+    task = session.exec(select(Task).where(Task.id == task_id)).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    if not getattr(task, "is_recurring", False):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task is not recurring")
+
+    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this task")
+
+    # Ensure instances exist around today
+    ensure_instances_for_task(session, task, horizon_days=120, past_days=60)
+
+    today = date.today()
+    past_from = today - timedelta(days=60)
+    future_to = today + timedelta(days=120)
+
+    inst_stmt = (
+        select(TaskInstance)
+        .where(
+            TaskInstance.task_id == task.id,
+            TaskInstance.instance_date >= past_from,
+            TaskInstance.instance_date <= future_to,
+        )
+        .order_by(TaskInstance.instance_date.asc())
+    )
+    instances = session.exec(inst_stmt).all()
+
+    assignee_name = None
+    if task.assigned_to:
+        assignee = session.exec(select(User).where(User.id == task.assigned_to)).first()
+        assignee_name = assignee.name if assignee else None
+
+    def to_item(inst: TaskInstance) -> dict:
+        return {
+            "id": inst.id,
+            "task_id": inst.task_id,
+            "instance_date": inst.instance_date,
+            "status": inst.status,
+            "created_at": inst.created_at,
+            "updated_at": inst.updated_at,
+            "assigned_to": task.assigned_to,
+            "assignee_name": assignee_name,
+        }
+
+    upcoming = []
+    history = []
+
+    for inst in instances:
+        item = to_item(inst)
+        # Upcoming: pending instances from today onwards
+        if inst.instance_date >= today and inst.status in (TaskInstanceStatus.todo, TaskInstanceStatus.in_progress):
+            upcoming.append(item)
+            continue
+
+        # History: completed/skipped always show; overdue pending show as missed.
+        if inst.status in (TaskInstanceStatus.completed, TaskInstanceStatus.skipped):
+            history.append(item)
+        elif inst.instance_date < today and inst.status in (TaskInstanceStatus.todo, TaskInstanceStatus.in_progress):
+            history.append(item)
+
+    # Upcoming sorted ascending, history descending
+    upcoming.sort(key=lambda x: x["instance_date"])
+    history.sort(key=lambda x: x["instance_date"], reverse=True)
+
+    next_occurrence_date = upcoming[0]["instance_date"] if len(upcoming) > 0 else None
+
+    return {
+        "upcoming": upcoming[: max(0, upcoming_limit)],
+        "history": history[: max(0, history_limit)],
+        "next_occurrence_date": next_occurrence_date,
     }
 
 

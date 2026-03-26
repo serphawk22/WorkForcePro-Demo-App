@@ -174,18 +174,26 @@ export interface TaskInstanceSummary {
   id: number;
   task_id: number;
   instance_date: string;
-  status: "todo" | "in_progress" | "completed";
+  status: "todo" | "in_progress" | "completed" | "skipped";
   created_at: string;
   updated_at: string;
   task_title?: string;
   public_id?: string;
   priority?: string;
+  assigned_to?: number | null;
+  assignee_name?: string | null;
 }
 
 export interface RecurringInstancesSummary {
   today: TaskInstanceSummary[];
   upcoming: TaskInstanceSummary[];
   completed_recent: TaskInstanceSummary[];
+}
+
+export interface TaskRecurringInstancesResponse {
+  upcoming: TaskInstanceSummary[];
+  history: TaskInstanceSummary[];
+  next_occurrence_date: string | null;
 }
 
 export interface LeaveRequest {
@@ -1012,12 +1020,25 @@ export async function getMyRecurringInstancesSummary(): Promise<ApiResponse<Recu
 
 export async function updateTaskInstanceStatus(
   instanceId: number,
-  status: "todo" | "in_progress" | "completed"
+  status: "todo" | "in_progress" | "completed" | "skipped"
 ): Promise<ApiResponse<TaskInstanceSummary>> {
   return apiFetch<TaskInstanceSummary>(`/tasks/recurring/instances/${instanceId}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+}
+
+export async function getTaskRecurringInstances(
+  taskId: number,
+  upcomingLimit: number = 10,
+  historyLimit: number = 10
+): Promise<ApiResponse<TaskRecurringInstancesResponse>> {
+  const params = new URLSearchParams();
+  params.append("upcoming_limit", String(upcomingLimit));
+  params.append("history_limit", String(historyLimit));
+  return apiFetch<TaskRecurringInstancesResponse>(
+    `/tasks/recurring/tasks/${taskId}/instances?${params.toString()}`
+  );
 }
 
 /**
