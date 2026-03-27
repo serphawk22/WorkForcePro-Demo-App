@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, CheckCircle2, Sparkles, Filter, X } from "lucide-react";
+import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
   getMyHappySheets,
@@ -33,7 +34,6 @@ export default function HappySheetPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // ── Joy Log state ───────────────────────────────────────────
   const [teamHistory, setTeamHistory] = useState<HappySheetEntry[]>([]);
@@ -110,9 +110,11 @@ export default function HappySheetPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!whatMadeYouHappy.trim() || !whatMadeOthersHappy.trim() || !goalsWithoutGreed.trim() || !dreamsSupported.trim()) {
-      setError("Please fill out all reflection fields."); return;
+      showFloatingToast({ type: "error", message: "Please fill all required fields" });
+      return;
     }
-    setIsSubmitting(true); setError(null); setSuccess(false);
+    setIsSubmitting(true);
+    setSuccess(false);
     try {
       const res = await submitHappySheet({
         what_made_you_happy: whatMadeYouHappy,
@@ -122,7 +124,7 @@ export default function HappySheetPage() {
         date: selectedDate,
       });
       if (res.error) {
-        setError(res.error);
+        showFloatingToast({ type: "error", message: res.error });
       } else {
         setSuccess(true);
         setIsUpdate(true);
@@ -139,7 +141,7 @@ export default function HappySheetPage() {
         setTimeout(() => setSuccess(false), 5000);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to submit.");
+      showFloatingToast({ type: "error", message: err?.message || "Failed to submit." });
     } finally {
       setIsSubmitting(false);
     }
@@ -170,7 +172,6 @@ export default function HappySheetPage() {
                 max={todayStr()}
                 onChange={(e) => {
                   setSuccess(false);
-                  setError(null);
                   setSelectedDate(e.target.value);
                 }}
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
@@ -186,9 +187,6 @@ export default function HappySheetPage() {
             </div>
           )}
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">⚠️ {error}</div>
-          )}
           {success && (
             <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2">
               <CheckCircle2 size={18} />

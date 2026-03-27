@@ -4,3 +4,4 @@ export { FeaturesSection } from "./FeaturesSection";
 export { HowItWorksSection } from "./HowItWorksSection";
 export { AIVisionSection } from "./AIVisionSection";
 export { FooterSection } from "./FooterSection";
+export { BookDemoModal } from "./BookDemoModal";

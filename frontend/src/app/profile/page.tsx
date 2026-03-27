@@ -318,8 +318,12 @@ export default function ProfilePage() {
                     <Label htmlFor="name">
                       Name <span className="text-red-500">*</span>
                     </Label>
-                    <div className="relative">
-                      <UserIcon className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <div className="relative group">
+                      <UserIcon
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-[20px] h-[20px] text-[#4B5563] dark:text-[#E5E7EB] opacity-100 filter-none transition-colors group-focus-within:text-primary"
+                        style={{ imageRendering: 'auto', shapeRendering: 'geometricPrecision', filter: 'none', opacity: 1 }}
+                        aria-hidden="true"
+                      />
                       <Input
                         id="name"
                         name="name"
@@ -334,8 +338,8 @@ export default function ProfilePage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="email">Email (cannot be changed)</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <div className="relative group">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-600 dark:text-slate-200 opacity-100 transition-colors group-focus-within:text-primary" />
                       <Input
                         id="email"
                         value={profile?.email || ""}
@@ -351,8 +355,12 @@ export default function ProfilePage() {
                     <Label htmlFor="age">
                       Age <span className="text-red-500">*</span>
                     </Label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <div className="relative group">
+                      <Calendar
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-[20px] h-[20px] text-[#4B5563] dark:text-[#E5E7EB] opacity-100 filter-none transition-colors group-focus-within:text-primary"
+                        style={{ imageRendering: 'auto', shapeRendering: 'geometricPrecision', filter: 'none', opacity: 1 }}
+                        aria-hidden="true"
+                      />
                       <Input
                         id="age"
                         name="age"
@@ -372,8 +380,8 @@ export default function ProfilePage() {
                     <Label htmlFor="date_joined">
                       Date Joined <span className="text-red-500">*</span>
                     </Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                    <div className="relative group">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-600 dark:text-slate-200 opacity-100 transition-colors group-focus-within:text-primary" />
                       <Input
                         id="date_joined"
                         name="date_joined"
@@ -391,8 +399,12 @@ export default function ProfilePage() {
                   <Label htmlFor="github_url">
                     GitHub URL <span className="text-red-500">*</span>
                   </Label>
-                  <div className="relative">
-                    <Github className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <Github
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-[20px] h-[20px] text-[#4B5563] dark:text-[#E5E7EB] opacity-100 filter-none transition-colors group-focus-within:text-primary"
+                      style={{ imageRendering: 'auto', shapeRendering: 'geometricPrecision', filter: 'none', opacity: 1 }}
+                      aria-hidden="true"
+                    />
                     <Input
                       id="github_url"
                       name="github_url"
@@ -409,8 +421,12 @@ export default function ProfilePage() {
                   <Label htmlFor="linkedin_url">
                     LinkedIn URL <span className="text-red-500">*</span>
                   </Label>
-                  <div className="relative">
-                    <Linkedin className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <Linkedin
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-[20px] h-[20px] text-[#4B5563] dark:text-[#E5E7EB] opacity-100 filter-none transition-colors group-focus-within:text-primary"
+                      style={{ imageRendering: 'auto', shapeRendering: 'geometricPrecision', filter: 'none', opacity: 1 }}
+                      aria-hidden="true"
+                    />
                     <Input
                       id="linkedin_url"
                       name="linkedin_url"
@@ -534,8 +550,12 @@ export default function ProfilePage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="bank_account_holder">Account Holder Name</Label>
-                  <div className="relative">
-                    <UserIcon className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <UserIcon
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-[20px] h-[20px] text-[#4B5563] dark:text-[#E5E7EB] opacity-100 filter-none transition-colors group-focus-within:text-primary"
+                      style={{ imageRendering: 'auto', shapeRendering: 'geometricPrecision', filter: 'none', opacity: 1 }}
+                      aria-hidden="true"
+                    />
                     <Input
                       id="bank_account_holder"
                       name="bank_account_holder"
@@ -548,8 +568,8 @@ export default function ProfilePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bank_name">Bank Name</Label>
-                  <div className="relative">
-                    <Landmark className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-600 dark:text-slate-200 opacity-100 transition-colors group-focus-within:text-primary" />
                     <Input
                       id="bank_name"
                       name="bank_name"
@@ -564,8 +584,8 @@ export default function ProfilePage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="bank_account_number">Account Number</Label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-600 dark:text-slate-200 opacity-100 transition-colors group-focus-within:text-primary" />
                     <Input
                       id="bank_account_number"
                       name="bank_account_number"
@@ -579,8 +599,8 @@ export default function ProfilePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bank_ifsc_code">IFSC Code</Label>
-                  <div className="relative">
-                    <Hash className="absolute left-3 top-3 h-4 w-4 text-slate-500 dark:text-white/70" />
+                  <div className="relative group">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-600 dark:text-slate-200 opacity-100 transition-colors group-focus-within:text-primary" />
                     <Input
                       id="bank_ifsc_code"
                       name="bank_ifsc_code"

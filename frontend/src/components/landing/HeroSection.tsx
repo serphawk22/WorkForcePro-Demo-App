@@ -1,10 +1,25 @@
 import Link from "next/link";
-import { ArrowRight, PlayCircle, Users, BarChart3, Clock } from "lucide-react";
+import { ArrowRight, PlayCircle, Sparkles, Brain, Clock, RefreshCw } from "lucide-react";
 
-const stats = [
-  { icon: Users, label: "Active Teams", value: "2,400+" },
-  { icon: BarChart3, label: "Tasks Tracked", value: "1.2M+" },
-  { icon: Clock, label: "Hours Saved / mo", value: "18,000+" },
+const features = [
+  {
+    icon: Sparkles,
+    title: "AI Task Creation 🤖",
+    description: "Create tasks, assign employees, and structure workflows instantly using AI.",
+    gradient: "from-purple-500 via-pink-400 to-pink-300",
+  },
+  {
+    icon: Clock,
+    title: "Smart Attendance Tracking ⏱️",
+    description: "Real-time punch-in/out tracking with productivity insights.",
+    gradient: "from-blue-500 via-purple-500 to-purple-300",
+  },
+  {
+    icon: RefreshCw,
+    title: "Recurring Task Automation 🔁",
+    description: "Automate weekly/monthly tasks and never miss repetitive workflows.",
+    gradient: "from-orange-400 via-pink-500 to-pink-300",
+  },
 ];
 
 export function HeroSection() {
@@ -65,20 +80,26 @@ export function HeroSection() {
             </a>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 animate-fade-in-up" style={{ animationDelay: "0.45s" }}>
-            {stats.map(({ icon: Icon, label, value }) => (
-              <div key={label}
-                   className="group relative p-5 rounded-2xl glass-card glass-card-hover overflow-hidden
-                              flex flex-col items-center gap-2
-                              transition-all duration-300">
-                {/* Gradient glow on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative h-10 w-10 rounded-xl glass-light flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Icon size={18} className="text-primary" />
+          {/* Feature-driven cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 animate-fade-in-up" style={{ animationDelay: "0.45s" }}>
+            {features.map(({ icon: Icon, title, description, gradient }, i) => (
+              <div
+                key={title}
+                className="group relative p-8 rounded-3xl bg-white/60 dark:bg-background/70 shadow-xl border border-border/30 dark:border-border/50 backdrop-blur-lg overflow-hidden flex flex-col items-center gap-4 transition-all duration-300 hover:-translate-y-3 hover:shadow-2xl hover:border-accent/60 cursor-pointer"
+                style={{ animationDelay: `${i * 0.08}s` }}
+              >
+                {/* Animated gradient glow on hover */}
+                <div className={`absolute -inset-1 z-0 rounded-3xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500`} style={{ boxShadow: '0 0 48px 0 rgba(133,79,108,0.18)' }}>
+                  <div className={`w-full h-full rounded-3xl bg-gradient-to-br ${gradient} opacity-40 blur-2xl`} />
                 </div>
-                <p className="relative text-2xl font-extrabold text-foreground">{value}</p>
-                <p className="relative text-xs text-muted-foreground font-medium text-center">{label}</p>
+                {/* Icon with glass background and subtle shadow */}
+                <div className="relative z-10 h-16 w-16 rounded-2xl flex items-center justify-center mb-2 bg-gradient-to-br from-white/80 via-background/60 to-accent/10 shadow-lg group-hover:scale-110 group-hover:rotate-2 transition-all duration-300">
+                  <Icon size={32} className="text-primary drop-shadow-lg" />
+                </div>
+                <h3 className="relative z-10 text-xl font-extrabold text-foreground text-center mb-1 tracking-tight group-hover:text-primary transition-colors duration-200">{title}</h3>
+                <p className="relative z-10 text-muted-foreground text-base leading-relaxed text-center font-medium">{description}</p>
+                {/* Accent line for premium feel */}
+                <div className={`relative z-10 mt-4 h-1 w-16 rounded-full bg-gradient-to-r ${gradient} opacity-80 group-hover:w-24 transition-all duration-400`} />
               </div>
             ))}
           </div>

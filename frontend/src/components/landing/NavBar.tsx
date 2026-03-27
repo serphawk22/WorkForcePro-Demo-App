@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, Zap } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { BookDemoModal } from "./BookDemoModal";
 
 export function NavBar() {
   const [open, setOpen] = useState(false);
@@ -40,17 +41,18 @@ export function NavBar() {
           </Link>
           <Link
             href="/signup"
-            className="px-4 py-2 text-sm font-semibold rounded-xl text-primary-foreground
-                       gradient-primary shadow-primary hover:shadow-glow
-                       transition-all duration-200 hover:scale-105 active:scale-95"
+            className="px-4 py-2 text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-[#854F6C] via-[#522B5B] to-[#2B124C] shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            style={{ boxShadow: '0 4px 24px 0 rgba(133,79,108,0.18)' }}
           >
             Get Started
           </Link>
+          <BookDemoModal buttonClassName="px-4 py-2 text-sm font-semibold rounded-xl text-[#2B124C] bg-gradient-to-r from-[#FBE4D8] via-[#DFB6B2] to-[#FFD580] shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/40" style={{ boxShadow: '0 4px 24px 0 rgba(255,213,128,0.18)' }} />
         </div>
 
         {/* Mobile */}
         <div className="flex md:hidden items-center gap-2">
           <ThemeToggle />
+          <BookDemoModal />
           <button
             onClick={() => setOpen(!open)}
             className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground"

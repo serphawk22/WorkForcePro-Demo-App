@@ -48,7 +48,15 @@ interface SidebarProps {
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
   const pathname = usePathname();
   const [isHovered, setIsHovered] = useState(false);
-  const [isPinned, setIsPinned] = useState(false);
+  const PIN_KEY = "workforcepro_sidebarPinned";
+  const [isPinned, setIsPinned] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(PIN_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [sidebarWidth, setSidebarWidth] = useState(72);
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
@@ -58,7 +66,14 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const links = role === "admin" ? adminLinks : employeeLinks;
   const [pendingCount, setPendingCount] = useState(0);
   const isOpen = isHovered || isPinned;
-  const effectiveWidth = isDragging ? sidebarWidth : (isOpen ? 240 : 72);
+  const effectiveWidth = isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72);
+
+  // Persist pinned state across route navigation (prevents collapse on menu click).
+  useEffect(() => {
+    try {
+      localStorage.setItem(PIN_KEY, String(isPinned));
+    } catch {}
+  }, [isPinned]);
 
   useEffect(() => {
     console.log('[AppSidebar] User state changed:', user?.email || 'null');
@@ -103,12 +118,14 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   }, []);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    // Pinned behavior: sidebar remains expanded; resizing is disabled while pinned.
+    if (isPinned) return;
     dragStartX.current = e.clientX;
     dragStartWidth.current = isOpen ? 240 : 72;
     isDraggingRef.current = true;
     setIsDragging(true);
     e.preventDefault();
-  }, [isOpen]);
+  }, [isOpen, isPinned]);
 
   const displayName = user?.name || userName;
   const displayHandle = user?.email || userHandle;
@@ -123,8 +140,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
 
   return (
     <aside
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => { if (!isPinned) setIsHovered(true); }}
+      onMouseLeave={() => { if (!isPinned) setIsHovered(false); }}
       className={`glass-sidebar fixed left-0 top-0 h-screen flex flex-col z-40 ${
         isDragging ? "" : "transition-[width] duration-300 ease-in-out"
       }`}

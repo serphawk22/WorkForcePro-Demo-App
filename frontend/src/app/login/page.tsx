@@ -194,14 +194,6 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Default credentials hint */}
-          <div className="mb-6 p-3 rounded-xl glass-light bg-blue-50/50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-sm">
-            <div className="font-semibold mb-1">Default Admin Credentials:</div>
-            <div className="flex flex-col gap-0.5 text-xs">
-              <div><strong>Email:</strong> admin@gmail.com</div>
-              <div><strong>Password:</strong> admin</div>
-            </div>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
