@@ -17,6 +17,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Expose port (Railway overrides this with $PORT but it's good practice)
 EXPOSE 8000
+ENV PORT=8000
 
-# Start the FastAPI server using the dynamically assigned PORT, default 8000
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Start the FastAPI server using the dynamically assigned PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
