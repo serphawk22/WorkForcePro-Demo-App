@@ -8,31 +8,18 @@ from typing import Generator
 
 load_dotenv()
 
-# PostgreSQL in production; optional SQLite when SQLITE_DEV=1 (no Docker/Postgres required locally)
-if os.getenv("SQLITE_DEV") == "1":
-    DATABASE_URL = "sqlite:///./workforce_local.db"
-else:
-    DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise RuntimeError(
-        "Set DATABASE_URL in backend/.env (see .env.example) or SQLITE_DEV=1 for local SQLite."
-    )
+    raise RuntimeError("Set DATABASE_URL in backend/.env to your PostgreSQL database connection string.")
 
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL,
-        echo=False,
-        connect_args={"check_same_thread": False},
-    )
-else:
-    engine = create_engine(
-        DATABASE_URL,
-        echo=False,
-        pool_timeout=20,
-        pool_recycle=3600,
-        pool_pre_ping=True,
-    )
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_timeout=20,
+    pool_recycle=3600,
+    pool_pre_ping=True,
+)
 
 
 def create_db_and_tables():

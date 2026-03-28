@@ -87,7 +87,7 @@ python3 -m venv venv          # Windows: py -m venv venv
 # macOS/Linux: source venv/bin/activate   |   Windows: venv\Scripts\activate
 ./venv/bin/pip install -r requirements.txt   # Windows: venv\Scripts\pip install -r requirements.txt
 cp .env.example .env
-# Edit .env: set SQLITE_DEV=1 for SQLite, or set DATABASE_URL for PostgreSQL
+# Edit .env: set DATABASE_URL for PostgreSQL
 
 cd ..                         # back to WorkForcePro root
 npm install
@@ -151,15 +151,7 @@ Copy the example file and edit:
 cp .env.example .env
 ```
 
-**Quick local setup without PostgreSQL:** in `backend/.env` set:
-
-```env
-SQLITE_DEV=1
-SECRET_KEY=change-me-in-production
-FRONTEND_URL=http://localhost:3000
-```
-
-**Or** use PostgreSQL — set `DATABASE_URL` as in `.env.example` and **do not** set `SQLITE_DEV`.
+**Important**: This application requires PostgreSQL. Set `DATABASE_URL` as structured in `.env.example`.
 
 #### Run the Backend Server
 

@@ -30,7 +30,7 @@ Use **`http://`**, not `https://`.
 | Message | What to do |
 |--------|------------|
 | `Frontend dependencies missing` | Run `cd frontend && npm install` |
-| Backend errors / `DATABASE_URL` / SQLite | In `backend/.env` set `SQLITE_DEV=1` **or** set a valid `DATABASE_URL`. Copy from `backend/.env.example`. |
+| Backend errors / `DATABASE_URL` | In `backend/.env` ensure `DATABASE_URL` is set to a robust PostgreSQL database string. Copy from `backend/.env.example`. |
 | `No backend/venv` | `cd backend && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt` |
 
 ## 3. Check the port yourself (macOS/Linux)
@@ -52,7 +52,7 @@ If **nothing** listens on 3000, Next.js never started — fix the error in the `
 ```bash
 cd backend
 source venv/bin/activate   # Windows: venv\Scripts\activate
-export SQLITE_DEV=1        # if using SQLite; or use DATABASE_URL in .env
+export DATABASE_URL=postgresql://user:pass@localhost:5432/db  # Use PostgreSQL explicitly
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 

@@ -38,7 +38,7 @@ if (!fs.existsSync(backendVenv)) {
      python3 -m venv venv
      ./venv/bin/pip install -r requirements.txt    (Windows: venv\\Scripts\\pip)
      cp .env.example .env
-     # Add SQLITE_DEV=1 to .env for SQLite, or set DATABASE_URL
+     # Add DATABASE_URL to .env with your PostgreSQL credentials
 `);
 }
 
@@ -47,7 +47,7 @@ if (!fs.existsSync(backendEnv)) {
 ⚠️  No backend/.env file — database may fail to start.
 
    Fix:  cd backend && cp .env.example .env
-   Then set SQLITE_DEV=1 (easiest) or DATABASE_URL.
+   Then accurately set DATABASE_URL to your PostgreSQL instance.
 `);
 }
 

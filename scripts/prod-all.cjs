@@ -61,7 +61,7 @@ if (!fs.existsSync(python)) {
 
 if (!fs.existsSync(path.join(backendRoot, ".env"))) {
   console.warn(
-    `[WorkForce Pro] No backend/.env — copy backend/.env.example → backend/.env and set SQLITE_DEV=1`
+    `[WorkForce Pro] No backend/.env — copy backend/.env.example → backend/.env and configure DATABASE_URL for PostgreSQL`
   );
 }
 
@@ -76,7 +76,7 @@ const feEnv = {
 
 const beEnv = {
   ...process.env,
-  SQLITE_DEV: process.env.SQLITE_DEV || "1",
+  // SQLite removed. PostgreSQL required.
 };
 
 console.log(`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full local stack: SQLite API + Next dev (macOS/Linux).
+# Full local stack: PostgreSQL API + Next dev (macOS/Linux).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -10,9 +10,9 @@ lsof -ti :8000 2>/dev/null | xargs kill -9 2>/dev/null || true
 rm -rf "$ROOT/frontend/.next"
 echo "Cleared frontend/.next"
 
-echo "Starting API (SQLite) on http://127.0.0.1:8000 ..."
+echo "Starting API (PostgreSQL) on http://127.0.0.1:8000 ..."
 cd "$ROOT/backend"
-export SQLITE_DEV=1
+# Rely entirely on backend/.env DATABASE_URL
 python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 &
 API_PID=$!
 sleep 2
@@ -33,6 +33,6 @@ echo ""
 echo "✅ WorkForce Pro running:"
 echo "   Frontend  http://localhost:3000"
 echo "   API       http://127.0.0.1:8000   (health: /health)"
-echo "   Login     admin@gmail.com / admin   (SQLite dev seed)"
+echo "   Login     admin@gmail.com / admin   (PostgreSQL dev seed)"
 echo ""
 wait

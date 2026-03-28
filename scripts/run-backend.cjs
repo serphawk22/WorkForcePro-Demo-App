@@ -25,7 +25,7 @@ if (!fs.existsSync(python)) {
 
 const env = {
   ...process.env,
-  SQLITE_DEV: process.env.SQLITE_DEV || "1",
+  // SQLite removed. PostgreSQL required.
 };
 
 const child = spawn(
