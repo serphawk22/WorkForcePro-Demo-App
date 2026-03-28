@@ -14,7 +14,7 @@ export default function UserDetailPage() {
   const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const userId = params.id as string;
+  const userId = params?.id as string;
 
   const [employee, setEmployee] = useState<UserProfile | null>(null);
   const [payroll, setPayroll] = useState<PayrollRecord | null>(null);
