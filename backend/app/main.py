@@ -251,6 +251,7 @@ origins = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
     "https://work-force-pro-4jae.vercel.app",  # Your Vercel deployment
+    "https://work-force-pro-demo-app.vercel.app", # New Vercel demo app
     "https://attendence-dashboard.allytechcourses.com",  # Custom domain
 ]
 
