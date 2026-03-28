@@ -124,7 +124,8 @@ function TimelineStep({
 export default function LeaveDetailPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
   const isAdmin = user?.role === "admin";
 
   const [leave, setLeave] = useState<LeaveRequest | null>(null);
