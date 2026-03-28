@@ -3,8 +3,11 @@
   "private": true,
   "description": "Run API + Next.js together (fixes ERR_CONNECTION_REFUSED when only one server was started)",
   "scripts": {
+    "postinstall": "cd frontend && npm install",
+    "build": "cd frontend && npm run build",
     "dev": "node scripts/dev-all.cjs",
     "start": "node scripts/dev-all.cjs",
+    "start:prod": "cd frontend && npm start",
     "dev:web-only": "node scripts/dev-web-only.cjs",
     "dev:concurrent": "concurrently -k -n api,web -c blue,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node scripts/run-backend.cjs",
