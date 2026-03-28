@@ -21,7 +21,6 @@ const nextConfig = {
    * Avoids CORS/IPv6 "localhost" quirks and matches production (Vercel → Railway via NEXT_PUBLIC_API_URL).
    */
   async rewrites() {
-    if (process.env.NODE_ENV !== "development") return [];
     const backend =
       process.env.BACKEND_PROXY_URL?.trim() || "http://127.0.0.1:8000";
     return [
