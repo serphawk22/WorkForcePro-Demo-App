@@ -52,7 +52,8 @@ let python = venvPython;
 let apiShell = false;
 if (!fs.existsSync(python)) {
   python = win ? "python" : "python3";
-  apiShell = win;
+  // Force shell=true for Unix so PATH resolution finds python3 reliably in Docker/Nixpacks
+  apiShell = true;
   console.warn(
     `[WorkForce Pro] No backend/venv — trying "${python}" on PATH for API.`
   );
