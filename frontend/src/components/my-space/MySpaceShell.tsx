@@ -21,7 +21,7 @@ interface MySpaceShellProps {
 
 export default function MySpaceShell({ children, headerAction }: MySpaceShellProps) {
   const { user } = useAuth();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
 
   return (
     <ProtectedRoute>

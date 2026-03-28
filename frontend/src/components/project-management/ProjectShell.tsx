@@ -23,7 +23,7 @@ interface ProjectShellProps {
 
 export default function ProjectShell({ children, headerAction }: ProjectShellProps) {
   const { user } = useAuth();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const isAdmin = user?.role === "admin";
 
   // Employees: only Summary, Board, Projects

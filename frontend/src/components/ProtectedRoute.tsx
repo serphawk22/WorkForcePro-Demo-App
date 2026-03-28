@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, isLoading, isLoggedIn } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const hasRedirected = useRef(false);
 
   useEffect(() => {

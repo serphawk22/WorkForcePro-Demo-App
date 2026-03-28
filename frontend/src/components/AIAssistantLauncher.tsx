@@ -9,7 +9,7 @@ import { useAuth } from "./AuthProvider";
 export default function AIAssistantLauncher() {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
 
   if (!user) return null;
 

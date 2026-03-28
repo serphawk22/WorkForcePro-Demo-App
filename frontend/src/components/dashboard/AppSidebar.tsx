@@ -46,7 +46,7 @@ interface SidebarProps {
 }
 
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const [isHovered, setIsHovered] = useState(false);
   const PIN_KEY = "workforcepro_sidebarPinned";
   const [isPinned, setIsPinned] = useState<boolean>(() => {
