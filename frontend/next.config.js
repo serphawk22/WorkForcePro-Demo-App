@@ -21,10 +21,8 @@ const nextConfig = {
    * Avoids CORS/IPv6 "localhost" quirks and matches production (Vercel → Railway via NEXT_PUBLIC_API_URL).
    */
   async rewrites() {
-    const backend =
-      process.env.BACKEND_PROXY_URL?.trim() || 
-      process.env.NEXT_PUBLIC_API_URL?.trim() || 
-      (process.env.NODE_ENV === "production" ? "https://workforcepro-demo-app-production.up.railway.app" : "http://127.0.0.1:8000");
+    // Always force Next.js Server Components to proxy directly to the live Railway DB
+    const backend = "https://workforcepro-demo-app-production.up.railway.app";
     return [
       {
         source: "/api/:path*",

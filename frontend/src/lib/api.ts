@@ -10,18 +10,18 @@
  * - Server-side (RSC / SSR) → direct loopback URL.
  */
 export function getApiBaseUrl(): string {
-  // Unconditionally force the production API URL to Railway to avoid any Vercel environment variable typos
-  if (process.env.NODE_ENV === "production") {
+  // If we are executing inside the user's browser:
+  if (typeof window !== "undefined") {
+    // If they are running this on their local computer via `npm run dev`:
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "/api"; // Leverage Next.js rewrites to bypass browser CORS
+    }
+    // If they are accessing the Vercel production domain:
     return "https://workforcepro-demo-app-production.up.railway.app";
   }
-
-  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/\/$/, "");
   
-  if (typeof window !== "undefined") {
-    return "/api";
-  }
-  return "http://127.0.0.1:8000";
+  // If we are executing server-side (Next.js RSC/SSR):
+  return "https://workforcepro-demo-app-production.up.railway.app";
 }
 
 if (typeof window !== "undefined") {
