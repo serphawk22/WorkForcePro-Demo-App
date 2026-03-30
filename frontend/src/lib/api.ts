@@ -13,7 +13,13 @@ export function getApiBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, "");
   if (typeof window !== "undefined") {
+    if (process.env.NODE_ENV === "production") {
+      return "https://workforcepro-demo-app-production.up.railway.app";
+    }
     return "/api";
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "https://workforcepro-demo-app-production.up.railway.app";
   }
   return "http://127.0.0.1:8000";
 }

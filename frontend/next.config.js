@@ -22,7 +22,9 @@ const nextConfig = {
    */
   async rewrites() {
     const backend =
-      process.env.BACKEND_PROXY_URL?.trim() || "http://127.0.0.1:8000";
+      process.env.BACKEND_PROXY_URL?.trim() || 
+      process.env.NEXT_PUBLIC_API_URL?.trim() || 
+      (process.env.NODE_ENV === "production" ? "https://workforcepro-demo-app-production.up.railway.app" : "http://127.0.0.1:8000");
     return [
       {
         source: "/api/:path*",
