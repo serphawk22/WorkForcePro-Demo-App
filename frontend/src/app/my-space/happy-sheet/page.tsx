@@ -423,21 +423,19 @@ export default function HappySheetPage() {
                   <X size={14} className="lighthouse-muted" />
                 </button>
               )}
-              {user.role === "admin" && (
-                <button
-                  type="button"
-                  onClick={handleDownloadPng}
-                  disabled={isExportingPng}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Download daily happy sheet PNG"
-                >
-                  {isExportingPng ? (
-                    <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleDownloadPng}
+                disabled={isExportingPng}
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Download daily happy sheet PNG"
+              >
+                {isExportingPng ? (
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                ) : (
+                  <Download size={14} />
+                )}
+              </button>
             </div>
           </div>
 
