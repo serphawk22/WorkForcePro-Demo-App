@@ -298,7 +298,6 @@ export default function HappySheetPage() {
   };
 
   const handleDownloadPng = async () => {
-    if (user?.role !== "admin") return;
     setIsExportingPng(true);
     try {
       const reportDate = logFilterDate || selectedDate;
@@ -404,7 +403,7 @@ export default function HappySheetPage() {
           {/* Log header + date filter */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-lg font-bold text-[#2B124C] dark:text-purple-100">Joy Log</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
               <Filter size={14} className="lighthouse-muted" />
               <label className="text-xs font-medium text-[#854F6C] dark:text-purple-400">Filter by date</label>
               <input
@@ -423,17 +422,21 @@ export default function HappySheetPage() {
                   <X size={14} className="lighthouse-muted" />
                 </button>
               )}
+              <div className="w-px h-5 bg-[#854F6C]/20" />
               <button
                 type="button"
                 onClick={handleDownloadPng}
                 disabled={isExportingPng}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-8 px-2 flex items-center justify-center gap-1 rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                 title="Download daily happy sheet PNG"
               >
                 {isExportingPng ? (
                   <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                 ) : (
-                  <Download size={14} />
+                  <>
+                    <Download size={14} />
+                    <span className="hidden sm:inline">Download</span>
+                  </>
                 )}
               </button>
             </div>
