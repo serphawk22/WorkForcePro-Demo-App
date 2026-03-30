@@ -46,7 +46,7 @@ export default function HappySheetPage() {
   // ── Joy Log state ───────────────────────────────────────────
   const [teamHistory, setTeamHistory] = useState<HappySheetEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [logFilterDate, setLogFilterDate] = useState("");
+  const [logFilterDate, setLogFilterDate] = useState(todayStr());
   const [filteredTeam, setFilteredTeam] = useState<HappySheetEntry[]>([]);
   const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
 
@@ -55,7 +55,6 @@ export default function HappySheetPage() {
   // Initial load
   useEffect(() => {
     loadPersonalForDate(selectedDate);
-    loadTeamHistory();
   }, []);
 
   // When form date changes, reload personal entry

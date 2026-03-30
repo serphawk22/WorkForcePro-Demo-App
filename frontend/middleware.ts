@@ -99,8 +99,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 3️⃣ Check if route starts with /admin
-  if (pathname.startsWith("/admin")) {
+  // 3️⃣ Check if route starts with /admin or is /dashboard (admin dashboards)
+  const isAdminRoute = pathname.startsWith("/admin") || pathname === "/dashboard";
+  if (isAdminRoute) {
     // No token or expired → redirect to login
     if (!cookieToken || isExpired) {
       console.log('[MIDDLEWARE] Admin route without valid token, redirecting to login');
@@ -139,9 +140,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Other protected routes (tasks, attendance, etc.)
+  // Other protected routes (tasks, attendance, etc.) - /dashboard now handled above
   const protectedRoutes = [
-    "/dashboard",
     "/employees",
     "/tasks",
     "/attendance",

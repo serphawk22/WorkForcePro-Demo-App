@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { CheckCircle2, XCircle, Clock, RefreshCw, UserCheck, Users, ArrowUpRight } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
   getAllUsers,
   approveUser,
@@ -89,7 +90,8 @@ export default function UserApprovalsPage() {
   };
 
   return (
-    <DashboardLayout role="admin">
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -317,5 +319,6 @@ export default function UserApprovalsPage() {
         </div>
       )}
     </DashboardLayout>
+    </ProtectedRoute>
   );
 }
