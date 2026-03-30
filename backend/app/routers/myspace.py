@@ -197,7 +197,7 @@ async def get_team_happy_sheets(
 async def get_all_happy_sheets(
     limit: int = 50,
     session: Session = Depends(get_session),
-    admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all happy sheets (admin only)."""
     results = session.exec(
@@ -215,7 +215,7 @@ async def get_daily_happy_sheet_report(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user),
 ):
-    """Get all employees with their happy sheet entry for the selected date (admin only)."""
+    """Get all employees with their happy sheet entry for the selected date (for all users)."""
     try:
         target_date = DateType.fromisoformat(date)
     except ValueError:

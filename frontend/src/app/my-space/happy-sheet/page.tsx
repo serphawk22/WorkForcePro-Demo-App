@@ -141,7 +141,6 @@ export default function HappySheetPage() {
         setWhatMadeOthersHappy("");
         setGoalsWithoutGreed("");
         setDreamsSupported("");
-        loadTeamHistory();
         // Refresh filtered view if active
         if (logFilterDate === selectedDate) {
           const r2 = await getTeamHappySheetsByDate(logFilterDate);
@@ -156,8 +155,8 @@ export default function HappySheetPage() {
     }
   };
 
-  const displayEntries = logFilterDate ? filteredTeam : teamHistory;
-  const isLoadingLog = logFilterDate ? isLoadingFiltered : isLoadingHistory;
+  const displayEntries = filteredTeam;
+  const isLoadingLog = isLoadingFiltered;
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const link = document.createElement("a");
@@ -413,15 +412,6 @@ export default function HappySheetPage() {
                 onChange={(e) => setLogFilterDate(e.target.value)}
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
-              {logFilterDate && (
-                <button
-                  onClick={() => setLogFilterDate("")}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                  title="Clear filter"
-                >
-                  <X size={14} className="lighthouse-muted" />
-                </button>
-              )}
               <div className="w-px h-5 bg-[#854F6C]/20" />
               <button
                 type="button"
@@ -442,14 +432,12 @@ export default function HappySheetPage() {
             </div>
           </div>
 
-          {logFilterDate && (
-            <p className="text-xs mb-3 text-[#854F6C] dark:text-purple-400">
+          <p className="text-xs mb-3 text-[#854F6C] dark:text-purple-400">
               Showing entries for{" "}
               <span className="font-semibold text-[#522B5B] dark:text-purple-300">
                 {fmtLongDate(logFilterDate)}
               </span>
-            </p>
-          )}
+          </p>
 
           {isLoadingLog ? (
             <div className="flex items-center justify-center py-10">
@@ -457,9 +445,7 @@ export default function HappySheetPage() {
             </div>
           ) : displayEntries.length === 0 ? (
             <div className="rounded-xl p-8 text-center text-sm lighthouse-empty">
-              {logFilterDate
-                ? `No entries found for ${new Date(logFilterDate + "T00:00:00").toLocaleDateString()}.`
-                : "No reflections yet. Be the first to share your joy above!"}
+              No entries found for {new Date(logFilterDate + "T00:00:00").toLocaleDateString()}.
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
