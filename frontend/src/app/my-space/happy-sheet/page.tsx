@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, X } from "lucide-react";
+import { Calendar, CheckCircle2, Sparkles, Filter, X, Download } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
   getMyHappySheets,
   getAllTeamHappySheets,
   getTeamHappySheetsByDate,
+  getAdminDailyHappySheetReport,
   HappySheetEntry,
 } from "@/lib/api";
 
@@ -21,6 +22,13 @@ const getInitials = (name?: string | null) =>
   name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "?";
 const colorFor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
 const todayStr = () => new Date().toISOString().split("T")[0];
+const fmtLongDate = (date: string) =>
+  new Date(date + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
 export default function HappySheetPage() {
   const { user } = useAuth();
@@ -41,6 +49,8 @@ export default function HappySheetPage() {
   const [logFilterDate, setLogFilterDate] = useState("");
   const [filteredTeam, setFilteredTeam] = useState<HappySheetEntry[]>([]);
   const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
+
+  const [isExportingPng, setIsExportingPng] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -150,6 +160,170 @@ export default function HappySheetPage() {
   const displayEntries = logFilterDate ? filteredTeam : teamHistory;
   const isLoadingLog = logFilterDate ? isLoadingFiltered : isLoadingHistory;
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const getWrappedLines = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number
+  ): string[] => {
+    const safe = text?.trim() ? text.trim() : "-";
+    const words = safe.split(/\s+/);
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (ctx.measureText(next).width <= maxWidth || !current) {
+        current = next;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : ["-"];
+  };
+
+  const buildReportCanvas = (date: string, rows: Array<any>) => {
+    const padding = 24;
+    const tableTop = 110;
+    const rowPaddingY = 12;
+    const lineHeight = 20;
+    const headerHeight = 48;
+    const colWidths = [240, 340, 340, 340, 340];
+    const headers = ["Employee Name", "Happy Today", "Made Others Happy", "Goals", "Dreams"];
+    const width = padding * 2 + colWidths.reduce((a, b) => a + b, 0);
+
+    const scratch = document.createElement("canvas");
+    const sctx = scratch.getContext("2d");
+    if (!sctx) throw new Error("Canvas not supported.");
+    sctx.font = "15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+
+    const computedRows = rows.map((row) => {
+      const cells = [
+        row.user_name || "-",
+        row.what_made_you_happy || "-",
+        row.what_made_others_happy || "-",
+        row.goals_without_greed || "-",
+        row.dreams_supported || "-",
+      ];
+      const wrapped = cells.map((cell, idx) =>
+        getWrappedLines(sctx, String(cell), colWidths[idx] - 20)
+      );
+      const maxLines = Math.max(...wrapped.map((w) => w.length));
+      const height = rowPaddingY * 2 + maxLines * lineHeight;
+      return { wrapped, height };
+    });
+
+    const bodyHeight = computedRows.reduce((sum, r) => sum + r.height, 0);
+    const height = tableTop + headerHeight + bodyHeight + 20;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "700 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText("WORKFORCE PRO", padding, 28);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "700 28px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText("Daily Happy Sheet Report", padding, 62);
+
+    ctx.fillStyle = "#334155";
+    ctx.font = "500 16px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText(fmtLongDate(date), padding, 86);
+
+    let x = padding;
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "700 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    headers.forEach((h, idx) => {
+      ctx.fillText(h, x + 10, tableTop + 30);
+      x += colWidths[idx];
+      if (idx < colWidths.length - 1) {
+        ctx.beginPath();
+        ctx.moveTo(x, tableTop);
+        ctx.lineTo(x, tableTop + headerHeight);
+        ctx.stroke();
+      }
+    });
+
+    let y = tableTop + headerHeight;
+    computedRows.forEach((rowData, rowIdx) => {
+      let cellX = padding;
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.strokeRect(padding, y, colWidths.reduce((a, b) => a + b, 0), rowData.height);
+
+      rowData.wrapped.forEach((lines, colIdx) => {
+        if (colIdx > 0) {
+          ctx.beginPath();
+          ctx.moveTo(cellX, y);
+          ctx.lineTo(cellX, y + rowData.height);
+          ctx.stroke();
+        }
+        ctx.fillStyle = colIdx === 0 ? "#0f172a" : "#334155";
+        ctx.font = `${colIdx === 0 ? "600" : "500"} 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+        lines.forEach((line, lineIdx) => {
+          ctx.fillText(line, cellX + 10, y + rowPaddingY + 16 + lineIdx * lineHeight);
+        });
+        cellX += colWidths[colIdx];
+      });
+
+      y += rowData.height;
+      if (rowIdx < computedRows.length - 1) {
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(padding + colWidths.reduce((a, b) => a + b, 0), y);
+        ctx.stroke();
+      }
+    });
+
+    return canvas;
+  };
+
+  const handleDownloadPng = async () => {
+    if (user?.role !== "admin") return;
+    setIsExportingPng(true);
+    try {
+      const reportDate = logFilterDate || selectedDate;
+      const reportRes = await getAdminDailyHappySheetReport(reportDate);
+      if (!reportRes.data) {
+        throw new Error(reportRes.error || "Failed to load daily report data.");
+      }
+
+      const canvas = buildReportCanvas(reportDate, reportRes.data);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (!b) reject(new Error("Failed to generate PNG image."));
+          else resolve(b);
+        }, "image/png");
+      });
+      downloadBlob(blob, `workforce-pro-happy-sheet-${reportDate}.png`);
+    } catch (err: any) {
+      console.error("PNG export failed", err);
+      showFloatingToast({ type: "error", message: err?.message || "Failed to download PNG." });
+    } finally {
+      setIsExportingPng(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -183,7 +357,7 @@ export default function HappySheetPage() {
             <div className="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 lighthouse-date-note">
               <Calendar size={13} />
               Logging reflection for{" "}
-              <span className="font-bold">{new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+              <span className="font-bold">{fmtLongDate(selectedDate)}</span>
             </div>
           )}
 
@@ -250,6 +424,21 @@ export default function HappySheetPage() {
                   <X size={14} className="lighthouse-muted" />
                 </button>
               )}
+              {user.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPng}
+                  disabled={isExportingPng}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download daily happy sheet PNG"
+                >
+                  {isExportingPng ? (
+                    <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -257,7 +446,7 @@ export default function HappySheetPage() {
             <p className="text-xs mb-3 text-[#854F6C] dark:text-purple-400">
               Showing entries for{" "}
               <span className="font-semibold text-[#522B5B] dark:text-purple-300">
-                {new Date(logFilterDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                {fmtLongDate(logFilterDate)}
               </span>
             </p>
           )}

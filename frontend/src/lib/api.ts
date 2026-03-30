@@ -1642,6 +1642,17 @@ export interface HappySheetEntry {
   profile_picture?: string | null;
 }
 
+export interface DailyHappySheetReportRow {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  date: string;
+  what_made_you_happy?: string | null;
+  what_made_others_happy?: string | null;
+  goals_without_greed?: string | null;
+  dreams_supported?: string | null;
+}
+
 export interface DreamProjectEntry {
   id: number;
   user_id: number;
@@ -1709,6 +1720,10 @@ export async function getAllTeamHappySheets(limit = 100): Promise<ApiResponse<Ha
 
 export async function getTeamHappySheetsByDate(date: string): Promise<ApiResponse<HappySheetEntry[]>> {
   return apiFetch<HappySheetEntry[]>(`/my-space/happy-sheet/team/by-date?date=${encodeURIComponent(date)}`);
+}
+
+export async function getAdminDailyHappySheetReport(date: string): Promise<ApiResponse<DailyHappySheetReportRow[]>> {
+  return apiFetch<DailyHappySheetReportRow[]>(`/my-space/happy-sheet/admin/daily-report?date=${encodeURIComponent(date)}`);
 }
 
 // Dream Project (Visionary Canvas)

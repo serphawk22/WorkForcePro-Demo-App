@@ -2,6 +2,7 @@ from typing import List
 from datetime import date as DateType
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
+from sqlalchemy import and_
 
 from app.database import get_session
 from app.models import (
@@ -14,6 +15,7 @@ from app.models import (
     HappySheetCreate,
     HappySheetRead,
     HappySheetWithUser,
+    DailyHappySheetReportRow,
     DreamProject,
     DreamProjectCreate,
     DreamProjectWithUser,
@@ -204,6 +206,42 @@ async def get_all_happy_sheets(
     return [
         HappySheetWithUser(**sheet.model_dump(), user_name=user.name, user_email=user.email)
         for sheet, user in results
+    ]
+
+
+@router.get("/happy-sheet/admin/daily-report", response_model=List[DailyHappySheetReportRow])
+async def get_daily_happy_sheet_report(
+    date: str,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Get all employees with their happy sheet entry for the selected date (admin only)."""
+    try:
+        target_date = DateType.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    results = session.exec(
+        select(User, HappySheet)
+        .outerjoin(
+            HappySheet,
+            and_(HappySheet.user_id == User.id, HappySheet.date == target_date),
+        )
+        .order_by(User.name.asc())
+    ).all()
+
+    return [
+        DailyHappySheetReportRow(
+            user_id=user.id,
+            user_name=user.name,
+            user_email=user.email,
+            date=target_date,
+            what_made_you_happy=sheet.what_made_you_happy if sheet else None,
+            what_made_others_happy=sheet.what_made_others_happy if sheet else None,
+            goals_without_greed=sheet.goals_without_greed if sheet else None,
+            dreams_supported=sheet.dreams_supported if sheet else None,
+        )
+        for user, sheet in results
     ]
 
 

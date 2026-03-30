@@ -746,6 +746,18 @@ class HappySheetWithUser(HappySheetRead):
     user_email: Optional[str] = None
 
 
+class DailyHappySheetReportRow(SQLModel):
+    """Admin daily happy sheet row with nullable entry fields for missing submissions."""
+    user_id: int
+    user_name: str
+    user_email: str
+    date: DateType
+    what_made_you_happy: Optional[str] = None
+    what_made_others_happy: Optional[str] = None
+    goals_without_greed: Optional[str] = None
+    dreams_supported: Optional[str] = None
+
+
 class DreamProject(SQLModel, table=True):
     """Visionary Canvas: My Dream Project tracking model."""
     __tablename__ = "dream_projects"

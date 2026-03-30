@@ -116,8 +116,8 @@ export default function UserApprovalsPage() {
               hover:-translate-y-0.5 hover:shadow-md hover:shadow-primary/30
               ${ripple ? "scale-90 duration-75" : ""}
               ${loading
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 cursor-default"
-                : "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-primary hover:text-primary-foreground cursor-pointer"
+                ? "bg-primary text-white shadow-md shadow-primary/30 cursor-default"
+                : "bg-primary text-white border border-primary/60 hover:bg-primary/90 hover:text-white cursor-pointer"
               }`}
           >
             {/* Click ripple burst */}

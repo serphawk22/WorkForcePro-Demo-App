@@ -52,12 +52,12 @@ export default function StatCard({
 
       <div className="relative flex items-start justify-between mb-4">
         <div 
-          className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110"} dashboard-card-icon-shell rounded-xl p-3 transition-all duration-300 ${iconColor}`}
+          className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110"} dashboard-card-icon-shell rounded-xl p-3 transition-all duration-300 ${iconColor || "bg-primary/12 dark:bg-primary/30"}`}
           style={{
             boxShadow: `0 4px 14px ${shadowColor || 'rgba(0,0,0,0.25)'}, 0 8px 24px -4px ${shadowColor || 'rgba(0,0,0,0.15)'}`
           }}
         >
-          <Icon size={20} className="relative z-10 text-white" />
+          <Icon size={20} className="relative z-10 text-primary dark:text-white" />
         </div>
         <div className="flex items-center gap-2">
           {trend && (

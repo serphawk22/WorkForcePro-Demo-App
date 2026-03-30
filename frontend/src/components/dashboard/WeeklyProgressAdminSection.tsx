@@ -251,13 +251,13 @@ export default function WeeklyProgressAdminSection() {
 
           {!loading && uniqueEmployees.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="text-xs text-muted-foreground w-full sm:w-auto sm:mr-2">Quick open history:</span>
+              <span className="text-xs text-foreground/90 dark:text-foreground w-full sm:w-auto sm:mr-2">Quick open history:</span>
               {uniqueEmployees.map(([id, name]) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => openEmployeeDetail(id, name)}
-                  className="text-xs font-medium px-2 py-1 rounded-lg border border-border bg-card/50 hover:border-primary/40 hover:bg-primary/5"
+                  className="text-xs font-medium px-2 py-1 rounded-lg border border-primary/60 bg-primary text-white hover:bg-primary/90"
                 >
                   {name}
                 </button>
