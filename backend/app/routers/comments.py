@@ -25,12 +25,8 @@ async def create_comment(
     current_user: User = Depends(get_current_user)
 ):
     """Create a comment on a task.
-    
-    Rules:
-    - Admins can comment on any task
-    - Employees can only comment on tasks assigned to them
-    - All admins get notified of any comment
-    - Assigned employee gets notified of admin comments
+
+    Any authenticated user can post to keep project chat/resources accessible.
     """
     # Verify task exists
     task_stmt = select(Task).where(Task.id == comment_data.task_id)
@@ -41,15 +37,6 @@ async def create_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    
-    # Check permission
-    if current_user.role == UserRole.employee:
-        # Employee can only comment on tasks assigned to them
-        if task.assigned_to != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only comment on tasks assigned to you"
-            )
     
     # Create comment
     comment = TaskComment(
@@ -98,10 +85,8 @@ async def get_task_comments(
     current_user: User = Depends(get_current_user)
 ):
     """Get all comments for a specific task.
-    
-    Rules:
-    - Admins can see comments on any task
-    - Employees can only see comments on tasks assigned to them
+
+    Any authenticated user can read project chat/resources.
     """
     # Verify task exists
     task_stmt = select(Task).where(Task.id == task_id)
@@ -112,14 +97,6 @@ async def get_task_comments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    
-    # Check permission
-    if current_user.role == UserRole.employee:
-        if task.assigned_to != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view comments on tasks assigned to you"
-            )
     
     # Get comments
     comments_stmt = select(TaskComment).where(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc())

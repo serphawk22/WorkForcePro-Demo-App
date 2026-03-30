@@ -304,3 +304,49 @@ async def admin_add_comment(
         created_at=comment.created_at,
         admin_name=admin.name,
     )
+
+
+@router.post("/me/{entry_id}/comments", response_model=WeeklyCommentRead, status_code=status.HTTP_201_CREATED)
+async def employee_add_comment(
+    entry_id: int,
+    body: WeeklyCommentCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Allow employees to add comments on their own weekly entry for two-way discussion."""
+    row = session.exec(select(WeeklyProgress).where(WeeklyProgress.id == entry_id)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Weekly entry not found")
+    if current_user.role != UserRole.employee:
+        raise HTTPException(status_code=403, detail="Only employees can use this endpoint")
+    if row.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only comment on your own weekly entry")
+
+    comment = WeeklyComment(
+        weekly_progress_id=row.id,
+        admin_id=current_user.id,
+        comment=body.comment.strip(),
+    )
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+
+    preview = body.comment.strip()[:120] + ("…" if len(body.comment.strip()) > 120 else "")
+    admins = session.exec(select(User).where(User.role == UserRole.admin)).all()
+    for admin in admins:
+        create_notification(
+            session=session,
+            user_id=admin.id,
+            type=NotificationType.WEEKLY_PROGRESS_COMMENT,
+            message=f"{current_user.name} commented on week of {row.week_start_date}: {preview}",
+            weekly_progress_id=row.id,
+        )
+
+    return WeeklyCommentRead(
+        id=comment.id,
+        weekly_progress_id=comment.weekly_progress_id,
+        admin_id=comment.admin_id,
+        comment=comment.comment,
+        created_at=comment.created_at,
+        admin_name=current_user.name,
+    )

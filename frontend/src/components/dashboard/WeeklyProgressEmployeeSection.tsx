@@ -9,6 +9,7 @@ import {
   upsertMyWeeklyProgress,
   updateMyWeeklyProgress,
   markWeeklyCommentsSeen,
+  postMyWeeklyComment,
   type WeeklyProgressEntry,
 } from "@/lib/api";
 
@@ -45,6 +46,8 @@ export default function WeeklyProgressEmployeeSection() {
   const [description, setDescription] = useState("");
   const [githubLink, setGithubLink] = useState("");
   const [deployedLink, setDeployedLink] = useState("");
+  const [replyText, setReplyText] = useState<Record<number, string>>({});
+  const [postingReplyId, setPostingReplyId] = useState<number | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     const res = await getMyWeeklyProgress();
@@ -114,6 +117,24 @@ export default function WeeklyProgressEmployeeSection() {
       await markWeeklyCommentsSeen(entry.id);
       await load();
     }
+  };
+
+  const submitReply = async (entryId: number) => {
+    const text = (replyText[entryId] || "").trim();
+    if (!text) {
+      toast.error("Enter a comment first.");
+      return;
+    }
+    setPostingReplyId(entryId);
+    const res = await postMyWeeklyComment(entryId, text);
+    if (res.error) {
+      toast.error(res.error);
+    } else {
+      toast.success("Comment shared.");
+      setReplyText((prev) => ({ ...prev, [entryId]: "" }));
+      await load();
+    }
+    setPostingReplyId(null);
   };
 
   const formatWeek = (ymd: string) => {
@@ -263,26 +284,45 @@ export default function WeeklyProgressEmployeeSection() {
                           </a>
                         )}
                       </div>
-                      {entry.comments.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
-                          <button
-                            type="button"
-                            onClick={() => openComments(entry)}
-                            className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground"
-                          >
-                            Admin feedback ({entry.comments.length})
-                          </button>
-                          {entry.comments.map((c) => (
+                      <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => openComments(entry)}
+                          className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                        >
+                          Weekly comments ({entry.comments.length})
+                        </button>
+                        {entry.comments.length > 0 ? (
+                          entry.comments.map((c) => (
                             <div key={c.id} className="text-xs rounded-lg bg-secondary/50 dark:bg-secondary/30 px-2 py-1.5 border border-border/50">
-                              <span className="font-semibold text-foreground">{c.admin_name || "Admin"}</span>
+                              <span className="font-semibold text-foreground">{c.admin_name || "Team"}</span>
                               <span className="text-muted-foreground text-[10px] ml-2">
                                 {new Date(c.created_at).toLocaleString()}
                               </span>
                               <p className="text-card-foreground mt-1 whitespace-pre-wrap">{c.comment}</p>
                             </div>
-                          ))}
+                          ))
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">No comments yet.</p>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={replyText[entry.id] || ""}
+                            onChange={(e) => setReplyText((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                            placeholder="Add comment or resource link..."
+                            className="flex-1 rounded-md py-1.5 px-2 text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => submitReply(entry.id)}
+                            disabled={postingReplyId === entry.id || !(replyText[entry.id] || "").trim()}
+                            className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-primary text-primary-foreground disabled:opacity-50"
+                          >
+                            {postingReplyId === entry.id ? "..." : "Send"}
+                          </button>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>

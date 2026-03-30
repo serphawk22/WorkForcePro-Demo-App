@@ -409,6 +409,16 @@ export async function postAdminWeeklyComment(
   });
 }
 
+export async function postMyWeeklyComment(
+  entryId: number,
+  comment: string
+): Promise<ApiResponse<WeeklyComment>> {
+  return apiFetch<WeeklyComment>(`/weekly-progress/me/${entryId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+}
+
 export interface TaskComment {
   id: number;
   task_id: number;

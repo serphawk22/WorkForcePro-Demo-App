@@ -970,7 +970,7 @@ export default function ProjectDetailPage() {
           <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <MessageSquare size={20} className="text-purple-500" />
-              Project Discussion ({comments.length})
+              Project Chat & Resources ({comments.length})
             </h2>
 
             {/* Comments List */}
@@ -996,7 +996,7 @@ export default function ProjectDetailPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-muted-foreground text-sm py-8">No comments yet. Start the discussion!</p>
+                <p className="text-center text-muted-foreground text-sm py-8">No messages yet. Start the chat and share resources!</p>
               )}
             </div>
 
@@ -1005,7 +1005,7 @@ export default function ProjectDetailPage() {
               <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
+                placeholder="Share an update, document link, repo, or any resource..."
                 className="flex-1 rounded-lg border border-input bg-background py-3 px-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                 rows={3}
               />
