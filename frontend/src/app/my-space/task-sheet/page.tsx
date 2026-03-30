@@ -6,8 +6,11 @@ import { useAuth } from "@/components/AuthProvider";
 import { Calendar, CheckCircle2, Link2, Swords } from "lucide-react";
 import { submitTaskSheet, getMyTaskSheets, TaskSheetEntry } from "@/lib/api";
 
+const todayStr = () => new Date().toISOString().split("T")[0];
+
 export default function TaskSheetPage() {
   const { user } = useAuth();
+  const [selectedDate, setSelectedDate] = useState(todayStr());
   const [achievements, setAchievements] = useState("");
   const [repoLink, setRepoLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,22 +22,32 @@ export default function TaskSheetPage() {
 
   useEffect(() => { fetchHistory(); }, []);
 
-  // Initial load: pre-populate form if today's entry already exists
+  useEffect(() => {
+    if (!history.length) {
+      setAchievements("");
+      setRepoLink("");
+      setIsUpdate(false);
+      return;
+    }
+    const selectedEntry = history.find((e) => e.date === selectedDate);
+    if (selectedEntry) {
+      setAchievements(selectedEntry.achievements);
+      setRepoLink(selectedEntry.repo_link || "");
+      setIsUpdate(true);
+    } else {
+      setAchievements("");
+      setRepoLink("");
+      setIsUpdate(false);
+    }
+  }, [history, selectedDate]);
+
+  // Initial load: fetch task history for date-based editing
   const fetchHistory = async () => {
     try {
       setIsLoadingHistory(true);
       const res = await getMyTaskSheets();
       if (res.data) {
         setHistory(res.data);
-        const today = new Date().toISOString().split("T")[0];
-        const todayEntry = res.data.find((e) => e.date === today);
-        if (todayEntry) {
-          setAchievements(todayEntry.achievements);
-          setRepoLink(todayEntry.repo_link || "");
-          setIsUpdate(true);
-        } else {
-          setIsUpdate(false);
-        }
       }
     } catch (err) {
       console.error("Failed to load history", err);
@@ -55,17 +68,15 @@ export default function TaskSheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!achievements.trim()) { setError("Please describe your achievements today."); return; }
+    if (!achievements.trim()) { setError("Please describe your achievements for the selected date."); return; }
     setIsSubmitting(true); setError(null); setSuccess(false);
     try {
-      const res = await submitTaskSheet({ achievements, repo_link: repoLink || undefined });
+      const res = await submitTaskSheet({ achievements, repo_link: repoLink || undefined, date: selectedDate });
       if (res.error) { setError(res.error); }
       else {
         setSuccess(true);
-        setAchievements("");
-        setRepoLink("");
         setIsUpdate(true);
-        refreshHistoryList();
+        await refreshHistoryList();
         setTimeout(() => setSuccess(false), 5000);
       }
     } catch (err: any) {
@@ -85,7 +96,28 @@ export default function TaskSheetPage() {
             <h3 className="text-xl font-bold text-[#2B124C] dark:text-purple-100">Log Your Operational Victories</h3>
           </div>
           {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">⚠️ {error}</div>}
-          {success && <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2"><CheckCircle2 size={18} />{isUpdate ? "Today's log updated successfully!" : "Performance logged successfully! Keep up the great work."}</div>}
+          {success && <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2"><CheckCircle2 size={18} />Task sheet saved successfully for {new Date(selectedDate + "T00:00:00").toLocaleDateString()}.</div>}
+          <div className="mb-5 flex items-center gap-2">
+            <Calendar size={15} className="lighthouse-muted" />
+            <label className="text-xs font-medium text-[#854F6C] dark:text-purple-400">Entry Date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              max={todayStr()}
+              onChange={(e) => {
+                setSuccess(false);
+                setError(null);
+                setSelectedDate(e.target.value);
+              }}
+              className="h-8 px-2 rounded-lg text-sm focus:outline-none transition-all lighthouse-input-white"
+            />
+          </div>
+          {selectedDate !== todayStr() && (
+            <div className="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 lighthouse-date-note">
+              <Calendar size={13} />
+              Backfilling task sheet for <span className="font-bold">{new Date(selectedDate + "T00:00:00").toLocaleDateString()}</span>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Operational Victories *</label>
@@ -98,7 +130,7 @@ export default function TaskSheetPage() {
             </div>
             <div className="pt-2">
               <button type="submit" disabled={isSubmitting} className="w-full h-11 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90" style={{ background: "#522B5B" }}>
-                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : isUpdate ? "Update Today's Log" : "Publish Strategic Log"}
+                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : isUpdate ? "Update Selected Date Log" : "Publish Strategic Log"}
               </button>
             </div>
           </form>

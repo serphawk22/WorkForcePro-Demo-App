@@ -1685,6 +1685,7 @@ export interface PersonalProjectEntry {
 export async function submitTaskSheet(data: {
   achievements: string;
   repo_link?: string;
+  date?: string; // YYYY-MM-DD; defaults to today if omitted
 }): Promise<ApiResponse<TaskSheetEntry>> {
   return apiFetch<TaskSheetEntry>("/my-space/task-sheet", {
     method: "POST",

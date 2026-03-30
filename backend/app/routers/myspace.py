@@ -39,10 +39,10 @@ async def create_task_sheet(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Submit or update today's task sheet log (upsert)."""
-    today = DateType.today()
+    """Submit or update a task sheet for the given date (upsert). Defaults to today."""
+    target_date = sheet_data.date if sheet_data.date else DateType.today()
     existing = session.exec(
-        select(TaskSheet).where(TaskSheet.user_id == current_user.id, TaskSheet.date == today)
+        select(TaskSheet).where(TaskSheet.user_id == current_user.id, TaskSheet.date == target_date)
     ).first()
     if existing:
         existing.achievements = sheet_data.achievements
@@ -53,7 +53,7 @@ async def create_task_sheet(
         return existing
     task_sheet = TaskSheet(
         user_id=current_user.id,
-        date=today,
+        date=target_date,
         achievements=sheet_data.achievements,
         repo_link=sheet_data.repo_link,
     )
@@ -215,7 +215,7 @@ async def get_daily_happy_sheet_report(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user),
 ):
-    """Get all employees with their happy sheet entry for the selected date (for all users)."""
+    """Get all employees with their happy sheet entry for the selected date (admin only)."""
     try:
         target_date = DateType.fromisoformat(date)
     except ValueError:

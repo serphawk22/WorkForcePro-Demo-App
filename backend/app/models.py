@@ -698,6 +698,7 @@ class TaskSheet(SQLModel, table=True):
 class TaskSheetCreate(SQLModel):
     achievements: str = Field(max_length=1000)
     repo_link: Optional[str] = None
+    date: Optional[DateType] = None  # if None, defaults to today on the backend
 
 class TaskSheetRead(SQLModel):
     id: int

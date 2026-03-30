@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, X, Download } from "lucide-react";
+import { Calendar, CheckCircle2, Sparkles, Filter, Download } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
@@ -297,6 +297,7 @@ export default function HappySheetPage() {
   };
 
   const handleDownloadPng = async () => {
+    if (user?.role !== "admin") return;
     setIsExportingPng(true);
     try {
       const reportDate = logFilterDate || selectedDate;
@@ -413,22 +414,24 @@ export default function HappySheetPage() {
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
               <div className="w-px h-5 bg-[#854F6C]/20" />
-              <button
-                type="button"
-                onClick={handleDownloadPng}
-                disabled={isExportingPng}
-                className="h-8 px-2 flex items-center justify-center gap-1 rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
-                title="Download daily happy sheet PNG"
-              >
-                {isExportingPng ? (
-                  <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                ) : (
-                  <>
-                    <Download size={14} />
-                    <span className="hidden sm:inline">Download</span>
-                  </>
-                )}
-              </button>
+              {user.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPng}
+                  disabled={isExportingPng}
+                  className="h-8 px-2 flex items-center justify-center gap-1 rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                  title="Download daily happy sheet PNG"
+                >
+                  {isExportingPng ? (
+                    <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <>
+                      <Download size={14} />
+                      <span className="hidden sm:inline">Download</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
