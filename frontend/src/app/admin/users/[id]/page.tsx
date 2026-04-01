@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
+import NextImage from "next/image";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
@@ -28,18 +29,7 @@ export default function UserDetailPage() {
   const [departmentInput, setDepartmentInput] = useState("");
   const [savingSalary, setSavingSalary] = useState(false);
 
-  // Invalidate Next.js route cache on every mount so navigating back always shows fresh data
-  useEffect(() => {
-    router.refresh();
-  }, []);
-
-  useEffect(() => {
-    if (userId) {
-      loadEmployee();
-    }
-  }, [userId]);
-
-  const loadEmployee = async () => {
+  const loadEmployee = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -62,7 +52,18 @@ export default function UserDetailPage() {
     }
 
     setLoading(false);
-  };
+  }, [userId]);
+
+  // Invalidate Next.js route cache on every mount so navigating back always shows fresh data
+  useEffect(() => {
+    router.refresh();
+  }, [router]);
+
+  useEffect(() => {
+    if (userId) {
+      loadEmployee();
+    }
+  }, [userId, loadEmployee]);
 
   const getProfilePictureUrl = () => {
     if (!employee?.profile_picture) return null;
@@ -136,10 +137,13 @@ export default function UserDetailPage() {
               <CardContent className="flex flex-col items-center gap-4">
                 <div className="h-32 w-32 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center overflow-hidden border-4 border-background shadow-lg">
                   {getProfilePictureUrl() ? (
-                    <img
+                    <NextImage
                       src={getProfilePictureUrl()!}
-                      alt={employee.name}
+                      alt={employee.name ? `${employee.name}'s profile picture` : "Employee profile picture"}
+                      width={128}
+                      height={128}
                       className="h-full w-full object-cover"
+                      unoptimized
                     />
                   ) : (
                     <UserIcon className="h-16 w-16 text-white" />

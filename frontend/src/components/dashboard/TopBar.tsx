@@ -3,6 +3,7 @@
 import { Bell, Moon, Sun, User, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
@@ -45,6 +46,8 @@ export default function TopBar() {
     return `${getApiBaseUrl()}${user.profile_picture}`;
   };
 
+  const profilePictureUrl = getProfilePictureUrl();
+
   return (
     <div className="flex justify-center items-center px-4 pt-2.5 pb-1">
       {/* Gradient border wrapper — centered pill */}
@@ -74,11 +77,14 @@ export default function TopBar() {
               className="topbar-icon-btn"
               title="Profile"
             >
-              {getProfilePictureUrl() ? (
-                <img
-                  src={getProfilePictureUrl()!}
-                  alt={user?.name || "User"}
+              {profilePictureUrl ? (
+                <Image
+                  src={profilePictureUrl}
+                  alt={user?.name ? `${user.name}'s profile picture` : "User profile picture"}
+                  width={24}
+                  height={24}
                   className="h-6 w-6 rounded-full object-cover"
+                  unoptimized
                 />
               ) : (
                 <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-semibold">

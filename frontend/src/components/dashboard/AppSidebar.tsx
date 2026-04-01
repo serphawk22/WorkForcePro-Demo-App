@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -167,6 +168,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     if (profilePicture.startsWith("http")) return profilePicture;
     return `${getApiBaseUrl()}${profilePicture}`;
   };
+
+  const profilePictureUrl = getProfilePictureUrl();
 
   return (
     <aside
@@ -390,11 +393,14 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       <div className="border-t border-sidebar-border px-3 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-sm font-semibold overflow-hidden">
-            {getProfilePictureUrl() ? (
-              <img
-                src={getProfilePictureUrl()!}
-                alt={displayName}
+            {profilePictureUrl ? (
+              <Image
+                src={profilePictureUrl}
+                alt={`${displayName}'s profile picture`}
+                width={36}
+                height={36}
                 className="h-full w-full object-cover"
+                unoptimized
               />
             ) : (
               displayName[0]

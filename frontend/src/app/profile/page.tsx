@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import NextImage from "next/image";
 import { Calendar, Github, Linkedin, Mail, User as UserIcon, Upload, Camera, Building2, CreditCard, Hash, Landmark, Banknote, Briefcase, Clock, BadgeCheck, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/AuthProvider";
@@ -44,7 +45,7 @@ export default function ProfilePage() {
   // Invalidate Next.js route cache on every mount so payroll data is always fresh
   useEffect(() => {
     router.refresh();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!user) {
@@ -257,10 +258,13 @@ export default function ProfilePage() {
               <div className="relative">
                 <div className="h-32 w-32 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center overflow-hidden border-4 border-background shadow-lg">
                   {getProfilePictureUrl() ? (
-                    <img
+                    <NextImage
                       src={getProfilePictureUrl()!}
-                      alt={profile?.name}
+                      alt={profile?.name ? `${profile.name}'s profile picture` : "Profile picture"}
+                      width={128}
+                      height={128}
                       className="h-full w-full object-cover"
+                      unoptimized
                     />
                   ) : (
                     <UserIcon className="h-16 w-16 text-white" />

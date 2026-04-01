@@ -661,7 +661,7 @@ export default function AIAssistant({
     } finally {
       setIsTyping(false);
     }
-  }, [message, isTyping, pathname, currentActions, handleNavigate, messages]);
+  }, [message, isTyping, pathname, currentActions, handleNavigate, messages, onClose]);
 
   const handleConfirmTask = async (task: TaskData, msgIndex: number) => {
     try {

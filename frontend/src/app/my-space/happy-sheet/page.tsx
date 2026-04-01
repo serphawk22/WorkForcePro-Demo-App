@@ -52,11 +52,6 @@ export default function HappySheetPage() {
 
   const [isExportingPng, setIsExportingPng] = useState(false);
 
-  // Initial load
-  useEffect(() => {
-    loadPersonalForDate(selectedDate);
-  }, []);
-
   // When form date changes, reload personal entry
   useEffect(() => {
     loadPersonalForDate(selectedDate);

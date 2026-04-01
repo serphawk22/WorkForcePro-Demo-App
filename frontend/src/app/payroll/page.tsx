@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
@@ -44,7 +44,7 @@ export default function PayrollPage() {
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
-  const loadPayroll = async () => {
+  const loadPayroll = useCallback(async () => {
     setLoading(true);
     setError("");
     const res = await getPayroll(month, year);
@@ -54,11 +54,11 @@ export default function PayrollPage() {
       setError(res.error || "Failed to load payroll data");
     }
     setLoading(false);
-  };
+  }, [month, year]);
 
   useEffect(() => {
     loadPayroll();
-  }, [month, year]);
+  }, [loadPayroll]);
 
   const totalPayroll = useMemo(
     () => records.reduce((sum, r) => sum + r.salary, 0),

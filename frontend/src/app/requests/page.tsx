@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import NextImage from "next/image";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2, Paperclip, FileText, Image, ChevronRight, User } from "lucide-react";
+import { Plus, CalendarOff, Clock, CheckCircle, XCircle, Loader2, X, Trash2, Paperclip, FileText, Image as ImageIcon, ChevronRight, User } from "lucide-react";
 import {
   getMyLeaveRequests,
   getAllLeaveRequests,
@@ -186,7 +187,14 @@ export default function RequestsPage() {
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-accent">
                         {(req as any).user_profile_picture ? (
-                          <img src={(req as any).user_profile_picture} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                          <NextImage
+                            src={(req as any).user_profile_picture}
+                            alt={req.user_name ? `${req.user_name}'s profile picture` : "User profile picture"}
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-lg object-cover"
+                            unoptimized
+                          />
                         ) : (
                           <CalendarOff size={18} />
                         )}
@@ -328,7 +336,7 @@ export default function RequestsPage() {
                   {document ? (
                     <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/40 px-3 py-2.5">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        {document.type.startsWith("image/") ? <Image size={16} /> : <FileText size={16} />}
+                        {document.type.startsWith("image/") ? <ImageIcon size={16} /> : <FileText size={16} />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-card-foreground truncate">{document.name}</p>

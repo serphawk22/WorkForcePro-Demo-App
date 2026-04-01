@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -89,12 +89,6 @@ export default function ProjectDetailPage() {
   const [instanceActionLoadingId, setInstanceActionLoadingId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (taskId) {
-      loadProjectDetails();
-    }
-  }, [taskId]);
-
-  useEffect(() => {
     const loadAssignableUsers = async () => {
       const response = await getAssignableUsers();
       if (response.data) setAssignableUsers(response.data);
@@ -129,7 +123,7 @@ export default function ProjectDetailPage() {
     };
   }, [taskId, project?.task?.is_recurring]);
 
-  const loadProjectDetails = async () => {
+  const loadProjectDetails = useCallback(async () => {
     if (!taskId) return;
     
     setIsLoading(true);
@@ -152,7 +146,13 @@ export default function ProjectDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [taskId, router]);
+
+  useEffect(() => {
+    if (taskId) {
+      loadProjectDetails();
+    }
+  }, [taskId, loadProjectDetails]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!taskId) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   login as apiLogin,
@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const refreshedUserIdRef = useRef<number | null>(null);
 
   // 1️⃣ Check localStorage on app load
   const checkAuth = useCallback(() => {
@@ -139,14 +140,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch full user profile after initial auth check completes
   useEffect(() => {
     const fetchProfileAfterAuth = async () => {
-      if (!isLoading && user) {
+      if (!user) {
+        refreshedUserIdRef.current = null;
+        return;
+      }
+
+      if (!isLoading && refreshedUserIdRef.current !== user.id) {
         console.log('[AUTH] Initial load complete, fetching full profile...');
+        refreshedUserIdRef.current = user.id;
         await refreshUser();
       }
     };
     
     fetchProfileAfterAuth();
-  }, [isLoading]); // Run when loading completes
+  }, [isLoading, user, refreshUser]); // Run when loading completes
 
   // 2️⃣ Login function - update state BEFORE redirect
   const login = async (email: string, password: string) => {

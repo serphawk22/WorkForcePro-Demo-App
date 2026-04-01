@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import NextImage from "next/image";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Folder, Lightbulb, Users, Plus, X } from "lucide-react";
@@ -116,7 +117,7 @@ export default function LearningCanvasPage() {
               <div className="space-y-2.5">
                 {uniqueByUser.map((f) => (
                   <div key={f.id} className="flex items-center gap-3 rounded-xl p-3.5 shadow-sm lighthouse-inner-card">
-                    {f.profile_picture ? (<img src={f.profile_picture} alt={f.user_name || ""} className="h-8 w-8 rounded-full object-cover flex-shrink-0" />) : (<div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: colorFor(f.user_id) }}>{getInitials(f.user_name || "?")}</div>)}
+                    {f.profile_picture ? (<NextImage src={f.profile_picture} alt={f.user_name ? `${f.user_name}'s profile picture` : "User profile picture"} width={32} height={32} className="h-8 w-8 rounded-full object-cover flex-shrink-0" unoptimized />) : (<div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: colorFor(f.user_id) }}>{getInitials(f.user_name || "?")}</div>)}
                     <p className="text-sm text-[#2B124C] dark:text-purple-100"><span className="font-semibold">{f.user_name}</span>{" "}<span className="text-[#854F6C] dark:text-purple-400">is learning:</span>{" "}{f.focus}</p>
                   </div>
                 ))}

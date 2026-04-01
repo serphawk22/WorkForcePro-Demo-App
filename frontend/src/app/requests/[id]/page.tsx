@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import NextImage from "next/image";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
@@ -73,7 +74,14 @@ function Avatar({ name, picture }: { name?: string; picture?: string | null }) {
   const url = getUrl();
 
   return url ? (
-    <img src={url} alt={name} className="h-16 w-16 rounded-2xl object-cover ring-2 ring-border" />
+    <NextImage
+      src={url}
+      alt={name ? `${name}'s profile picture` : "Profile picture"}
+      width={64}
+      height={64}
+      className="h-16 w-16 rounded-2xl object-cover ring-2 ring-border"
+      unoptimized
+    />
   ) : (
     <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-2 ring-border">
       <span className="text-xl font-bold text-primary">{initials}</span>
@@ -319,10 +327,13 @@ export default function LeaveDetailPage() {
                       </h2>
                       {leave.document_data?.startsWith("data:image/") ? (
                         <div className="space-y-3">
-                          <img
+                          <NextImage
                             src={leave.document_data}
-                            alt={leave.document_filename}
+                            alt={leave.document_filename || "Supporting document image"}
+                            width={800}
+                            height={400}
                             className="max-h-64 rounded-xl border border-border object-contain w-full"
+                            unoptimized
                           />
                           <a
                             href={leave.document_data}

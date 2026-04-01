@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -24,6 +25,14 @@ interface ProjectShellProps {
 }
 
 export default function ProjectShell({ children, headerAction }: ProjectShellProps) {
+  return (
+    <Suspense fallback={<div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading project management...</div>}>
+      <ProjectShellContent headerAction={headerAction}>{children}</ProjectShellContent>
+    </Suspense>
+  );
+}
+
+function ProjectShellContent({ children, headerAction }: ProjectShellProps) {
   const { user } = useAuth();
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();

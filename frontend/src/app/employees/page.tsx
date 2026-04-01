@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import NextImage from "next/image";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
@@ -159,10 +160,13 @@ export default function EmployeesPage() {
                   <div className="flex items-start gap-4">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/50 text-white font-semibold text-sm overflow-hidden">
                       {getProfilePictureUrl(emp.profile_picture) ? (
-                        <img
+                        <NextImage
                           src={getProfilePictureUrl(emp.profile_picture)!}
-                          alt={emp.name}
+                          alt={emp.name ? `${emp.name}'s profile picture` : "Employee profile picture"}
+                          width={44}
+                          height={44}
                           className="h-full w-full object-cover"
+                          unoptimized
                         />
                       ) : (
                         emp.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)

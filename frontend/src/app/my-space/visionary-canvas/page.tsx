@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import NextImage from "next/image";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Rocket, Users } from "lucide-react";
@@ -84,7 +85,7 @@ export default function VisionaryCanvasPage() {
                   <div key={proj.id} className="rounded-xl p-4 shadow-sm lighthouse-aspiration-card" style={{ borderLeft: `4px solid ${colorFor(proj.user_id)}`, border: `1px solid ${colorFor(proj.user_id)}` }}>
                     <div className="flex items-center gap-2 mb-2">
                       {proj.profile_picture ? (
-                        <img src={proj.profile_picture} alt={proj.user_name || ""} className="h-8 w-8 rounded-full object-cover" />
+                        <NextImage src={proj.profile_picture} alt={proj.user_name ? `${proj.user_name}'s profile picture` : "User profile picture"} width={32} height={32} className="h-8 w-8 rounded-full object-cover" unoptimized />
                       ) : (
                         <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: colorFor(proj.user_id) }}>{getInitials(proj.user_name || "?")}</div>
                       )}
