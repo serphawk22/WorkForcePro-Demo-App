@@ -440,6 +440,14 @@ app = FastAPI(
 # CORS configuration
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 PRODUCTION_FRONTEND = os.getenv("PRODUCTION_FRONTEND_URL", "")
+FRONTEND_URLS = os.getenv("FRONTEND_URLS", "")
+
+# Allow Vercel preview deployments for this project and (optionally) all Vercel domains.
+# Can be overridden from env with FRONTEND_ORIGIN_REGEX.
+FRONTEND_ORIGIN_REGEX = os.getenv(
+    "FRONTEND_ORIGIN_REGEX",
+    r"https://work-force-pro-demo-[a-z0-9-]+-serp-hawks-projects\.vercel\.app",
+)
 
 origins = [
     "http://localhost:3000",
@@ -458,13 +466,21 @@ if FRONTEND_URL and FRONTEND_URL not in origins:
 if PRODUCTION_FRONTEND and PRODUCTION_FRONTEND not in origins:
     origins.append(PRODUCTION_FRONTEND)
 
+# Add any additional origins from env (comma-separated)
+if FRONTEND_URLS:
+    for origin in [o.strip() for o in FRONTEND_URLS.split(",") if o.strip()]:
+        if origin not in origins:
+            origins.append(origin)
+
 print(f"[CORS] Allowed origins: {origins}")
+print(f"[CORS] Allowed origin regex: {FRONTEND_ORIGIN_REGEX}")
 
 # CRITICAL: Cannot use allow_origins=["*"] with allow_credentials=True
 # This will cause browsers to reject CORS requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # Use explicit origins list instead of wildcard
+    allow_origin_regex=FRONTEND_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
