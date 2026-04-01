@@ -98,14 +98,28 @@ export default function LoginPage() {
       console.log("Response status:", res.status);
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: "Unknown error" }));
-        console.error("Login failed:", errorData);
+        let detail = "Login failed";
+        try {
+          const errorData = await res.json();
+          detail = errorData?.detail || detail;
+          console.error("Login failed:", errorData);
+        } catch {
+          const errorText = await res.text().catch(() => "");
+          if (errorText) {
+            if (/ECONNREFUSED|Failed to proxy|Bad Gateway|502/i.test(errorText)) {
+              detail = "Cannot reach API server. Start backend and try again.";
+            } else {
+              detail = `Login failed (${res.status})`;
+            }
+          }
+          console.error("Login failed with non-JSON response:", errorText || `status ${res.status}`);
+        }
         if (res.status === 403) {
-          setPendingMessage(errorData.detail || "Your account is pending admin approval.");
+          setPendingMessage(detail || "Your account is pending admin approval.");
           setIsSubmitting(false);
           return;
         }
-        throw new Error(errorData.detail || "Invalid credentials");
+        throw new Error(detail || "Invalid credentials");
       }
 
       const data = await res.json();

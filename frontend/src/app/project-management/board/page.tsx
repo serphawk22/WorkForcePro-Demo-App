@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import { getAllTasks, getMyTasks, updateTaskStatus, Task } from "@/lib/api";
@@ -52,7 +52,11 @@ const PRIORITY_COLORS: Record<string, string> = {
 export default function BoardPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isAdmin = user?.role === "admin";
+  const workspaceFilter = searchParams?.get("workspace")
+    ? Number(searchParams.get("workspace"))
+    : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,10 +65,16 @@ export default function BoardPage() {
 
   const load = useCallback(async () => {
     setIsLoading(true);
-    const r = isAdmin ? await getAllTasks() : await getMyTasks();
-    if (r.data) setTasks(r.data);
+    const r = isAdmin
+      ? await getAllTasks(undefined, undefined, workspaceFilter)
+      : await getMyTasks();
+    const loadedTasks = r.data || [];
+    const scopedTasks = !isAdmin && workspaceFilter
+      ? loadedTasks.filter((t) => t.workspace_id === workspaceFilter)
+      : loadedTasks;
+    setTasks(scopedTasks);
     setIsLoading(false);
-  }, [isAdmin]);
+  }, [isAdmin, workspaceFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -163,7 +173,10 @@ export default function BoardPage() {
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => router.push(`/project-management/${task.id}`)}
+                      onClick={() => {
+                        if (workspaceFilter) router.push(`/project-management/workspaces/${workspaceFilter}/projects/${task.id}`);
+                        else router.push(`/project-management/${task.id}`);
+                      }}
                       className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none bg-card border border-border/40 shadow-sm ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:shadow-md hover:border-border/70"}`}
                     >
                       {/* Ref ID + priority */}

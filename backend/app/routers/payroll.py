@@ -50,7 +50,11 @@ async def get_payroll(
 
     # Get all active employees
     employees = session.exec(
-        select(User).where(User.role == UserRole.employee, User.is_active == True)
+        select(User).where(
+            User.role == UserRole.employee,
+            User.is_active == True,
+            User.organization_id == admin.organization_id,
+        )
     ).all()
 
     result = []
@@ -58,6 +62,7 @@ async def get_payroll(
         # Look for existing payroll record
         record = session.exec(
             select(Payroll).where(
+                Payroll.organization_id == admin.organization_id,
                 Payroll.employee_id == emp.id,
                 Payroll.month == target_month,
                 Payroll.year == target_year,
@@ -67,6 +72,7 @@ async def get_payroll(
         if not record:
             # Auto-create with employee's base_salary (or 0 as fallback)
             record = Payroll(
+                organization_id=admin.organization_id,
                 employee_id=emp.id,
                 month=target_month,
                 year=target_year,
@@ -99,6 +105,8 @@ async def mark_paid(
     record = session.get(Payroll, payroll_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll record not found")
+    if record.organization_id != admin.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this payroll record")
 
     record.status = "Paid"
     record.pay_date = date.today()
@@ -142,6 +150,8 @@ async def update_payroll_status(
     record = session.get(Payroll, payroll_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll record not found")
+    if record.organization_id != admin.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this payroll record")
 
     record.status = body.status
     if body.status == "Paid":
@@ -178,7 +188,10 @@ async def get_my_payroll(
     """Get the current employee's most recent payroll record (employee-accessible)."""
     record = session.exec(
         select(Payroll)
-        .where(Payroll.employee_id == current_user.id)
+        .where(
+            Payroll.employee_id == current_user.id,
+            Payroll.organization_id == current_user.organization_id,
+        )
         .order_by(Payroll.year.desc(), Payroll.month.desc())
     ).first()
 
@@ -205,13 +218,21 @@ async def get_latest_payroll(
     admin: User = Depends(get_current_admin_user),
 ):
     """Get the most recent payroll record for a specific employee."""
-    user = session.get(User, employee_id)
+    user = session.exec(
+        select(User).where(
+            User.id == employee_id,
+            User.organization_id == admin.organization_id,
+        )
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
 
     record = session.exec(
         select(Payroll)
-        .where(Payroll.employee_id == employee_id)
+        .where(
+            Payroll.employee_id == employee_id,
+            Payroll.organization_id == admin.organization_id,
+        )
         .order_by(Payroll.year.desc(), Payroll.month.desc())
     ).first()
 
@@ -242,6 +263,8 @@ async def update_salary(
     record = session.get(Payroll, payroll_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll record not found")
+    if record.organization_id != admin.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this payroll record")
 
     record.salary = salary
     session.add(record)
@@ -261,7 +284,12 @@ async def update_employee_base_salary(
     admin: User = Depends(get_current_admin_user),
 ):
     """Update an employee's base salary (and optionally department)."""
-    user = session.get(User, employee_id)
+    user = session.exec(
+        select(User).where(
+            User.id == employee_id,
+            User.organization_id == admin.organization_id,
+        )
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
 
@@ -275,6 +303,7 @@ async def update_employee_base_salary(
     today = date.today()
     current_record = session.exec(
         select(Payroll).where(
+            Payroll.organization_id == admin.organization_id,
             Payroll.employee_id == employee_id,
             Payroll.month == today.month,
             Payroll.year == today.year,

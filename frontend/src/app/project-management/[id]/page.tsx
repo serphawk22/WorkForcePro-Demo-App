@@ -8,19 +8,22 @@ import { useAuth } from "@/components/AuthProvider";
 import { 
   ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle,
   Github, ExternalLink, ListTree, MessageSquare, Send, Edit, Save, X,
-  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent
+  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent, Plus
 } from "lucide-react";
 import { 
   getProjectDetails, 
   updateTaskLinks, 
   updateTaskStatus,
   createComment,
+  createSubtask,
+  getAssignableUsers,
   updateSubtaskStatus,
   getTaskRecurringInstances,
   updateTaskInstanceStatus,
   type TaskRecurringInstancesResponse,
   ProjectDetails,
-  TaskComment
+  TaskComment,
+  User as ApiUser,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -52,7 +55,10 @@ export default function ProjectDetailPage() {
   const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const taskId = params?.id ? parseInt(params.id as string) : null;
+  const taskIdRaw = (params?.id as string | undefined) || (params?.projectId as string | undefined);
+  const workspaceIdRaw = params?.workspaceId as string | undefined;
+  const taskId = taskIdRaw ? parseInt(taskIdRaw) : null;
+  const workspaceId = workspaceIdRaw ? parseInt(workspaceIdRaw) : null;
   const isAdmin = user?.role === "admin";
 
   const [project, setProject] = useState<ProjectDetails | null>(null);
@@ -67,6 +73,15 @@ export default function ProjectDetailPage() {
   // Comments
   const [newComment, setNewComment] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
+  const [showSubtaskModal, setShowSubtaskModal] = useState(false);
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
+  const [selectedParentSubtaskId, setSelectedParentSubtaskId] = useState<number | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<ApiUser[]>([]);
+  const [newSubtask, setNewSubtask] = useState({
+    title: "",
+    description: "",
+    assigned_to: "",
+  });
 
   // Recurring task instances (only when task.is_recurring is true)
   const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
@@ -78,6 +93,14 @@ export default function ProjectDetailPage() {
       loadProjectDetails();
     }
   }, [taskId]);
+
+  useEffect(() => {
+    const loadAssignableUsers = async () => {
+      const response = await getAssignableUsers();
+      if (response.data) setAssignableUsers(response.data);
+    };
+    loadAssignableUsers();
+  }, []);
 
   useEffect(() => {
     // Only fetch recurrence data when we have a loaded project for a recurring task.
@@ -284,6 +307,41 @@ export default function ProjectDetailPage() {
     });
   };
 
+  const openAddSubtaskModal = (parentSubtaskId: number | null = null) => {
+    setSelectedParentSubtaskId(parentSubtaskId);
+    setNewSubtask({ title: "", description: "", assigned_to: "" });
+    setShowSubtaskModal(true);
+  };
+
+  const handleCreateSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskId || !newSubtask.title.trim()) return;
+
+    setIsCreatingSubtask(true);
+    try {
+      const response = await createSubtask(taskId, {
+        title: newSubtask.title.trim(),
+        description: newSubtask.description.trim() || undefined,
+        assigned_to: newSubtask.assigned_to ? Number(newSubtask.assigned_to) : undefined,
+        parent_subtask_id: selectedParentSubtaskId ?? undefined,
+      });
+
+      if (response.data) {
+        toast.success(selectedParentSubtaskId ? "Sub-subtask created" : "Subtask created");
+        setShowSubtaskModal(false);
+        setSelectedParentSubtaskId(null);
+        loadProjectDetails();
+      } else {
+        toast.error(response.error || "Failed to create subtask");
+      }
+    } catch (error) {
+      console.error("Error creating subtask:", error);
+      toast.error("Failed to create subtask");
+    } finally {
+      setIsCreatingSubtask(false);
+    }
+  };
+
   const renderSubtaskTree = (subtasks: any[], level = 0) => {
     return subtasks.map((subtask) => (
       <div key={subtask.id} className="space-y-2">
@@ -291,7 +349,10 @@ export default function ProjectDetailPage() {
           className="relative rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/30 p-4 hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200 shadow-sm"
           style={{ marginLeft: `${level * 24}px` }}
         >
-          <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-purple-${Math.max(600 - level * 100, 400)}`} />
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+            style={{ backgroundColor: level === 0 ? "#8B5CF6" : level === 1 ? "#A78BFA" : "#C4B5FD" }}
+          />
           
           <div className="flex items-start justify-between ml-2">
             <div className="flex-1">
@@ -338,6 +399,16 @@ export default function ProjectDetailPage() {
                   <span className="text-xs font-medium text-muted-foreground">{subtask.assignee_name}</span>
                 </div>
               )}
+
+              <div className="mt-2 ml-8">
+                <button
+                  onClick={() => openAddSubtaskModal(subtask.id)}
+                  className="inline-flex items-center gap-1 rounded-md border border-purple-300/40 dark:border-purple-500/40 px-2.5 py-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                >
+                  <Plus size={11} />
+                  Add Subtask
+                </button>
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
@@ -472,7 +543,10 @@ export default function ProjectDetailPage() {
           {/* Header with Back Button */}
           <div className="flex items-center gap-4">
             <button
-              onClick={() => router.push("/project-management/projects")}
+              onClick={() => {
+                if (workspaceId) router.push(`/project-management/workspaces/${workspaceId}`);
+                else router.push("/project-management");
+              }}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft size={20} />
@@ -954,17 +1028,29 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Subtasks Section */}
-          {subtasks && subtasks.length > 0 && (
-            <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
-              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <ListTree size={20} className="text-purple-500" />
-                Subtasks ({subtasks.length})
-              </h2>
+          <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <ListTree size={20} className="text-purple-500" />
+                  Subtasks ({subtasks.length})
+                </h2>
+                <button
+                  onClick={() => openAddSubtaskModal(null)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white transition-colors"
+                >
+                  <Plus size={14} />
+                  Add Subtask
+                </button>
+              </div>
+
               <div className="space-y-3">
-                {renderSubtaskTree(subtasks)}
+                {subtasks.length > 0 ? renderSubtaskTree(subtasks) : (
+                  <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                    <p className="text-sm text-muted-foreground">No subtasks yet. Add one to start breaking down this task.</p>
+                  </div>
+                )}
               </div>
             </div>
-          )}
 
           {/* Comments Section */}
           <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
@@ -1020,6 +1106,80 @@ export default function ProjectDetailPage() {
             </form>
           </div>
         </div>
+
+        {showSubtaskModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-white/20 bg-card p-5 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-base font-bold text-foreground">
+                  {selectedParentSubtaskId ? "Create Sub-Subtask" : "Create Subtask"}
+                </h3>
+                <button
+                  onClick={() => setShowSubtaskModal(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateSubtask} className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-foreground">Title *</label>
+                  <input
+                    value={newSubtask.title}
+                    onChange={(e) => setNewSubtask((prev) => ({ ...prev, title: e.target.value }))}
+                    placeholder="Subtask title"
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-foreground">Description</label>
+                  <textarea
+                    value={newSubtask.description}
+                    onChange={(e) => setNewSubtask((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Optional description"
+                    rows={3}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-foreground">Assign To</label>
+                  <select
+                    value={newSubtask.assigned_to}
+                    onChange={(e) => setNewSubtask((prev) => ({ ...prev, assigned_to: e.target.value }))}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Unassigned</option>
+                    {assignableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSubtaskModal(false)}
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreatingSubtask}
+                    className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {isCreatingSubtask ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                    {selectedParentSubtaskId ? "Create Sub-Subtask" : "Create Subtask"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     </ProtectedRoute>
   );

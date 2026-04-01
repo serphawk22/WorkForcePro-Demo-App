@@ -9,17 +9,25 @@ const root = path.join(__dirname, "..");
 const backend = path.join(root, "backend");
 const win = process.platform === "win32";
 
-const venvPython = win
-  ? path.join(backend, "venv", "Scripts", "python.exe")
-  : path.join(backend, "venv", "bin", "python");
+const candidatePythons = win
+  ? [
+      path.join(backend, "venv", "Scripts", "python.exe"),
+      path.join(backend, ".venv", "Scripts", "python.exe"),
+      path.join(root, ".venv", "Scripts", "python.exe"),
+    ]
+  : [
+      path.join(backend, "venv", "bin", "python"),
+      path.join(backend, ".venv", "bin", "python"),
+      path.join(root, ".venv", "bin", "python"),
+    ];
 
-let python = venvPython;
-if (!fs.existsSync(python)) {
+let python = candidatePythons.find((p) => fs.existsSync(p));
+if (!python) {
   python = win ? "python" : "python3";
   console.warn(
     "[dev:api] No backend/venv found; using",
     python,
-    "from PATH. Create venv: cd backend && python -m venv venv && pip install -r requirements.txt"
+    "from PATH. Create venv: cd backend && python -m venv .venv && pip install -r requirements.txt"
   );
 }
 
@@ -31,7 +39,7 @@ const env = {
 const child = spawn(
   python,
   ["-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"],
-  { cwd: backend, stdio: "inherit", env, shell: win && python === "python" }
+  { cwd: backend, stdio: "inherit", env, shell: win && (python === "python" || python === "python3") }
 );
 
 child.on("exit", (code, signal) => {

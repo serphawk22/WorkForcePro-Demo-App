@@ -44,17 +44,25 @@ try {
 
 console.log("[WorkForce Pro] Next CLI:", nextBin);
 
-const venvPython = win
-  ? path.join(backendRoot, "venv", "Scripts", "python.exe")
-  : path.join(backendRoot, "venv", "bin", "python");
+const candidatePythons = win
+  ? [
+      path.join(backendRoot, "venv", "Scripts", "python.exe"),
+      path.join(backendRoot, ".venv", "Scripts", "python.exe"),
+      path.join(root, ".venv", "Scripts", "python.exe"),
+    ]
+  : [
+      path.join(backendRoot, "venv", "bin", "python"),
+      path.join(backendRoot, ".venv", "bin", "python"),
+      path.join(root, ".venv", "bin", "python"),
+    ];
 
-let python = venvPython;
+let python = candidatePythons.find((p) => fs.existsSync(p));
 let apiShell = false;
-if (!fs.existsSync(python)) {
+if (!python) {
   python = win ? "python" : "python3";
   apiShell = win;
   console.warn(
-    `[WorkForce Pro] No backend/venv — trying "${python}" on PATH for API.`
+    `[WorkForce Pro] No local venv found (checked backend/venv, backend/.venv, .venv) — trying "${python}" on PATH for API.`
   );
 }
 

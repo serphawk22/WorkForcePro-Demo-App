@@ -107,7 +107,10 @@ async def list_my_weekly_progress(
     """All weekly entries for the current employee, newest first."""
     stmt = (
         select(WeeklyProgress)
-        .where(WeeklyProgress.user_id == current_user.id)
+        .where(
+            WeeklyProgress.user_id == current_user.id,
+            WeeklyProgress.organization_id == current_user.organization_id,
+        )
         .order_by(WeeklyProgress.week_start_date.desc())
     )
     rows = session.exec(stmt).all()
@@ -132,6 +135,7 @@ async def create_or_replace_my_weekly_progress(
         select(WeeklyProgress).where(
             WeeklyProgress.user_id == current_user.id,
             WeeklyProgress.week_start_date == week_start,
+            WeeklyProgress.organization_id == current_user.organization_id,
         )
     ).first()
 
@@ -147,6 +151,7 @@ async def create_or_replace_my_weekly_progress(
         return _to_read(existing, session)
 
     row = WeeklyProgress(
+        organization_id=current_user.organization_id,
         user_id=current_user.id,
         week_start_date=week_start,
         description=body.description,
@@ -169,7 +174,12 @@ async def update_my_weekly_progress(
     current_user: User = Depends(get_current_user),
 ):
     """Update own entry (same week rules: must be owner)."""
-    row = session.exec(select(WeeklyProgress).where(WeeklyProgress.id == entry_id)).first()
+    row = session.exec(
+        select(WeeklyProgress).where(
+            WeeklyProgress.id == entry_id,
+            WeeklyProgress.organization_id == current_user.organization_id,
+        )
+    ).first()
     if not row or row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Entry not found")
 
@@ -198,7 +208,12 @@ async def mark_comments_seen(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    row = session.exec(select(WeeklyProgress).where(WeeklyProgress.id == entry_id)).first()
+    row = session.exec(
+        select(WeeklyProgress).where(
+            WeeklyProgress.id == entry_id,
+            WeeklyProgress.organization_id == current_user.organization_id,
+        )
+    ).first()
     if not row or row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Entry not found")
     row.last_seen_comments_at = datetime.now(timezone.utc)
@@ -219,7 +234,7 @@ async def admin_list_weekly_progress(
     admin: User = Depends(get_current_admin_user),
 ):
     """All entries, optional filter by week (any date in week → normalized to Monday) or employee."""
-    stmt = select(WeeklyProgress)
+    stmt = select(WeeklyProgress).where(WeeklyProgress.organization_id == admin.organization_id)
     if week_start:
         mon = monday_of_week(week_start)
         stmt = stmt.where(WeeklyProgress.week_start_date == mon)
@@ -229,7 +244,12 @@ async def admin_list_weekly_progress(
     rows = session.exec(stmt).all()
     out: List[WeeklyProgressRead] = []
     for p in rows:
-        emp = session.exec(select(User).where(User.id == p.user_id)).first()
+        emp = session.exec(
+            select(User).where(
+                User.id == p.user_id,
+                User.organization_id == admin.organization_id,
+            )
+        ).first()
         out.append(
             _to_read(
                 p,
@@ -247,12 +267,20 @@ async def admin_list_employee_history(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user),
 ):
-    emp = session.exec(select(User).where(User.id == user_id)).first()
+    emp = session.exec(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == admin.organization_id,
+        )
+    ).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
     stmt = (
         select(WeeklyProgress)
-        .where(WeeklyProgress.user_id == user_id)
+        .where(
+            WeeklyProgress.user_id == user_id,
+            WeeklyProgress.organization_id == admin.organization_id,
+        )
         .order_by(WeeklyProgress.week_start_date.desc())
     )
     rows = session.exec(stmt).all()
@@ -274,7 +302,12 @@ async def admin_add_comment(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user),
 ):
-    row = session.exec(select(WeeklyProgress).where(WeeklyProgress.id == entry_id)).first()
+    row = session.exec(
+        select(WeeklyProgress).where(
+            WeeklyProgress.id == entry_id,
+            WeeklyProgress.organization_id == admin.organization_id,
+        )
+    ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Weekly entry not found")
 
@@ -314,7 +347,12 @@ async def employee_add_comment(
     current_user: User = Depends(get_current_user),
 ):
     """Allow employees to add comments on their own weekly entry for two-way discussion."""
-    row = session.exec(select(WeeklyProgress).where(WeeklyProgress.id == entry_id)).first()
+    row = session.exec(
+        select(WeeklyProgress).where(
+            WeeklyProgress.id == entry_id,
+            WeeklyProgress.organization_id == current_user.organization_id,
+        )
+    ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Weekly entry not found")
     if current_user.role != UserRole.employee:
@@ -332,7 +370,12 @@ async def employee_add_comment(
     session.refresh(comment)
 
     preview = body.comment.strip()[:120] + ("…" if len(body.comment.strip()) > 120 else "")
-    admins = session.exec(select(User).where(User.role == UserRole.admin)).all()
+    admins = session.exec(
+        select(User).where(
+            User.role == UserRole.admin,
+            User.organization_id == current_user.organization_id,
+        )
+    ).all()
     for admin in admins:
         create_notification(
             session=session,

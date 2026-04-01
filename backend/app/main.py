@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations
 
 load_dotenv()
 
@@ -19,6 +19,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup: Create database tables
     create_db_and_tables()
+
+    # Local/dev default: skip heavy bootstrap migrations/backfills after core tables exist.
+    # Set SKIP_STARTUP_BOOTSTRAP=0 to run the full migration/backfill flow.
+    if os.getenv("SKIP_STARTUP_BOOTSTRAP", "1") == "1":
+        print("[startup] SKIP_STARTUP_BOOTSTRAP=1 -> core tables ready, skipping heavy startup bootstrap")
+        yield
+        return
 
     is_sqlite = engine.url.drivername == "sqlite"
     if is_sqlite:
@@ -95,11 +102,50 @@ async def lifespan(app: FastAPI):
     if not is_sqlite:
         # Additional migrations — each runs in its own connection so one failure doesn't abort others
         additional_migrations = [
+        # Organizations table
+        '''
+        CREATE TABLE IF NOT EXISTS organizations (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            domain VARCHAR(255),
+            logo VARCHAR(1000),
+            theme VARCHAR(64),
+            timezone VARCHAR(64) DEFAULT 'UTC',
+            created_by INTEGER,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        ''',
+        # Workspaces table
+        '''
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(120) NOT NULL UNIQUE,
+            description VARCHAR(1000),
+            icon VARCHAR(16),
+            color VARCHAR(32),
+            created_by INTEGER NOT NULL REFERENCES users(id),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        ''',
         # Bank details columns on users table
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
+        # Multi-tenant org fields
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE attendance ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        'ALTER TABLE weekly_progress ADD COLUMN IF NOT EXISTS organization_id INTEGER',
+        # Organization settings columns
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo VARCHAR(1000)',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS theme VARCHAR(64)',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT \'UTC\'',
         # Leave request document attachment columns
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_data TEXT',
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',
@@ -115,6 +161,9 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_start_date DATE',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end_date DATE',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS monthly_day INTEGER',
+        # Task workspace hierarchy
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id INTEGER',
+        'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',
         ]
 
         for migration in additional_migrations:
@@ -125,6 +174,58 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass  # Already exists or syntax error on non-Postgres
         print("✅ Additional migrations complete")
+
+    if not is_sqlite:
+        # Add workspace FK only if missing
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'fk_tasks_workspace_id'
+                        ) THEN
+                            ALTER TABLE tasks
+                            ADD CONSTRAINT fk_tasks_workspace_id
+                            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT;
+                        END IF;
+                    END$$;
+                """))
+                conn.commit()
+        except Exception:
+            pass
+
+    if not is_sqlite:
+        # Add organization FKs only if missing
+        org_fk_sql = [
+            ("fk_users_organization_id", "users", "organization_id", "organizations"),
+            ("fk_workspaces_organization_id", "workspaces", "organization_id", "organizations"),
+            ("fk_tasks_organization_id", "tasks", "organization_id", "organizations"),
+            ("fk_subtasks_organization_id", "subtasks", "organization_id", "organizations"),
+            ("fk_attendance_organization_id", "attendance", "organization_id", "organizations"),
+            ("fk_payrolls_organization_id", "payrolls", "organization_id", "organizations"),
+            ("fk_leave_requests_organization_id", "leave_requests", "organization_id", "organizations"),
+            ("fk_task_sheets_organization_id", "task_sheets", "organization_id", "organizations"),
+            ("fk_weekly_progress_organization_id", "weekly_progress", "organization_id", "organizations"),
+        ]
+        for constraint_name, table_name, col_name, ref_table in org_fk_sql:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(f"""
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_constraint WHERE conname = '{constraint_name}'
+                            ) THEN
+                                ALTER TABLE {table_name}
+                                ADD CONSTRAINT {constraint_name}
+                                FOREIGN KEY ({col_name}) REFERENCES {ref_table}(id) ON DELETE RESTRICT;
+                            END IF;
+                        END$$;
+                    """))
+                    conn.commit()
+            except Exception:
+                pass
 
     if not is_sqlite:
         # task_instances table (recurring occurrences)
@@ -191,11 +292,24 @@ async def lifespan(app: FastAPI):
             print(f"⚠️ weekly_progress migration note: {e}")
     
     # Seed default admin account
-    from app.models import User, UserRole
+    from app.models import User, UserRole, Workspace, Organization
     from app.auth import get_password_hash
     from sqlmodel import Session, select
     
     with Session(engine) as session:
+        # Ensure default organization exists
+        default_org = session.exec(select(Organization).where(Organization.name == "Default Organization")).first()
+        if not default_org:
+            default_org = Organization(
+                name="Default Organization",
+                domain=None,
+                theme="default",
+                timezone="UTC",
+            )
+            session.add(default_org)
+            session.commit()
+            session.refresh(default_org)
+
         # Check if admin exists
         admin_email = "admin@gmail.com"
         statement = select(User).where(User.email == admin_email)
@@ -209,6 +323,7 @@ async def lifespan(app: FastAPI):
                 email=admin_email,
                 hashed_password=get_password_hash("admin"),
                 role=UserRole.admin,
+                organization_id=default_org.id,
                 is_active=True,
                 status="APPROVED",  # Admin should be pre-approved
                 age=30,
@@ -224,11 +339,92 @@ async def lifespan(app: FastAPI):
             if existing_admin.status != "APPROVED" or not existing_admin.is_active:
                 existing_admin.status = "APPROVED"
                 existing_admin.is_active = True
+                if existing_admin.organization_id is None:
+                    existing_admin.organization_id = default_org.id
                 session.add(existing_admin)
                 session.commit()
                 print(f"✅ Admin account updated to APPROVED status: {admin_email}")
             else:
                 print(f"✅ Admin account already exists: {admin_email}")
+
+        # Backfill users organization_id
+        orgless_users = session.exec(select(User).where(User.organization_id.is_(None))).all()
+        for u in orgless_users:
+            u.organization_id = default_org.id
+            session.add(u)
+        if orgless_users:
+            session.commit()
+
+        # Ensure at least one workspace exists and backfill tasks.workspace_id for legacy rows.
+        default_workspace = session.exec(select(Workspace).where(Workspace.name == "General")).first()
+        if not default_workspace:
+            admin_user = session.exec(select(User).where(User.role == UserRole.admin).order_by(User.id.asc())).first()
+            if admin_user:
+                default_workspace = Workspace(
+                    name="General",
+                    description="Default workspace for uncategorized projects",
+                    icon="📁",
+                    color="#7C8EA3",
+                    organization_id=admin_user.organization_id,
+                    created_by=admin_user.id,
+                )
+                session.add(default_workspace)
+                session.commit()
+                session.refresh(default_workspace)
+
+        # Backfill multi-tenant organization_id on core tables.
+        from app.models import Task, Subtask, Attendance, Payroll, LeaveRequest, TaskSheet, WeeklyProgress
+
+        for ws in session.exec(select(Workspace).where(Workspace.organization_id.is_(None))).all():
+            creator = session.exec(select(User).where(User.id == ws.created_by)).first()
+            ws.organization_id = creator.organization_id if creator else default_org.id
+            session.add(ws)
+
+        for t in session.exec(select(Task).where(Task.organization_id.is_(None))).all():
+            owner = session.exec(select(User).where(User.id == t.assigned_by)).first()
+            t.organization_id = owner.organization_id if owner else default_org.id
+            session.add(t)
+
+        for st in session.exec(select(Subtask).where(Subtask.organization_id.is_(None))).all():
+            parent = session.exec(select(Task).where(Task.id == st.parent_task_id)).first()
+            st.organization_id = parent.organization_id if parent else default_org.id
+            session.add(st)
+
+        for a in session.exec(select(Attendance).where(Attendance.organization_id.is_(None))).all():
+            usr = session.exec(select(User).where(User.id == a.user_id)).first()
+            a.organization_id = usr.organization_id if usr else default_org.id
+            session.add(a)
+
+        for p in session.exec(select(Payroll).where(Payroll.organization_id.is_(None))).all():
+            usr = session.exec(select(User).where(User.id == p.employee_id)).first()
+            p.organization_id = usr.organization_id if usr else default_org.id
+            session.add(p)
+
+        for lr in session.exec(select(LeaveRequest).where(LeaveRequest.organization_id.is_(None))).all():
+            usr = session.exec(select(User).where(User.id == lr.user_id)).first()
+            lr.organization_id = usr.organization_id if usr else default_org.id
+            session.add(lr)
+
+        for ts in session.exec(select(TaskSheet).where(TaskSheet.organization_id.is_(None))).all():
+            usr = session.exec(select(User).where(User.id == ts.user_id)).first()
+            ts.organization_id = usr.organization_id if usr else default_org.id
+            session.add(ts)
+
+        for wp in session.exec(select(WeeklyProgress).where(WeeklyProgress.organization_id.is_(None))).all():
+            usr = session.exec(select(User).where(User.id == wp.user_id)).first()
+            wp.organization_id = usr.organization_id if usr else default_org.id
+            session.add(wp)
+
+        session.commit()
+
+        if default_workspace:
+            from app.models import Task
+            orphan_tasks = session.exec(select(Task).where(Task.workspace_id.is_(None))).all()
+            for orphan in orphan_tasks:
+                orphan.workspace_id = default_workspace.id
+                session.add(orphan)
+            if orphan_tasks:
+                session.commit()
     
     yield
     # Shutdown: cleanup if needed
@@ -292,6 +488,8 @@ app.include_router(chatbot.router)
 app.include_router(teams.router)
 app.include_router(ai_assistant.router)
 app.include_router(weekly_progress.router)
+app.include_router(workspaces.router)
+app.include_router(organizations.router)
 
 
 @app.get("/")

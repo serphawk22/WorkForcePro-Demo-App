@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -15,15 +15,17 @@ import {
   User,
   Pin,
   ClipboardList,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getApiBaseUrl } from "@/lib/api";
+import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
-  { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
@@ -34,7 +36,7 @@ const adminLinks = [
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
   { label: "Weekly Progress", icon: ClipboardList, path: "/weekly-progress" },
-  { label: "Project Management", icon: FolderKanban, path: "/project-management/summary" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
 ];
@@ -47,8 +49,11 @@ interface SidebarProps {
 
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
   const pathname = usePathname() || "";
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [isHovered, setIsHovered] = useState(false);
   const PIN_KEY = "workforcepro_sidebarPinned";
+  const LAST_PROJECT_WORKSPACE_KEY = "workforcepro_lastProjectWorkspaceId";
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -65,6 +70,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const { user, logout } = useAuth();
   const links = role === "admin" ? adminLinks : employeeLinks;
   const [pendingCount, setPendingCount] = useState(0);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const isOpen = isHovered || isPinned;
   const effectiveWidth = isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72);
 
@@ -95,8 +102,28 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   }, [role]);
 
   useEffect(() => {
+    const loadWorkspaces = async () => {
+      const res = await getWorkspaces();
+      if (res.data) setWorkspaces(res.data);
+    };
+    loadWorkspaces();
+    window.addEventListener("workspaces-updated", loadWorkspaces);
+    return () => window.removeEventListener("workspaces-updated", loadWorkspaces);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.style.setProperty('--sidebar-width', `${effectiveWidth}px`);
   }, [effectiveWidth]);
+
+  useEffect(() => {
+    const workspaceIdFromPath = pathname.match(/^\/project-management\/workspaces\/(\d+)/)?.[1];
+    const workspaceIdFromQuery = searchParams?.get("workspace");
+    const activeWorkspaceId = workspaceIdFromPath || workspaceIdFromQuery;
+    if (!activeWorkspaceId) return;
+    try {
+      localStorage.setItem(LAST_PROJECT_WORKSPACE_KEY, activeWorkspaceId);
+    } catch {}
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -130,6 +157,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const displayName = user?.name || userName;
   const displayHandle = user?.email || userHandle;
   const profilePicture = user?.profile_picture;
+  const workspaceIdFromPath = pathname.match(/^\/project-management\/workspaces\/(\d+)/)?.[1] || null;
+  const workspaceIdFromQuery = searchParams?.get("workspace") || null;
+  const activeWorkspaceId = workspaceIdFromPath || workspaceIdFromQuery;
 
   const getProfilePictureUrl = () => {
     if (!profilePicture) return null;
@@ -187,7 +217,109 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       {/* Nav links */}
       <nav className="flex-1 flex flex-col gap-1 px-3 py-2">
         {links.map((link) => {
-          const isActive = link.path === "/project-management/summary"
+          if (link.label === "Project Management") {
+            const parentActive = pathname.startsWith("/project-management");
+
+            return (
+              <div key={link.path} className="relative group/item">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const workspaceIdFromPath = pathname.match(/^\/project-management\/workspaces\/(\d+)/)?.[1];
+                    const workspaceIdFromQuery = searchParams?.get("workspace");
+                    let targetWorkspaceId = workspaceIdFromPath || workspaceIdFromQuery;
+
+                    if (!targetWorkspaceId) {
+                      try {
+                        targetWorkspaceId = localStorage.getItem(LAST_PROJECT_WORKSPACE_KEY) || null;
+                      } catch {}
+                    }
+
+                    if (targetWorkspaceId) {
+                      router.push(`/project-management/workspaces/${targetWorkspaceId}`, { scroll: false });
+                      return;
+                    }
+
+                    router.push("/project-management", { scroll: false });
+                  }}
+                  className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
+                    parentActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  }`}
+                >
+                  <span className={`sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-sidebar-primary transition-all duration-300 ${
+                    parentActive ? "h-5 opacity-100" : "h-0 opacity-0"
+                  }`} />
+                  <FolderKanban size={18} className={`shrink-0 transition-transform duration-200 ${parentActive ? "scale-110" : "group-hover/item:scale-110"}`} />
+                  <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
+                    isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
+                  }`}>
+                    Project Management
+                  </span>
+                  {isOpen && (
+                    <span
+                      className="ml-auto rounded p-0.5 hover:bg-sidebar-accent/70"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWorkspacesOpen((prev) => !prev);
+                      }}
+                    >
+                      {workspacesOpen ? <ChevronDown size={14} className="ml-auto" /> : <ChevronRight size={14} className="ml-auto" />}
+                    </span>
+                  )}
+                </button>
+
+                {isOpen && workspacesOpen && (
+                  <div className="ml-7 mt-1 space-y-1 border-l border-sidebar-border pl-3">
+                    {workspaces.length === 0 && (
+                      <p className="py-1 text-xs text-sidebar-foreground/60">No workspaces</p>
+                    )}
+                    {workspaces.map((ws) => {
+                      const wsPath = `/project-management/workspaces/${ws.id}`;
+                      const wsActive = String(ws.id) === activeWorkspaceId;
+                      return (
+                        <Link
+                          key={ws.id}
+                          href={wsPath}
+                          prefetch
+                          scroll={false}
+                          onClick={() => {
+                            try {
+                              localStorage.setItem(LAST_PROJECT_WORKSPACE_KEY, String(ws.id));
+                            } catch {}
+                          }}
+                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                            wsActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/75 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                          }`}
+                        >
+                          <span
+                            className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
+                            style={{ backgroundColor: ws.color || "#6b7280" }}
+                            aria-hidden
+                          />
+                          <span className="text-sm leading-none">{ws.icon || "•"}</span>
+                          <span className="truncate">{ws.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!isOpen && (
+                  <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 delay-150">
+                    <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-lg border border-border whitespace-nowrap">
+                      Project Management
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const isActive = link.path === "/project-management"
             ? pathname.startsWith("/project-management")
             : link.path === "/my-space/task-sheet"
               ? pathname.startsWith("/my-space")
@@ -198,6 +330,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
             <div key={link.path} className="relative group/item">
               <Link
                 href={link.path}
+                prefetch
+                scroll={false}
                 className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"

@@ -131,6 +131,10 @@ export type RecurrenceType = "daily" | "weekly" | "monthly";
 export interface Task {
   id: number;
   public_id: string;
+  workspace_id?: number | null;
+  workspace_name?: string | null;
+  workspace_icon?: string | null;
+  workspace_color?: string | null;
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high";
@@ -148,6 +152,7 @@ export interface Task {
   assignee_email?: string;
   assigned_by_name?: string;
   progress?: number;  // Task completion progress (0-100)
+  subtask_count?: number;
   /** Recurring task template fields */
   is_recurring?: boolean;
   recurrence_type?: RecurrenceType | string | null;
@@ -161,6 +166,7 @@ export interface Task {
 
 export interface TaskCreate {
   title: string;
+  workspace_id: number;
   description?: string;
   priority?: "low" | "medium" | "high";
   due_date?: string;
@@ -200,6 +206,22 @@ export interface TaskRecurringInstancesResponse {
   upcoming: TaskInstanceSummary[];
   history: TaskInstanceSummary[];
   next_occurrence_date: string | null;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  created_by: number;
+  created_at: string;
+  project_count?: number;
+}
+
+export interface WorkspaceProjectsResponse {
+  workspace: Workspace;
+  projects: Task[];
 }
 
 export interface LeaveRequest {
@@ -577,9 +599,16 @@ async function apiFetch<T>(
 
     clearTimeout(timeoutId);
 
-    // Handle empty responses (like 204 No Content)
+    // Handle empty and non-JSON responses safely (e.g. plain "Internal Server Error")
     const text = await response.text();
-    const data = text ? JSON.parse(text) : {};
+    let data: any = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text };
+      }
+    }
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -594,7 +623,7 @@ async function apiFetch<T>(
       if (response.status === 403) {
         return { error: data.detail || "Access forbidden. Insufficient permissions." };
       }
-      return { error: data.detail || "Request failed" };
+      return { error: data.detail || `Request failed (${response.status})` };
     }
 
     return { data };
@@ -1004,17 +1033,74 @@ export async function updateTaskStatus(
 }
 
 /**
- * Get all tasks (admin only).
+ * Get all organization tasks (all authenticated users).
  */
 export async function getAllTasks(
   statusFilter?: string,
-  assignedTo?: number
+  assignedTo?: number,
+  workspaceId?: number
 ): Promise<ApiResponse<Task[]>> {
   const params = new URLSearchParams();
   if (statusFilter) params.append("status_filter", statusFilter);
   if (assignedTo) params.append("assigned_to", String(assignedTo));
+  if (workspaceId) params.append("workspace_id", String(workspaceId));
   const query = params.toString() ? `?${params.toString()}` : "";
   return apiFetch<Task[]>(`/tasks/${query}`);
+}
+
+export async function getWorkspaces(): Promise<ApiResponse<Workspace[]>> {
+  return apiFetch<Workspace[]>("/workspaces/");
+}
+
+export async function createWorkspace(data: {
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+}): Promise<ApiResponse<Workspace>> {
+  return apiFetch<Workspace>("/workspaces/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateWorkspace(
+  workspaceId: number,
+  data: {
+    name?: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+  }
+): Promise<ApiResponse<Workspace>> {
+  return apiFetch<Workspace>(`/workspaces/${workspaceId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWorkspace(
+  workspaceId: number
+): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/workspaces/${workspaceId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getWorkspaceProjects(
+  workspaceId: number,
+  filters?: {
+    statusFilter?: string;
+    ownerId?: number;
+    recentDays?: number;
+  }
+): Promise<ApiResponse<WorkspaceProjectsResponse>> {
+  const params = new URLSearchParams();
+  if (filters?.statusFilter) params.append("status_filter", filters.statusFilter);
+  if (filters?.ownerId) params.append("owner_id", String(filters.ownerId));
+  if (filters?.recentDays) params.append("recent_days", String(filters.recentDays));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<WorkspaceProjectsResponse>(`/workspaces/${workspaceId}/projects${query}`);
 }
 
 /**

@@ -13,7 +13,7 @@ from app.models import (
     EmployeePerformance, AttendanceStats, EmployeeListItem, NotificationType,
     Payroll, TaskSheet, HappySheet, DreamProject, LearningFocus, PersonalProject
 )
-from app.auth import get_current_admin_user, get_password_hash
+from app.auth import get_current_admin_user, get_password_hash, ensure_same_organization
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -27,7 +27,11 @@ async def get_dashboard_stats(
     """Get dashboard statistics (admin only)."""
     # Total employees
     employees = session.exec(
-        select(User).where(User.role == UserRole.employee, User.is_active == True)
+        select(User).where(
+            User.role == UserRole.employee,
+            User.is_active == True,
+            User.organization_id == admin.organization_id,
+        )
     ).all()
     total_employees = len(employees)
     
@@ -35,6 +39,7 @@ async def get_dashboard_stats(
     today = date.today()
     active = session.exec(
         select(Attendance).where(
+            Attendance.organization_id == admin.organization_id,
             Attendance.date == today,
             Attendance.punch_in != None,
             Attendance.punch_out == None
@@ -44,17 +49,26 @@ async def get_dashboard_stats(
     
     # Pending tasks (tasks submitted for review)
     pending_tasks = len(session.exec(
-        select(Task).where(Task.status == TaskStatus.submitted)
+        select(Task).where(
+            Task.organization_id == admin.organization_id,
+            Task.status == TaskStatus.submitted,
+        )
     ).all())
     
     # Pending leave requests
     pending_leaves = len(session.exec(
-        select(LeaveRequest).where(LeaveRequest.status == LeaveStatus.pending)
+        select(LeaveRequest).where(
+            LeaveRequest.organization_id == admin.organization_id,
+            LeaveRequest.status == LeaveStatus.pending,
+        )
     ).all())
     
     # Average daily hours (from last 30 days)
     recent_attendance = session.exec(
-        select(Attendance).where(Attendance.total_hours != None)
+        select(Attendance).where(
+            Attendance.organization_id == admin.organization_id,
+            Attendance.total_hours != None,
+        )
     ).all()
     
     if recent_attendance:
@@ -69,7 +83,10 @@ async def get_dashboard_stats(
         pending_leaves=pending_leaves,
         avg_daily_hours=round(avg_hours, 1),
         pending_registrations=len(session.exec(
-            select(User).where(User.status == "PENDING")
+            select(User).where(
+                User.status == "PENDING",
+                User.organization_id == admin.organization_id,
+            )
         ).all())
     )
 
@@ -86,7 +103,10 @@ async def get_all_employees(
     Returns a list of all users with role='employee'.
     Requires admin authentication.
     """
-    statement = select(User).where(User.role == UserRole.employee)
+    statement = select(User).where(
+        User.role == UserRole.employee,
+        User.organization_id == current_user.organization_id,
+    )
     employees = session.exec(statement).all()
     return employees
 
@@ -100,7 +120,7 @@ async def get_all_users(
     """
     Get all users (admin only). Optionally filter by status=PENDING|APPROVED|REJECTED.
     """
-    statement = select(User)
+    statement = select(User).where(User.organization_id == current_user.organization_id)
     if status_filter:
         statement = statement.where(User.status == status_filter.upper())
     users = session.exec(statement).all()
@@ -116,7 +136,10 @@ async def get_user_by_id(
     """
     Get a specific user by ID (admin only).
     """
-    statement = select(User).where(User.id == user_id)
+    statement = select(User).where(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id,
+    )
     user = session.exec(statement).first()
     
     if not user:
@@ -136,7 +159,12 @@ async def approve_user(
 ):
     """Approve a pending user registration (admin only)."""
     try:
-        user = session.exec(select(User).where(User.id == user_id)).first()
+        user = session.exec(
+            select(User).where(
+                User.id == user_id,
+                User.organization_id == current_user.organization_id,
+            )
+        ).first()
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -170,7 +198,12 @@ async def reject_user(
     current_user: User = Depends(get_current_admin_user)
 ):
     """Reject a pending user registration (admin only)."""
-    user = session.exec(select(User).where(User.id == user_id)).first()
+    user = session.exec(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == current_user.organization_id,
+        )
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -187,7 +220,12 @@ async def create_employee(
     current_user: User = Depends(get_current_admin_user)
 ):
     """Create a new employee directly (admin only). Account is auto-approved."""
-    existing = session.exec(select(User).where(User.email == user_data.email)).first()
+    existing = session.exec(
+        select(User).where(
+            User.email == user_data.email,
+            User.organization_id == current_user.organization_id,
+        )
+    ).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -200,6 +238,7 @@ async def create_employee(
         email=user_data.email,
         hashed_password=hashed_password,
         role=user_data.role,
+        organization_id=current_user.organization_id,
         status=UserStatus.APPROVED,
         approved_at=datetime.now(timezone.utc),
         approved_by=current_user.id,
@@ -222,7 +261,12 @@ async def update_date_joined(
     Pass date_joined as query param in YYYY-MM-DD format, or omit to clear it.
     """
     from datetime import date as DateType
-    user = session.exec(select(User).where(User.id == user_id)).first()
+    user = session.exec(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == current_user.organization_id,
+        )
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -249,7 +293,10 @@ async def deactivate_user(
     """
     Deactivate a user account (admin only).
     """
-    statement = select(User).where(User.id == user_id)
+    statement = select(User).where(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id,
+    )
     user = session.exec(statement).first()
     
     if not user:
@@ -280,7 +327,10 @@ async def activate_user(
     """
     Activate a user account (admin only).
     """
-    statement = select(User).where(User.id == user_id)
+    statement = select(User).where(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id,
+    )
     user = session.exec(statement).first()
     
     if not user:
@@ -307,7 +357,10 @@ async def delete_user(
     WARNING: This will also delete all associated records (tasks, attendance, etc.)
     """
     try:
-        statement = select(User).where(User.id == user_id)
+        statement = select(User).where(
+            User.id == user_id,
+            User.organization_id == current_user.organization_id,
+        )
         user = session.exec(statement).first()
         
         if not user:

@@ -45,6 +45,7 @@ async def create_leave_request_from_ai(
         raise HTTPException(status_code=400, detail="End date must be after start date.")
 
     leave_request = LeaveRequest(
+        organization_id=current_user.organization_id,
         user_id=current_user.id,
         reason=data.reason,
         start_date=start,
@@ -106,6 +107,7 @@ async def create_leave_request(
         document_filename = document.filename
 
     leave_request = LeaveRequest(
+        organization_id=current_user.organization_id,
         user_id=current_user.id,
         reason=reason,
         start_date=start,
@@ -149,7 +151,10 @@ async def cancel_leave_request(
     current_user: User = Depends(get_current_user)
 ):
     """Cancel a pending leave request."""
-    statement = select(LeaveRequest).where(LeaveRequest.id == leave_id)
+    statement = select(LeaveRequest).where(
+        LeaveRequest.id == leave_id,
+        LeaveRequest.organization_id == current_user.organization_id,
+    )
     leave_request = session.exec(statement).first()
     
     if not leave_request:
@@ -185,7 +190,7 @@ async def get_all_leave_requests(
     admin: User = Depends(get_current_admin_user)
 ):
     """Get all leave requests (admin only)."""
-    statement = select(LeaveRequest)
+    statement = select(LeaveRequest).where(LeaveRequest.organization_id == admin.organization_id)
     
     if status_filter:
         statement = statement.where(LeaveRequest.status == status_filter)
@@ -195,7 +200,10 @@ async def get_all_leave_requests(
     
     result = []
     for req in requests:
-        user_stmt = select(User).where(User.id == req.user_id)
+        user_stmt = select(User).where(
+            User.id == req.user_id,
+            User.organization_id == admin.organization_id,
+        )
         user = session.exec(user_stmt).first()
         
         result.append(LeaveRequestWithUser(
@@ -225,6 +233,7 @@ async def get_pending_leave_requests(
 ):
     """Get all pending leave requests (admin only)."""
     statement = select(LeaveRequest).where(
+        LeaveRequest.organization_id == admin.organization_id,
         LeaveRequest.status == LeaveStatus.pending
     ).order_by(LeaveRequest.created_at.asc())
     
@@ -232,7 +241,10 @@ async def get_pending_leave_requests(
     
     result = []
     for req in requests:
-        user_stmt = select(User).where(User.id == req.user_id)
+        user_stmt = select(User).where(
+            User.id == req.user_id,
+            User.organization_id == admin.organization_id,
+        )
         user = session.exec(user_stmt).first()
         
         result.append(LeaveRequestWithUser(
@@ -263,7 +275,10 @@ async def review_leave_request(
     admin: User = Depends(get_current_admin_user)
 ):
     """Approve or reject a leave request (admin only)."""
-    statement = select(LeaveRequest).where(LeaveRequest.id == leave_id)
+    statement = select(LeaveRequest).where(
+        LeaveRequest.id == leave_id,
+        LeaveRequest.organization_id == admin.organization_id,
+    )
     leave_request = session.exec(statement).first()
     
     if not leave_request:
@@ -297,10 +312,10 @@ async def get_leave_stats(
     admin: User = Depends(get_current_admin_user)
 ):
     """Get leave request statistics (admin only)."""
-    total = len(session.exec(select(LeaveRequest)).all())
-    pending = len(session.exec(select(LeaveRequest).where(LeaveRequest.status == LeaveStatus.pending)).all())
-    approved = len(session.exec(select(LeaveRequest).where(LeaveRequest.status == LeaveStatus.approved)).all())
-    rejected = len(session.exec(select(LeaveRequest).where(LeaveRequest.status == LeaveStatus.rejected)).all())
+    total = len(session.exec(select(LeaveRequest).where(LeaveRequest.organization_id == admin.organization_id)).all())
+    pending = len(session.exec(select(LeaveRequest).where(LeaveRequest.organization_id == admin.organization_id, LeaveRequest.status == LeaveStatus.pending)).all())
+    approved = len(session.exec(select(LeaveRequest).where(LeaveRequest.organization_id == admin.organization_id, LeaveRequest.status == LeaveStatus.approved)).all())
+    rejected = len(session.exec(select(LeaveRequest).where(LeaveRequest.organization_id == admin.organization_id, LeaveRequest.status == LeaveStatus.rejected)).all())
     
     return {
         "total": total,
@@ -318,7 +333,10 @@ async def get_leave_request_by_id(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific leave request by ID (owner or admin)."""
-    statement = select(LeaveRequest).where(LeaveRequest.id == leave_id)
+    statement = select(LeaveRequest).where(
+        LeaveRequest.id == leave_id,
+        LeaveRequest.organization_id == current_user.organization_id,
+    )
     leave_request = session.exec(statement).first()
 
     if not leave_request:
@@ -334,7 +352,10 @@ async def get_leave_request_by_id(
             detail="Not authorized to view this request"
         )
 
-    user_stmt = select(User).where(User.id == leave_request.user_id)
+    user_stmt = select(User).where(
+        User.id == leave_request.user_id,
+        User.organization_id == current_user.organization_id,
+    )
     user = session.exec(user_stmt).first()
 
     return LeaveRequestWithUser(

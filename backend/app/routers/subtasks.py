@@ -15,8 +15,10 @@ def generate_public_id(session: Session, model_class, prefix: str = "", length: 
     while True:
         suffix = ''.join(random.choices(chars, k=length))
         candidate = f"{prefix}{suffix}" if prefix else suffix
-        existing = session.exec(select(model_class).where(model_class.public_id == candidate)).first()
-        if not existing:
+        existing_same_model = session.exec(select(model_class).where(model_class.public_id == candidate)).first()
+        existing_task = session.exec(select(Task).where(Task.public_id == candidate)).first()
+        existing_subtask = session.exec(select(Subtask).where(Subtask.public_id == candidate)).first()
+        if not existing_same_model and not existing_task and not existing_subtask:
             return candidate
 
 from app.database import get_session
@@ -24,7 +26,7 @@ from app.models import (
     User, Task, Subtask, SubtaskCreate, SubtaskUpdate, SubtaskRead, SubtaskWithAssignee,
     SubtaskStatus, UserRole, NotificationType, TaskStatus
 )
-from app.auth import get_current_user, get_current_admin_user
+from app.auth import get_current_user, get_current_admin_user, ensure_same_organization
 from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["Subtasks"])
@@ -54,6 +56,7 @@ async def create_subtask(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Parent task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Permission: anyone can create subtasks as long as they are authenticated
     # (Removed restriction: must be assigned to task or be admin)
@@ -75,9 +78,28 @@ async def create_subtask(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Assigned user not found"
             )
+            ensure_same_organization(current_user, assignee.organization_id, "assignee")
+
+    # If creating nested subtask, verify parent_subtask belongs to same task.
+    if subtask_data.parent_subtask_id is not None:
+        parent_subtask = session.exec(
+            select(Subtask).where(Subtask.id == subtask_data.parent_subtask_id)
+        ).first()
+        if not parent_subtask:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent subtask not found"
+            )
+        ensure_same_organization(current_user, parent_subtask.organization_id, "parent subtask")
+        if parent_subtask.parent_task_id != task_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent subtask must belong to the same task"
+            )
     
     # Create subtask
     subtask = Subtask(
+        organization_id=task.organization_id,
         parent_task_id=task_id,
         parent_subtask_id=subtask_data.parent_subtask_id,  # Support nested subtasks
         title=subtask_data.title,
@@ -129,9 +151,13 @@ async def get_task_subtasks(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Get subtasks
-    subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task_id).order_by(Subtask.created_at.asc())
+    subtasks_stmt = select(Subtask).where(
+        Subtask.parent_task_id == task_id,
+        Subtask.organization_id == current_user.organization_id,
+    ).order_by(Subtask.created_at.asc())
     subtasks = session.exec(subtasks_stmt).all()
     
     result = []
@@ -150,6 +176,7 @@ async def get_task_subtasks(
         
         result.append(SubtaskWithAssignee(
             id=subtask.id,
+            organization_id=subtask.organization_id,
             public_id=subtask.public_id,
             parent_task_id=subtask.parent_task_id,
             parent_subtask_id=subtask.parent_subtask_id,
@@ -191,9 +218,13 @@ async def get_task_subtasks_hierarchy(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Get all subtasks for the task
-    subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task_id).order_by(Subtask.created_at.asc())
+    subtasks_stmt = select(Subtask).where(
+        Subtask.parent_task_id == task_id,
+        Subtask.organization_id == current_user.organization_id,
+    ).order_by(Subtask.created_at.asc())
     subtasks = session.exec(subtasks_stmt).all()
     
     # Build subtask dictionary with user info
@@ -216,6 +247,7 @@ async def get_task_subtasks_hierarchy(
         
         subtask_dict[subtask.id] = SubtaskWithAssignee(
             id=subtask.id,
+            organization_id=subtask.organization_id,
             public_id=subtask.public_id,
             parent_task_id=subtask.parent_task_id,
             parent_subtask_id=subtask.parent_subtask_id,
@@ -271,6 +303,7 @@ async def update_subtask_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subtask not found"
         )
+    ensure_same_organization(current_user, subtask.organization_id, "subtask")
     
     # Role-based status validation
     admin_statuses = {SubtaskStatus.reviewing, SubtaskStatus.approved, SubtaskStatus.rejected}
@@ -334,6 +367,7 @@ async def update_subtask(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subtask not found"
         )
+    ensure_same_organization(current_user, subtask.organization_id, "subtask")
     
     # Check permission
     if current_user.role != UserRole.admin:
@@ -398,6 +432,7 @@ async def delete_subtask(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subtask not found"
         )
+    ensure_same_organization(current_user, subtask.organization_id, "subtask")
     
     # Prevent deleting completed subtasks
     if subtask.status == SubtaskStatus.completed:
@@ -419,7 +454,10 @@ async def delete_subtask(
             )
     
     # Delete nested child subtasks first (if any) to avoid foreign key constraint violations
-    child_subtasks_stmt = select(Subtask).where(Subtask.parent_subtask_id == subtask_id)
+    child_subtasks_stmt = select(Subtask).where(
+        Subtask.parent_subtask_id == subtask_id,
+        Subtask.organization_id == current_user.organization_id,
+    )
     child_subtasks = session.exec(child_subtasks_stmt).all()
     for child in child_subtasks:
         session.delete(child)

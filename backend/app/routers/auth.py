@@ -23,7 +23,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def register(
+def register(
     user_data: UserCreate,
     session: Session = Depends(get_session)
 ):
@@ -45,6 +45,46 @@ async def register(
             detail="Email already registered"
         )
     
+    # Resolve organization for new user
+    from app.models import Organization
+    organization_id = user_data.organization_id
+
+    if organization_id:
+        org = session.exec(select(Organization).where(Organization.id == organization_id)).first()
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Organization not found"
+            )
+    elif user_data.organization_name:
+        existing_org = session.exec(select(Organization).where(Organization.name == user_data.organization_name.strip())).first()
+        if existing_org:
+            organization_id = existing_org.id
+        else:
+            new_org = Organization(
+                name=user_data.organization_name.strip(),
+                domain=user_data.organization_domain,
+                theme="default",
+                timezone="UTC",
+            )
+            session.add(new_org)
+            session.commit()
+            session.refresh(new_org)
+            organization_id = new_org.id
+    else:
+        default_org = session.exec(select(Organization).where(Organization.name == "Default Organization")).first()
+        if not default_org:
+            default_org = Organization(
+                name="Default Organization",
+                domain=None,
+                theme="default",
+                timezone="UTC",
+            )
+            session.add(default_org)
+            session.commit()
+            session.refresh(default_org)
+        organization_id = default_org.id
+
     # Create new user
     hashed_password = get_password_hash(user_data.password)
     user = User(
@@ -52,6 +92,7 @@ async def register(
         email=user_data.email,
         hashed_password=hashed_password,
         role=user_data.role,
+        organization_id=organization_id,
         status=UserStatus.PENDING
     )
     
@@ -60,7 +101,12 @@ async def register(
     session.refresh(user)
 
     # Notify all admins about the new pending registration
-    admins = session.exec(select(User).where(User.role == UserRole.admin)).all()
+    admins = session.exec(
+        select(User).where(
+            User.role == UserRole.admin,
+            User.organization_id == user.organization_id,
+        )
+    ).all()
     for admin in admins:
         notification = Notification(
             user_id=admin.id,
@@ -74,7 +120,7 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session)
 ):
@@ -120,7 +166,8 @@ async def login(
             "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
             "role": user.role.value,
-            "name": user.name
+            "name": user.name,
+            "organization_id": user.organization_id,
         },
         expires_delta=access_token_expires
     )
@@ -131,12 +178,13 @@ async def login(
         user_id=user.id,
         email=user.email,
         name=user.name,
-        role=user.role.value
+        role=user.role.value,
+        organization_id=user.organization_id,
     )
 
 
 @router.post("/login/json", response_model=Token)
-async def login_json(
+def login_json(
     credentials: UserLogin,
     response: Response,
     session: Session = Depends(get_session)
@@ -183,7 +231,8 @@ async def login_json(
             "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
             "role": user.role.value,
-            "name": user.name
+            "name": user.name,
+            "organization_id": user.organization_id,
         },
         expires_delta=access_token_expires
     )
@@ -197,12 +246,13 @@ async def login_json(
         user_id=user.id,
         email=user.email,
         name=user.name,
-        role=user.role.value
+        role=user.role.value,
+        organization_id=user.organization_id,
     )
 
 
 @router.get("/me", response_model=UserRead)
-async def get_current_user_info(
+def get_current_user_info(
     request: Request,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
@@ -212,14 +262,14 @@ async def get_current_user_info(
 
 
 @router.post("/logout")
-async def logout(response: Response):
+def logout(response: Response):
     """Logout and clear authentication cookie."""
     clear_auth_cookie(response)
     return {"message": "Successfully logged out"}
 
 
 @router.get("/verify")
-async def verify_session(
+def verify_session(
     request: Request,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
@@ -232,6 +282,7 @@ async def verify_session(
             "id": current_user.id,
             "email": current_user.email,
             "name": current_user.name,
-            "role": current_user.role.value
+            "role": current_user.role.value,
+            "organization_id": current_user.organization_id,
         }
     }

@@ -44,6 +44,7 @@ async def punch_in(
     # Close any previous open session (where punch_out is null)
     active_session_statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
         Attendance.punch_out == None
     )
     active_session = session.exec(active_session_statement).first()
@@ -67,6 +68,7 @@ async def punch_in(
     # Check if already completed attendance for today (by date field)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
         Attendance.date == today
     )
     existing = session.exec(statement).first()
@@ -80,6 +82,7 @@ async def punch_in(
     # Create new attendance record (or re-use if not completed)
     if not existing or existing.punch_out:
         attendance = Attendance(
+            organization_id=current_user.organization_id,
             user_id=current_user.id,
             date=today,
             punch_in=datetime.now(timezone.utc)
@@ -118,6 +121,7 @@ async def punch_out(
     # Find active session (timezone-safe) - don't use date field
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
         Attendance.punch_out == None  # Find active session
     ).order_by(Attendance.punch_in.desc())  # Get most recent
     
@@ -170,7 +174,8 @@ async def get_my_attendance(
 ):
     """Get current user's attendance records."""
     statement = select(Attendance).where(
-        Attendance.user_id == current_user.id
+        Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
     ).order_by(Attendance.date.desc()).limit(limit)
     
     records = session.exec(statement).all()
@@ -204,6 +209,7 @@ async def get_today_attendance(
     # Query by punch_in timestamp range instead of date field (timezone-safe)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
         Attendance.punch_in >= start_of_day,
         Attendance.punch_in < end_of_day
     )
@@ -237,6 +243,7 @@ async def get_attendance_status(
     # Query by punch_in timestamp range instead of date field (timezone-safe)
     statement = select(Attendance).where(
         Attendance.user_id == current_user.id,
+        Attendance.organization_id == current_user.organization_id,
         Attendance.punch_in >= start_of_day,
         Attendance.punch_in < end_of_day
     )
@@ -313,7 +320,7 @@ async def get_all_attendance(
     - sort: Sort order ('asc' or 'desc', default 'desc')
     - limit: Maximum number of records to return
     """
-    statement = select(Attendance)
+    statement = select(Attendance).where(Attendance.organization_id == admin.organization_id)
     
     # Apply date filters
     if date_filter:
@@ -344,7 +351,10 @@ async def get_all_attendance(
     # Enrich with user info and format datetime fields
     result = []
     for record in records:
-        user_statement = select(User).where(User.id == record.user_id)
+        user_statement = select(User).where(
+            User.id == record.user_id,
+            User.organization_id == admin.organization_id,
+        )
         user = session.exec(user_statement).first()
         
         result.append({
@@ -370,6 +380,7 @@ async def get_active_sessions(
     """Get count of employees currently working (punched in but not out)."""
     today = date.today()
     statement = select(Attendance).where(
+        Attendance.organization_id == admin.organization_id,
         Attendance.date == today,
         Attendance.punch_in != None,
         Attendance.punch_out == None

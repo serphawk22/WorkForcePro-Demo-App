@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 class UserRole(str, Enum):
     admin = "admin"
+    manager = "manager"
     employee = "employee"
 
 
@@ -93,6 +94,39 @@ class NotificationType(str, Enum):
 
 # ==================== USER MODELS ====================
 
+class OrganizationBase(SQLModel):
+    """Organization base model."""
+    name: str = Field(min_length=1, max_length=200, index=True)
+    domain: Optional[str] = Field(default=None, max_length=255)
+    logo: Optional[str] = Field(default=None, max_length=1000)
+    theme: Optional[str] = Field(default=None, max_length=64)
+    timezone: Optional[str] = Field(default="UTC", max_length=64)
+
+
+class Organization(OrganizationBase, table=True):
+    """Tenant organization model."""
+    __tablename__ = "organizations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_by: Optional[int] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class OrganizationUpdate(SQLModel):
+    """Organization settings update model."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    domain: Optional[str] = Field(default=None, max_length=255)
+    logo: Optional[str] = Field(default=None, max_length=1000)
+    theme: Optional[str] = Field(default=None, max_length=64)
+    timezone: Optional[str] = Field(default=None, max_length=64)
+
+
+class OrganizationRead(OrganizationBase):
+    """Organization read model."""
+    id: int
+    created_by: Optional[int] = None
+    created_at: datetime
+
 class UserBase(SQLModel):
     """Base user model with common fields."""
     name: str = Field(min_length=2, max_length=100)
@@ -117,6 +151,7 @@ class User(UserBase, table=True):
     __tablename__ = "users"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     hashed_password: str
     status: str = Field(default="PENDING")
     approved_at: Optional[datetime] = Field(default=None)
@@ -130,11 +165,15 @@ class UserCreate(SQLModel):
     email: str
     password: str = Field(min_length=6)
     role: UserRole = Field(default=UserRole.employee)
+    organization_id: Optional[int] = None
+    organization_name: Optional[str] = Field(default=None, max_length=200)
+    organization_domain: Optional[str] = Field(default=None, max_length=255)
 
 
 class UserRead(SQLModel):
     """Schema for reading user data (public)."""
     id: int
+    organization_id: Optional[int] = None
     name: str
     email: str
     role: UserRole
@@ -169,6 +208,7 @@ class Token(SQLModel):
     user_id: int
     name: str
     email: str
+    organization_id: Optional[int] = None
 
 
 class TokenData(SQLModel):
@@ -176,6 +216,7 @@ class TokenData(SQLModel):
     user_id: Optional[int] = None
     email: Optional[str] = None
     role: Optional[str] = None
+    organization_id: Optional[int] = None
 
 
 # ==================== ATTENDANCE MODELS ====================
@@ -185,6 +226,7 @@ class Attendance(SQLModel, table=True):
     __tablename__ = "attendance"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     date: DateType = Field(default_factory=DateType.today)
     punch_in: Optional[datetime] = None
@@ -216,6 +258,45 @@ class AttendanceWithUser(AttendanceRead):
 
 # ==================== TASK MODELS ====================
 
+class WorkspaceBase(SQLModel):
+    """Base workspace model."""
+    name: str = Field(min_length=1, max_length=120, index=True)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    icon: Optional[str] = Field(default=None, max_length=16)
+    color: Optional[str] = Field(default=None, max_length=32)
+
+
+class Workspace(WorkspaceBase, table=True):
+    """Workspace container for grouping projects/tasks."""
+    __tablename__ = "workspaces"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    created_by: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WorkspaceCreate(WorkspaceBase):
+    """Schema for creating workspaces."""
+    pass
+
+
+class WorkspaceUpdate(SQLModel):
+    """Schema for updating workspaces."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    icon: Optional[str] = Field(default=None, max_length=16)
+    color: Optional[str] = Field(default=None, max_length=32)
+
+
+class WorkspaceRead(WorkspaceBase):
+    """Schema for reading workspace data."""
+    id: int
+    organization_id: Optional[int] = None
+    created_by: int
+    created_at: datetime
+    project_count: Optional[int] = None
+
 class TaskBase(SQLModel):
     """Base task model."""
     title: str = Field(min_length=1, max_length=200)
@@ -229,7 +310,9 @@ class Task(TaskBase, table=True):
     __tablename__ = "tasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
+    workspace_id: Optional[int] = Field(default=None, foreign_key="workspaces.id", index=True)
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id")  # Admin who created/assigned the task
     status: TaskStatus = Field(default=TaskStatus.todo)
@@ -251,6 +334,7 @@ class Task(TaskBase, table=True):
 
 class TaskCreate(TaskBase):
     """Schema for creating task."""
+    workspace_id: int
     assigned_to: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
@@ -271,6 +355,7 @@ class TaskUpdate(SQLModel):
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
+    workspace_id: Optional[int] = None
     assigned_to: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
@@ -286,7 +371,12 @@ class TaskUpdate(SQLModel):
 class TaskRead(TaskBase):
     """Schema for reading task data."""
     id: int
+    organization_id: Optional[int] = None
     public_id: Optional[str] = None
+    workspace_id: Optional[int] = None
+    workspace_name: Optional[str] = None
+    workspace_icon: Optional[str] = None
+    workspace_color: Optional[str] = None
     assigned_to: Optional[int]
     assigned_by: int
     status: TaskStatus
@@ -311,6 +401,7 @@ class TaskWithAssignee(TaskRead):
     assignee_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
     progress: Optional[int] = None  # Task completion progress (0-100)
+    subtask_count: Optional[int] = None
 
 
 class TaskInstance(SQLModel, table=True):
@@ -386,6 +477,7 @@ class Subtask(SQLModel, table=True):
     __tablename__ = "subtasks"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
     parent_task_id: int = Field(foreign_key="tasks.id", index=True)
     parent_subtask_id: Optional[int] = Field(default=None, foreign_key="subtasks.id", index=True)  # For nested subtasks
@@ -423,6 +515,7 @@ class SubtaskUpdate(SQLModel):
 class SubtaskRead(SQLModel):
     """Schema for reading subtask data."""
     id: int
+    organization_id: Optional[int] = None
     public_id: Optional[str] = None
     parent_task_id: int
     parent_subtask_id: Optional[int]
@@ -460,6 +553,7 @@ class LeaveRequest(LeaveRequestBase, table=True):
     __tablename__ = "leave_requests"
     
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     status: LeaveStatus = Field(default=LeaveStatus.pending)
     admin_comment: Optional[str] = None
@@ -484,6 +578,7 @@ class LeaveRequestUpdate(SQLModel):
 class LeaveRequestRead(LeaveRequestBase):
     """Schema for reading leave request data."""
     id: int
+    organization_id: Optional[int] = None
     user_id: int
     status: LeaveStatus
     admin_comment: Optional[str]
@@ -545,6 +640,7 @@ class WeeklyProgress(SQLModel, table=True):
     __tablename__ = "weekly_progress"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     week_start_date: DateType = Field(index=True)  # Monday of the ISO week
     description: str = Field(sa_column=Column(Text, nullable=False))
@@ -594,6 +690,7 @@ class WeeklyCommentRead(SQLModel):
 
 class WeeklyProgressRead(SQLModel):
     id: int
+    organization_id: Optional[int] = None
     user_id: int
     week_start_date: DateType
     description: str
@@ -648,6 +745,7 @@ class Payroll(SQLModel, table=True):
     __tablename__ = "payrolls"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     employee_id: int = Field(foreign_key="users.id", index=True)
     month: int  # 1-12
     year: int
@@ -660,6 +758,7 @@ class Payroll(SQLModel, table=True):
 class PayrollRead(SQLModel):
     """Schema for reading payroll data."""
     id: int
+    organization_id: Optional[int] = None
     employee_id: int
     name: str
     department: Optional[str]
@@ -689,6 +788,7 @@ class TaskSheet(SQLModel, table=True):
     """Daily task sheet tracking model."""
     __tablename__ = "task_sheets"
     id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     date: DateType = Field(default_factory=DateType.today)
     achievements: str = Field(max_length=1000)
@@ -702,6 +802,7 @@ class TaskSheetCreate(SQLModel):
 
 class TaskSheetRead(SQLModel):
     id: int
+    organization_id: Optional[int] = None
     user_id: int
     date: DateType
     achievements: str

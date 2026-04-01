@@ -48,7 +48,8 @@ async def get_all_employees(
     # Get all active employees
     statement = select(User).where(
         User.role == UserRole.employee,
-        User.is_active == True
+        User.is_active == True,
+        User.organization_id == current_user.organization_id,
     )
     employees = session.exec(statement).all()
     
@@ -68,6 +69,7 @@ async def get_assignable_users(
         select(User)
         .where(
             User.is_active == True,
+            User.organization_id == current_user.organization_id,
             or_(User.role == UserRole.admin, User.role == UserRole.employee),
         )
         .order_by(User.name)

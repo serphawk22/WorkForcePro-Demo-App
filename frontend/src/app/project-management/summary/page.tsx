@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
-import { getAllTasks, getMyTasks, getTaskStats, Task, TaskStats } from "@/lib/api";
+import { getAllTasks, getMyTasks, Task } from "@/lib/api";
 import { Loader2, CheckCircle2, Clock, AlertCircle, Circle, ListTodo, TrendingUp, Copy } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,22 +50,29 @@ const statusMeta: Record<string, { label: string; color: string; bg: string; gra
 export default function SummaryPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isAdmin = user?.role === "admin";
+  const workspaceFilter = searchParams?.get("workspace")
+    ? Number(searchParams.get("workspace"))
+    : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [stats, setStats] = useState<TaskStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
     setIsLoading(true);
-    const [taskRes, statsRes] = await Promise.all([
-      isAdmin ? getAllTasks() : getMyTasks(),
-      getTaskStats(),
-    ]);
-    if (taskRes.data) setTasks(taskRes.data);
-    if (statsRes.data) setStats(statsRes.data);
+    const taskRes = isAdmin
+      ? await getAllTasks(undefined, undefined, workspaceFilter)
+      : await getMyTasks();
+
+    const loadedTasks = taskRes.data || [];
+    const scopedTasks = !isAdmin && workspaceFilter
+      ? loadedTasks.filter((t) => t.workspace_id === workspaceFilter)
+      : loadedTasks;
+
+    setTasks(scopedTasks);
     setIsLoading(false);
-  }, [isAdmin]);
+  }, [isAdmin, workspaceFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -81,11 +88,11 @@ export default function SummaryPage() {
     .slice(0, 8);
 
   const statusBreakdown = [
-    { key: "todo",        count: stats?.todo ?? 0 },
-    { key: "in_progress", count: stats?.in_progress ?? 0 },
-    { key: "reviewing",   count: stats?.reviewing ?? 0 },
-    { key: "approved",    count: stats?.approved ?? 0 },
-    { key: "rejected",    count: stats?.rejected ?? 0 },
+    { key: "todo",        count: tasks.filter(t => t.status === "todo").length },
+    { key: "in_progress", count: tasks.filter(t => t.status === "in_progress").length },
+    { key: "reviewing",   count: tasks.filter(t => t.status === "reviewing").length },
+    { key: "approved",    count: tasks.filter(t => t.status === "approved").length },
+    { key: "rejected",    count: tasks.filter(t => t.status === "rejected").length },
   ].filter(s => s.count > 0);
 
   const topCards = [
@@ -211,7 +218,10 @@ export default function SummaryPage() {
                   return (
                     <div
                       key={task.id}
-                      onClick={() => router.push(`/project-management/${task.id}`)}
+                        onClick={() => {
+                          if (workspaceFilter) router.push(`/project-management/workspaces/${workspaceFilter}/projects/${task.id}`);
+                          else router.push(`/project-management/${task.id}`);
+                        }}
                       className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-all hover:scale-[1.02] glass-card border border-border/30 hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/20"
                     >
                       <div className="flex items-center gap-3 min-w-0">

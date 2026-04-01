@@ -35,13 +35,15 @@ async def get_admin_dashboard(
         total_employees = session.exec(
             select(func.count(User.id)).where(
                 User.is_active == True,
-                User.role != UserRole.admin
+                User.role != UserRole.admin,
+                User.organization_id == current_user.organization_id,
             )
         ).one() or 0
         
         # Active sessions (clocked in today)
         active_sessions = session.exec(
             select(func.count(Attendance.id)).where(
+                Attendance.organization_id == current_user.organization_id,
                 Attendance.date == today,
                 Attendance.punch_in.isnot(None),
                 Attendance.punch_out.is_(None)
@@ -53,22 +55,31 @@ async def get_admin_dashboard(
         
         # Pending tasks (tasks submitted for review) - cast enum to text to avoid type mismatch
         pending_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM tasks WHERE status::text IN ('submitted', 'reviewing')")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE organization_id = :org_id AND status::text IN ('submitted', 'reviewing')").bindparams(
+                org_id=current_user.organization_id
+            )
         ).one()
         pending_tasks = int(pending_tasks_result[0] if hasattr(pending_tasks_result, '__getitem__') else pending_tasks_result or 0)
         
         # Active tasks (any status except approved/rejected) - cast enum to text
         active_tasks_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM tasks WHERE status::text NOT IN ('approved', 'rejected')")
+            sql_text("SELECT COUNT(*) FROM tasks WHERE organization_id = :org_id AND status::text NOT IN ('approved', 'rejected')").bindparams(
+                org_id=current_user.organization_id
+            )
         ).one()
         active_tasks_count = int(active_tasks_result[0] if hasattr(active_tasks_result, '__getitem__') else active_tasks_result or 0)
 
         # Total tasks
-        total_tasks_count = session.exec(select(func.count(Task.id))).one() or 0
+        total_tasks_count = session.exec(
+            select(func.count(Task.id)).where(Task.organization_id == current_user.organization_id)
+        ).one() or 0
 
         # Employees on leave today (approved leave covering today) - cast enum to text
         employees_on_leave_result = session.exec(
-            sql_text(f"SELECT COUNT(*) FROM leave_requests WHERE status::text = 'approved' AND start_date <= '{today}' AND end_date >= '{today}'")
+            sql_text("SELECT COUNT(*) FROM leave_requests WHERE organization_id = :org_id AND status::text = 'approved' AND start_date <= :today AND end_date >= :today").bindparams(
+                org_id=current_user.organization_id,
+                today=today,
+            )
         ).one()
         employees_on_leave_today = int(employees_on_leave_result[0] if hasattr(employees_on_leave_result, '__getitem__') else employees_on_leave_result or 0)
 
@@ -77,6 +88,7 @@ async def get_admin_dashboard(
         today_late_threshold = datetime.combine(today, time(4, 0, 0))  # ~9:30 IST in UTC
         late_checkins_today = session.exec(
             select(func.count(Attendance.id)).where(
+                Attendance.organization_id == current_user.organization_id,
                 Attendance.date == today,
                 Attendance.punch_in.isnot(None),
                 Attendance.punch_in > today_late_threshold
@@ -92,11 +104,13 @@ async def get_admin_dashboard(
                     SELECT t.id, t.title, t.due_date, t.priority, t.status, u.name as assignee_name
                     FROM tasks t
                     LEFT JOIN users u ON t.assigned_to = u.id
-                    WHERE t.status::text NOT IN ('approved', 'rejected')
+                    WHERE t.organization_id = :org_id
+                    AND t.status::text NOT IN ('approved', 'rejected')
                     AND t.due_date IS NOT NULL
                     ORDER BY t.due_date ASC
                     LIMIT 6
                 """)
+                .bindparams(org_id=current_user.organization_id)
             ).all()
 
             for row in upcoming_raw:
@@ -117,6 +131,7 @@ async def get_admin_dashboard(
         thirty_days_ago = today - timedelta(days=30)
         avg_hours_result = session.exec(
             select(func.avg(Attendance.total_hours)).where(
+                Attendance.organization_id == current_user.organization_id,
                 Attendance.date >= thirty_days_ago,
                 Attendance.total_hours.isnot(None)
             )
@@ -125,7 +140,9 @@ async def get_admin_dashboard(
         
         # Pending leave requests - cast enum to text
         leave_pending_result = session.exec(
-            sql_text("SELECT COUNT(*) FROM leave_requests WHERE status::text = 'pending'")
+            sql_text("SELECT COUNT(*) FROM leave_requests WHERE organization_id = :org_id AND status::text = 'pending'").bindparams(
+                org_id=current_user.organization_id
+            )
         ).one()
         leave_requests_pending = int(leave_pending_result[0] if hasattr(leave_pending_result, '__getitem__') else leave_pending_result or 0)
         
@@ -134,6 +151,7 @@ async def get_admin_dashboard(
         try:
             recent_tasks = session.exec(
                 select(Task, User.name).join(User, Task.assigned_to == User.id, isouter=True)
+                .where(Task.organization_id == current_user.organization_id)
                 .order_by(Task.created_at.desc())
                 .limit(5)
             ).all()
@@ -151,6 +169,7 @@ async def get_admin_dashboard(
         try:
             recent_leaves = session.exec(
                 select(LeaveRequest, User.name).join(User, LeaveRequest.user_id == User.id, isouter=True)
+                .where(LeaveRequest.organization_id == current_user.organization_id)
                 .order_by(LeaveRequest.created_at.desc())
                 .limit(5)
             ).all()
@@ -217,6 +236,7 @@ async def get_employee_dashboard(
     current_session_record = session.exec(
         select(Attendance).where(
             Attendance.user_id == current_user.id,
+            Attendance.organization_id == current_user.organization_id,
             Attendance.punch_in >= start_of_day,
             Attendance.punch_in < end_of_day,
             Attendance.punch_out.is_(None)
@@ -252,6 +272,7 @@ async def get_employee_dashboard(
         completed_session_record = session.exec(
             select(Attendance).where(
                 Attendance.user_id == current_user.id,
+                Attendance.organization_id == current_user.organization_id,
                 Attendance.punch_in >= start_of_day,
                 Attendance.punch_in < end_of_day,
                 Attendance.punch_out.isnot(None)
@@ -287,6 +308,7 @@ async def get_employee_dashboard(
     tasks_due_today = session.exec(
         select(func.count(Task.id)).where(
             Task.assigned_to == current_user.id,
+            Task.organization_id == current_user.organization_id,
             Task.due_date == today,
             Task.status != TaskStatus.approved
         )
@@ -296,6 +318,7 @@ async def get_employee_dashboard(
     tasks_completed = session.exec(
         select(func.count(Task.id)).where(
             Task.assigned_to == current_user.id,
+            Task.organization_id == current_user.organization_id,
             Task.status == TaskStatus.approved
         )
     ).one()
@@ -304,6 +327,7 @@ async def get_employee_dashboard(
     active_projects = session.exec(
         select(func.count(Task.id)).where(
             Task.assigned_to == current_user.id,
+            Task.organization_id == current_user.organization_id,
             Task.status == TaskStatus.in_progress
         )
     ).one()
@@ -311,7 +335,8 @@ async def get_employee_dashboard(
     # Total tasks
     total_tasks = session.exec(
         select(func.count(Task.id)).where(
-            Task.assigned_to == current_user.id
+            Task.assigned_to == current_user.id,
+            Task.organization_id == current_user.organization_id,
         )
     ).one()
     
@@ -326,6 +351,7 @@ async def get_employee_dashboard(
             (LeaveRequest.end_date - LeaveRequest.start_date) + 1
         )).where(
             LeaveRequest.user_id == current_user.id,
+            LeaveRequest.organization_id == current_user.organization_id,
             LeaveRequest.status == LeaveStatus.approved
         )
     ).one() or 0
@@ -336,6 +362,7 @@ async def get_employee_dashboard(
     pending_leave_requests = session.exec(
         select(func.count(LeaveRequest.id)).where(
             LeaveRequest.user_id == current_user.id,
+            LeaveRequest.organization_id == current_user.organization_id,
             LeaveRequest.status == LeaveStatus.pending
         )
     ).one()
@@ -357,7 +384,12 @@ async def get_all_users(
     session: Session = Depends(get_session)
 ):
     """Get all users (admin only)."""
-    users = session.exec(select(User).where(User.is_active == True)).all()
+    users = session.exec(
+        select(User).where(
+            User.is_active == True,
+            User.organization_id == current_user.organization_id,
+        )
+    ).all()
     return [
         {
             "id": user.id,

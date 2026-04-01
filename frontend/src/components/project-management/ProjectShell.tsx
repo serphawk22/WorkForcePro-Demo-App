@@ -1,12 +1,14 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 
 const ALL_TABS = [
+  { label: "Global",   path: "/project-management" },
+  { label: "Workspace", path: "/project-management/workspaces" },
   { label: "Summary",  path: "/project-management/summary" },
   { label: "Board",    path: "/project-management/board" },
   { label: "Projects", path: "/project-management/projects" },
@@ -24,10 +26,30 @@ interface ProjectShellProps {
 export default function ProjectShell({ children, headerAction }: ProjectShellProps) {
   const { user } = useAuth();
   const pathname = usePathname() || "";
+  const searchParams = useSearchParams();
+  const workspaceQuery = searchParams?.get("workspace") || null;
   const isAdmin = user?.role === "admin";
 
-  // Employees: only Summary, Board, Projects
-  const tabs = isAdmin ? ALL_TABS : ALL_TABS.filter(t => ["Summary", "Board", "Projects"].includes(t.label));
+  const workspaceMatch = pathname.match(/^\/project-management\/workspaces\/(\d+)/);
+  const workspaceIdFromPath = workspaceMatch?.[1] || null;
+  const workspaceIdFromQuery = workspaceQuery;
+  const activeWorkspaceId = workspaceIdFromPath || workspaceIdFromQuery;
+
+  // Employees: global + core project views
+  const tabs = (isAdmin ? ALL_TABS : ALL_TABS.filter(t => ["Global", "Workspace", "Summary", "Board", "Projects"].includes(t.label))).map((tab) => {
+    if (activeWorkspaceId) {
+      if (tab.label === "Workspace") {
+        return { ...tab, path: `/project-management/workspaces/${activeWorkspaceId}` };
+      }
+      if (["Summary", "Board", "Projects", "Calendar", "Timeline", "Reports"].includes(tab.label)) {
+        return { ...tab, path: `${tab.path}?workspace=${activeWorkspaceId}` };
+      }
+    }
+    if (!activeWorkspaceId && tab.label === "Workspace") {
+      return { ...tab, path: "/project-management" };
+    }
+    return tab;
+  });
 
   return (
     <ProtectedRoute>
@@ -57,14 +79,28 @@ export default function ProjectShell({ children, headerAction }: ProjectShellPro
             className="flex items-center gap-1.5 p-1.5 rounded-xl overflow-x-auto glass-card card-shadow"
           >
             {tabs.map((tab) => {
-              const isActive =
-                pathname === tab.path ||
-                (tab.path === "/project-management/summary" &&
-                  pathname === "/project-management");
+              if (tab.label === "Workspace" && !activeWorkspaceId) {
+                return null;
+              }
+
+              const isProjectsTab = tab.label === "Projects";
+              const isWorkspaceTab = tab.label === "Workspace";
+              const tabWorkspaceId = tab.path.includes("workspace=")
+                ? new URLSearchParams(tab.path.split("?")[1]).get("workspace")
+                : null;
+              const isActive = isProjectsTab
+                ? pathname === "/project-management/projects" && (
+                    !tabWorkspaceId || workspaceQuery === tabWorkspaceId
+                  )
+                : isWorkspaceTab
+                  ? Boolean(activeWorkspaceId) && pathname === `/project-management/workspaces/${activeWorkspaceId}`
+                : pathname === tab.path;
               return (
                 <Link
                   key={tab.path}
                   href={tab.path}
+                  prefetch
+                  scroll={false}
                   className={`whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                     isActive
                       ? "text-white shadow-lg shadow-purple-500/40 scale-105 bg-gradient-to-r from-purple-600 to-pink-600"

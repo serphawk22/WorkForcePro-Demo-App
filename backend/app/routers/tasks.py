@@ -17,17 +17,19 @@ def generate_public_id(session: Session, model_class, prefix: str = "", length: 
     while True:
         suffix = ''.join(random.choices(chars, k=length))
         candidate = f"{prefix}{suffix}" if prefix else suffix
-        existing = session.exec(select(model_class).where(model_class.public_id == candidate)).first()
-        if not existing:
+        existing_same_model = session.exec(select(model_class).where(model_class.public_id == candidate)).first()
+        existing_task = session.exec(select(Task).where(Task.public_id == candidate)).first()
+        existing_subtask = session.exec(select(Subtask).where(Subtask.public_id == candidate)).first()
+        if not existing_same_model and not existing_task and not existing_subtask:
             return candidate
 
 from app.database import get_session
 from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
-    SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus,
+    SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus, Workspace,
 )
-from app.auth import get_current_user, get_current_admin_user, get_current_user_optional
+from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization
 from app.routers.notifications import create_notification
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
 
@@ -44,6 +46,15 @@ def _recurrence_kwargs(task: Task) -> dict:
         "recurrence_start_date": getattr(task, "recurrence_start_date", None),
         "recurrence_end_date": getattr(task, "recurrence_end_date", None),
         "monthly_day": getattr(task, "monthly_day", None),
+    }
+
+
+def _workspace_kwargs(workspace: Optional[Workspace], task: Task) -> dict:
+    return {
+        "workspace_id": task.workspace_id,
+        "workspace_name": workspace.name if workspace else None,
+        "workspace_icon": workspace.icon if workspace else None,
+        "workspace_color": workspace.color if workspace else None,
     }
 
 
@@ -118,7 +129,10 @@ async def get_my_tasks(
     current_user: User = Depends(get_current_user)
 ):
     """Get tasks assigned to current user."""
-    statement = select(Task).where(Task.assigned_to == current_user.id)
+    statement = select(Task).where(
+        Task.assigned_to == current_user.id,
+        Task.organization_id == current_user.organization_id,
+    )
     
     if status_filter:
         statement = statement.where(Task.status == status_filter)
@@ -132,6 +146,11 @@ async def get_my_tasks(
         if task.assigned_to:
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
+
+        workspace = None
+        if task.workspace_id:
+            workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
+            workspace = session.exec(workspace_stmt).first()
         
         assigner = None
         if task.assigned_by:
@@ -151,6 +170,7 @@ async def get_my_tasks(
             done_by_employee=task.done_by_employee,
             github_link=task.github_link,
             deployed_link=task.deployed_link,
+            **_workspace_kwargs(workspace, task),
             start_date=task.start_date,
             created_at=task.created_at,
             updated_at=task.updated_at,
@@ -180,6 +200,7 @@ async def get_my_recurring_instances_summary(
     stmt = select(Task).where(
         Task.is_recurring == True,  # noqa: E712
         Task.assigned_to == current_user.id,
+        Task.organization_id == current_user.organization_id,
     )
     recurring_tasks = session.exec(stmt).all()
     for t in recurring_tasks:
@@ -254,6 +275,7 @@ async def get_recurring_task_instances(
     task = session.exec(select(Task).where(Task.id == task_id)).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    ensure_same_organization(current_user, task.organization_id, "task")
 
     if not getattr(task, "is_recurring", False):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task is not recurring")
@@ -339,6 +361,7 @@ async def update_task_instance_status(
     task = session.exec(select(Task).where(Task.id == inst.task_id)).first()
     if not task:
         raise HTTPException(status_code=404, detail="Parent task not found")
+    ensure_same_organization(current_user, task.organization_id, "task")
     if current_user.role != UserRole.admin and task.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this instance")
 
@@ -398,6 +421,7 @@ async def update_task_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check permission: must be assigned to task or be admin
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -421,7 +445,10 @@ async def update_task_status(
             task.done_by_employee = True
             
             # Notify all admins
-            admin_stmt = select(User).where(User.role == UserRole.admin)
+            admin_stmt = select(User).where(
+                User.role == UserRole.admin,
+                User.organization_id == current_user.organization_id,
+            )
             admins = session.exec(admin_stmt).all()
             
             for admin in admins:
@@ -497,6 +524,7 @@ async def update_task_links(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check permission: must be assigned to task or be admin
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -528,6 +556,20 @@ async def create_task(
     admin: User = Depends(get_current_admin_user)
 ):
     """Create a new task with deliverable tracking (admin only)."""
+    if not task_data.workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace is required",
+        )
+
+    workspace = session.exec(select(Workspace).where(Workspace.id == task_data.workspace_id)).first()
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace not found",
+        )
+    ensure_same_organization(admin, workspace.organization_id, "workspace")
+
     # Verify assignee exists if provided
     assignee = None
     if task_data.assigned_to:
@@ -579,9 +621,11 @@ async def create_task(
 
     task = Task(
         title=task_data.title,
+        organization_id=admin.organization_id,
         description=task_data.description,
         priority=task_data.priority,
         due_date=task_data.due_date,
+        workspace_id=task_data.workspace_id,
         assigned_to=task_data.assigned_to,
         assigned_by=admin.id,
         github_link=task_data.github_link,
@@ -621,16 +665,19 @@ async def get_all_tasks(
     request: Request,
     status_filter: Optional[TaskStatus] = None,
     assigned_to: Optional[int] = None,
+    workspace_id: Optional[int] = None,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all tasks — visible to every authenticated user."""
-    statement = select(Task)
+    """Get all organization tasks visible to every authenticated user."""
+    statement = select(Task).where(Task.organization_id == current_user.organization_id)
     
     if status_filter:
         statement = statement.where(Task.status == status_filter)
     if assigned_to:
         statement = statement.where(Task.assigned_to == assigned_to)
+    if workspace_id:
+        statement = statement.where(Task.workspace_id == workspace_id)
     
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
@@ -641,6 +688,11 @@ async def get_all_tasks(
         if task.assigned_to:
             assignee_stmt = select(User).where(User.id == task.assigned_to)
             assignee = session.exec(assignee_stmt).first()
+
+        workspace = None
+        if task.workspace_id:
+            workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
+            workspace = session.exec(workspace_stmt).first()
         
         assigner = None
         if task.assigned_by:
@@ -660,6 +712,7 @@ async def get_all_tasks(
             done_by_employee=task.done_by_employee,
             github_link=task.github_link,
             deployed_link=task.deployed_link,
+            **_workspace_kwargs(workspace, task),
             start_date=task.start_date,
             created_at=task.created_at,
             updated_at=task.updated_at,
@@ -689,6 +742,7 @@ async def get_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check permission
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -701,6 +755,11 @@ async def get_task(
     if task.assigned_to:
         assignee_stmt = select(User).where(User.id == task.assigned_to)
         assignee = session.exec(assignee_stmt).first()
+
+    workspace = None
+    if task.workspace_id:
+        workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
+        workspace = session.exec(workspace_stmt).first()
     
     return TaskWithAssignee(
         id=task.id,
@@ -715,6 +774,7 @@ async def get_task(
         done_by_employee=task.done_by_employee,
         github_link=task.github_link,
         deployed_link=task.deployed_link,
+        **_workspace_kwargs(workspace, task),
         start_date=task.start_date,
         created_at=task.created_at,
         updated_at=task.updated_at,
@@ -746,6 +806,7 @@ async def get_task_details(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+    ensure_same_organization(current_user, task.organization_id, "project")
     
     # Check permission
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -765,6 +826,11 @@ async def get_task_details(
     if task.assigned_by:
         assigned_by_stmt = select(User).where(User.id == task.assigned_by)
         assigned_by_user = session.exec(assigned_by_stmt).first()
+
+    workspace = None
+    if task.workspace_id:
+        workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
+        workspace = session.exec(workspace_stmt).first()
     
     # Build task data
     task_data = {
@@ -773,6 +839,10 @@ async def get_task_details(
         "description": task.description,
         "priority": task.priority,
         "due_date": task.due_date,
+        "workspace_id": task.workspace_id,
+        "workspace_name": workspace.name if workspace else None,
+        "workspace_icon": workspace.icon if workspace else None,
+        "workspace_color": workspace.color if workspace else None,
         "start_date": task.start_date,
         "assigned_to": task.assigned_to,
         "assigned_by": task.assigned_by,
@@ -844,12 +914,21 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(admin, task.organization_id, "task")
     
     # Track original assignee for notification logic
     original_assignee_id = task.assigned_to
     
     # Update fields
     update_data = task_data.model_dump(exclude_unset=True)
+    if "workspace_id" in update_data and update_data["workspace_id"] is not None:
+        workspace = session.exec(select(Workspace).where(Workspace.id == update_data["workspace_id"])).first()
+        if not workspace:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Workspace not found"
+            )
+        ensure_same_organization(admin, workspace.organization_id, "workspace")
     if "repeat_days" in update_data and update_data["repeat_days"] is not None:
         rd = update_data["repeat_days"]
         update_data["repeat_days"] = json.dumps(rd) if isinstance(rd, list) else rd
@@ -893,6 +972,7 @@ async def delete_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
+    ensure_same_organization(admin, task.organization_id, "task")
     
     # Delete related records first to avoid foreign key constraint violations
 
@@ -935,16 +1015,16 @@ async def get_task_stats(
     """Get task statistics with completion metrics (admin only)."""
     from datetime import date
     
-    all_tasks = session.exec(select(Task)).all()
+    all_tasks = session.exec(select(Task).where(Task.organization_id == admin.organization_id)).all()
     total = len(all_tasks)
     
     # Status counts
-    todo = len(session.exec(select(Task).where(Task.status == TaskStatus.todo)).all())
-    in_progress = len(session.exec(select(Task).where(Task.status == TaskStatus.in_progress)).all())
-    submitted = len(session.exec(select(Task).where(Task.status == TaskStatus.submitted)).all())
-    reviewing = len(session.exec(select(Task).where(Task.status == TaskStatus.reviewing)).all())
-    approved = len(session.exec(select(Task).where(Task.status == TaskStatus.approved)).all())
-    rejected = len(session.exec(select(Task).where(Task.status == TaskStatus.rejected)).all())
+    todo = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.todo)).all())
+    in_progress = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.in_progress)).all())
+    submitted = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.submitted)).all())
+    reviewing = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.reviewing)).all())
+    approved = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.approved)).all())
+    rejected = len(session.exec(select(Task).where(Task.organization_id == admin.organization_id, Task.status == TaskStatus.rejected)).all())
     
     # Completion metrics
     completed = approved  # Completed = approved tasks

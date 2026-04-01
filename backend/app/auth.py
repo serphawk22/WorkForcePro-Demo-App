@@ -61,7 +61,8 @@ def decode_token(token: str) -> Optional[TokenData]:
         user_id: int = int(user_id_str)  # Convert string back to int
         email: str = payload.get("email")
         role: str = payload.get("role")
-        return TokenData(user_id=user_id, email=email, role=role)
+        organization_id: Optional[int] = payload.get("organization_id")
+        return TokenData(user_id=user_id, email=email, role=role, organization_id=organization_id)
     except (JWTError, ValueError):
         return None
 
@@ -90,7 +91,7 @@ def clear_auth_cookie(response: Response) -> None:
     )
 
 
-async def get_current_user(
+def get_current_user(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     session: Session = Depends(get_session)
@@ -128,30 +129,43 @@ async def get_current_user(
     if not user.is_active:
         print(f"[AUTH] User {user.email} is inactive")
         raise HTTPException(status_code=400, detail="Inactive user")
+    if user.organization_id is None:
+        raise HTTPException(status_code=400, detail="User is not assigned to any organization")
     
     print(f"[AUTH] User authenticated successfully: {user.email}")
     return user
 
 
-async def get_current_user_optional(
+def ensure_same_organization(current_user: User, org_id: Optional[int], resource_name: str = "resource") -> None:
+    """Raise 403 if a record does not belong to the current user's organization."""
+    if current_user.organization_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User organization missing")
+    if org_id is None or org_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Not authorized to access this {resource_name}",
+        )
+
+
+def get_current_user_optional(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     session: Session = Depends(get_session)
 ) -> Optional[User]:
     """Get current user if authenticated, None otherwise."""
     try:
-        return await get_current_user(request, token, session)
+        return get_current_user(request, token, session)
     except HTTPException:
         return None
 
 
-async def get_current_admin_user(
+def get_current_admin_user(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     session: Session = Depends(get_session)
 ) -> User:
     """Verify the current user is an admin."""
-    current_user = await get_current_user(request, token, session)
+    current_user = get_current_user(request, token, session)
     if current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
