@@ -98,13 +98,12 @@ async def get_all_employees(
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Get all employees (admin only).
+    Get all organization users for the Employees section (admin only).
 
-    Returns a list of all users with role='employee'.
+    Returns a list of all accounts in the admin's organization, including admins and employees.
     Requires admin authentication.
     """
     statement = select(User).where(
-        User.role == UserRole.employee,
         User.organization_id == current_user.organization_id,
     )
     employees = session.exec(statement).all()
