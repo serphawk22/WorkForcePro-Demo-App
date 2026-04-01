@@ -1,9 +1,7 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import React, { useEffect, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import { getAllTasks, getMyTasks, updateTaskStatus, Task } from "@/lib/api";
@@ -51,14 +49,15 @@ const PRIORITY_COLORS: Record<string, string> = {
   low:    "#4ade80",
 };
 
-export default function BoardPage() {
+interface BoardClientProps {
+  workspaceQuery?: string | null;
+}
+
+export default function BoardPage({ workspaceQuery }: BoardClientProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const isAdmin = user?.role === "admin";
-  const workspaceFilter = searchParams?.get("workspace")
-    ? Number(searchParams.get("workspace"))
-    : undefined;
+  const workspaceFilter = workspaceQuery ? Number(workspaceQuery) : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,7 +127,7 @@ export default function BoardPage() {
   };
 
   return (
-    <ProjectShell>
+    <ProjectShell activeWorkspaceId={workspaceQuery || null}>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />

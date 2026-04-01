@@ -1,9 +1,7 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -39,10 +37,13 @@ function assigneeOptionLabel(u: User) {
   return `${u.name} (${roleLabel})`;
 }
 
-export default function ProjectsPage() {
+interface ProjectsClientProps {
+  workspaceQuery?: string | null;
+}
+
+export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const isAdmin = user?.role === "admin";
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -50,7 +51,7 @@ export default function ProjectsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(undefined);
+  const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -134,15 +135,13 @@ export default function ProjectsPage() {
   }, [statusFilter, workspaceFilter]);
 
   useEffect(() => {
-    if (!searchParams) return;
-    const ws = searchParams.get("workspace");
-    if (!ws) return;
-    const parsed = Number(ws);
+    if (!workspaceQuery) return;
+    const parsed = Number(workspaceQuery);
     if (!Number.isNaN(parsed) && parsed > 0) {
       setWorkspaceFilter(parsed);
       setNewTask((prev) => ({ ...prev, workspace_id: parsed }));
     }
-  }, [searchParams]);
+  }, [workspaceQuery]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -576,7 +575,7 @@ export default function ProjectsPage() {
   ) : null;
 
   return (
-    <ProjectShell headerAction={newProjectBtn}>
+    <ProjectShell headerAction={newProjectBtn} activeWorkspaceId={workspaceQuery || null}>
       <div className="space-y-4">
         {/* Filters */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">

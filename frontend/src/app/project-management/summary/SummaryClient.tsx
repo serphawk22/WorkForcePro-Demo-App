@@ -1,9 +1,7 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useEffect, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import { getAllTasks, getMyTasks, Task } from "@/lib/api";
@@ -49,14 +47,15 @@ const statusMeta: Record<string, { label: string; color: string; bg: string; gra
   }
 };
 
-export default function SummaryPage() {
+interface SummaryClientProps {
+  workspaceQuery?: string | null;
+}
+
+export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const isAdmin = user?.role === "admin";
-  const workspaceFilter = searchParams?.get("workspace")
-    ? Number(searchParams.get("workspace"))
-    : undefined;
+  const workspaceFilter = workspaceQuery ? Number(workspaceQuery) : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -133,7 +132,7 @@ export default function SummaryPage() {
   ];
 
   return (
-    <ProjectShell>
+    <ProjectShell activeWorkspaceId={workspaceQuery || null}>
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-purple-500 drop-shadow-[0_0_8px_rgba(168,85,247,0.6)]" />

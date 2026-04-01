@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -22,39 +22,37 @@ interface ProjectShellProps {
   children: React.ReactNode;
   /** Right side header action (e.g. New Project button) */
   headerAction?: React.ReactNode;
+  activeWorkspaceId?: string | null;
 }
 
-export default function ProjectShell({ children, headerAction }: ProjectShellProps) {
+export default function ProjectShell({ children, headerAction, activeWorkspaceId }: ProjectShellProps) {
   return (
     <Suspense fallback={<div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Loading project management...</div>}>
-      <ProjectShellContent headerAction={headerAction}>{children}</ProjectShellContent>
+      <ProjectShellContent headerAction={headerAction} activeWorkspaceId={activeWorkspaceId}>{children}</ProjectShellContent>
     </Suspense>
   );
 }
 
-function ProjectShellContent({ children, headerAction }: ProjectShellProps) {
+function ProjectShellContent({ children, headerAction, activeWorkspaceId }: ProjectShellProps) {
   const { user } = useAuth();
   const pathname = usePathname() || "";
-  const searchParams = useSearchParams();
-  const workspaceQuery = searchParams?.get("workspace") || null;
   const isAdmin = user?.role === "admin";
 
   const workspaceMatch = pathname.match(/^\/project-management\/workspaces\/(\d+)/);
   const workspaceIdFromPath = workspaceMatch?.[1] || null;
-  const workspaceIdFromQuery = workspaceQuery;
-  const activeWorkspaceId = workspaceIdFromPath || workspaceIdFromQuery;
+  const activeWorkspace = workspaceIdFromPath || activeWorkspaceId || null;
 
   // Employees: global + core project views
   const tabs = (isAdmin ? ALL_TABS : ALL_TABS.filter(t => ["Global", "Workspace", "Summary", "Board", "Projects"].includes(t.label))).map((tab) => {
-    if (activeWorkspaceId) {
+    if (activeWorkspace) {
       if (tab.label === "Workspace") {
-        return { ...tab, path: `/project-management/workspaces/${activeWorkspaceId}` };
+        return { ...tab, path: `/project-management/workspaces/${activeWorkspace}` };
       }
       if (["Summary", "Board", "Projects", "Calendar", "Timeline", "Reports"].includes(tab.label)) {
-        return { ...tab, path: `${tab.path}?workspace=${activeWorkspaceId}` };
+        return { ...tab, path: `${tab.path}?workspace=${activeWorkspace}` };
       }
     }
-    if (!activeWorkspaceId && tab.label === "Workspace") {
+    if (!activeWorkspace && tab.label === "Workspace") {
       return { ...tab, path: "/project-management" };
     }
     return tab;
@@ -88,7 +86,7 @@ function ProjectShellContent({ children, headerAction }: ProjectShellProps) {
             className="flex items-center gap-1.5 p-1.5 rounded-xl overflow-x-auto glass-card card-shadow"
           >
             {tabs.map((tab) => {
-              if (tab.label === "Workspace" && !activeWorkspaceId) {
+              if (tab.label === "Workspace" && !activeWorkspace) {
                 return null;
               }
 
@@ -98,11 +96,9 @@ function ProjectShellContent({ children, headerAction }: ProjectShellProps) {
                 ? new URLSearchParams(tab.path.split("?")[1]).get("workspace")
                 : null;
               const isActive = isProjectsTab
-                ? pathname === "/project-management/projects" && (
-                    !tabWorkspaceId || workspaceQuery === tabWorkspaceId
-                  )
+                ? pathname === "/project-management/projects"
                 : isWorkspaceTab
-                  ? Boolean(activeWorkspaceId) && pathname === `/project-management/workspaces/${activeWorkspaceId}`
+                  ? Boolean(activeWorkspace) && pathname === `/project-management/workspaces/${activeWorkspace}`
                 : pathname === tab.path;
               return (
                 <Link
