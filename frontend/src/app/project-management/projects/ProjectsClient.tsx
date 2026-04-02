@@ -43,6 +43,11 @@ function assigneeOptionLabel(u: User) {
   return `${u.name} (${roleLabel})`;
 }
 
+function toRecurrenceType(value?: string | null): "daily" | "weekly" | "monthly" | undefined {
+  if (value === "daily" || value === "weekly" || value === "monthly") return value;
+  return undefined;
+}
+
 function getProfilePictureUrl(profilePicture?: string | null) {
   if (!profilePicture) return null;
   if (profilePicture.startsWith("data:")) return profilePicture;
@@ -349,7 +354,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
       github_link: task.github_link || undefined,
       deployed_link: task.deployed_link || undefined,
       is_recurring: task.is_recurring,
-      recurrence_type: task.recurrence_type || undefined,
+      recurrence_type: toRecurrenceType(task.recurrence_type),
       recurrence_interval: task.recurrence_interval || 1,
       repeat_days: parseRepeatDays(task.repeat_days),
       recurrence_start_date: task.recurrence_start_date || undefined,
@@ -1040,7 +1045,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
                   <DropdownMenu
-                    value={newTask.priority}
+                    value={newTask.priority || "medium"}
                     onValueChange={(value) => setNewTask({ ...newTask, priority: value as any })}
                     options={priorityOptions}
                     placeholder="Priority"
