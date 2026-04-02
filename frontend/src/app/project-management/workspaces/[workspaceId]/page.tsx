@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, Plus, Pencil, Trash2, FolderOpen, Layers3, ListChecks, CheckCircle2, Clock3, Activity } from "lucide-react";
 import ProjectShell from "@/components/project-management/ProjectShell";
+import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 import {
   Workspace,
   Task,
   User,
+  getApiBaseUrl,
   createWorkspace,
   deleteWorkspace,
   getAssignableUsers,
@@ -54,6 +56,41 @@ export default function WorkspaceProjectsPage() {
     icon: "📁",
     color: "#4F46E5",
   });
+
+  const getProfilePictureUrl = (profilePicture?: string | null) => {
+    if (!profilePicture) return null;
+    if (profilePicture.startsWith("data:")) return profilePicture;
+    if (profilePicture.startsWith("http")) return profilePicture;
+    return `${getApiBaseUrl()}${profilePicture}`;
+  };
+
+  const statusOptions: DropdownOption[] = [
+    { value: "", label: "All Status", icon: <span className="text-muted-foreground">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
+  ];
+
+  const ownerOptions: DropdownOption[] = [
+    { value: "", label: "All Owners", icon: <span className="text-muted-foreground">👥</span> },
+    ...users.map((u) => ({
+      value: String(u.id),
+      label: u.name,
+      avatarSrc: getProfilePictureUrl(u.profile_picture),
+      avatarFallback: u.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+      icon: <span>{u.role === "admin" ? "⭐" : "👤"}</span>,
+    })),
+  ];
+
+  const recentOptions: DropdownOption[] = [
+    { value: "", label: "Any Activity", icon: <span className="text-muted-foreground">⏱️</span> },
+    { value: "7", label: "Last 7 days", icon: <span>7</span> },
+    { value: "14", label: "Last 14 days", icon: <span>14</span> },
+    { value: "30", label: "Last 30 days", icon: <span>30</span> },
+  ];
 
   const loadData = useCallback(async () => {
     if (!workspaceId || Number.isNaN(workspaceId)) return;
@@ -264,37 +301,29 @@ export default function WorkspaceProjectsPage() {
 
           <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <select
+              <DropdownMenu
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+                onValueChange={setStatusFilter}
+                options={statusOptions}
+                placeholder="All Status"
+                triggerClassName="w-52"
+              />
 
-              <select
-                value={ownerFilter || ""}
-                onChange={(e) => setOwnerFilter(e.target.value ? Number(e.target.value) : undefined)}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="">All Owners</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+              <DropdownMenu
+                value={ownerFilter ? String(ownerFilter) : ""}
+                onValueChange={(value) => setOwnerFilter(value ? Number(value) : undefined)}
+                options={ownerOptions}
+                placeholder="All Owners"
+                triggerClassName="w-52"
+              />
 
-              <select
-                value={recentDays || ""}
-                onChange={(e) => setRecentDays(e.target.value ? Number(e.target.value) : undefined)}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Any Activity</option>
-                <option value="7">Last 7 days</option>
-                <option value="14">Last 14 days</option>
-                <option value="30">Last 30 days</option>
-              </select>
+              <DropdownMenu
+                value={recentDays ? String(recentDays) : ""}
+                onValueChange={(value) => setRecentDays(value ? Number(value) : undefined)}
+                options={recentOptions}
+                placeholder="Any Activity"
+                triggerClassName="w-52"
+              />
             </div>
           </section>
 

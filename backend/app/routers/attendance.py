@@ -365,7 +365,9 @@ async def get_all_attendance(
             "punch_out": format_utc_datetime(record.punch_out),
             "total_hours": record.total_hours,
             "user_name": user.name if user else None,
-            "user_email": user.email if user else None
+            "user_email": user.email if user else None,
+            "user_role": user.role if user else None,
+            "user_profile_picture": user.profile_picture if user else None,
         })
     
     return result

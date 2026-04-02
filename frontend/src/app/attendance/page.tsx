@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import NextImage from "next/image";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -14,7 +15,8 @@ import {
   getMyAttendance,
   getAllAttendance,
   AttendanceStatus,
-  AttendanceRecord 
+  AttendanceRecord,
+  getApiBaseUrl,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
@@ -67,6 +69,13 @@ function formatDate(dateString: string): string {
     month: "short",
     day: "numeric"
   });
+}
+
+function getProfilePictureUrl(profilePicture?: string): string | null {
+  if (!profilePicture) return null;
+  if (profilePicture.startsWith("data:")) return profilePicture;
+  if (profilePicture.startsWith("http")) return profilePicture;
+  return `${getApiBaseUrl()}${profilePicture}`;
 }
 
 export default function AttendancePage() {
@@ -473,10 +482,27 @@ export default function AttendancePage() {
                         {isAdmin && (
                           <td className="py-3.5 pl-5">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-accent text-xs font-semibold">
-                                {record.user_name?.split(" ").map(n => n[0]).join("") || "?"}
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-accent text-xs font-semibold overflow-hidden">
+                                {getProfilePictureUrl(record.user_profile_picture) ? (
+                                  <NextImage
+                                    src={getProfilePictureUrl(record.user_profile_picture)!}
+                                    alt={record.user_name ? `${record.user_name} profile picture` : "Employee profile picture"}
+                                    width={32}
+                                    height={32}
+                                    className="h-full w-full object-cover"
+                                    unoptimized
+                                  />
+                                ) : (
+                                  record.user_name?.split(" ").map(n => n[0]).join("") || "?"
+                                )}
                               </div>
-                              <span className="font-medium text-card-foreground">{record.user_name || "Unknown"}</span>
+                              <div className="min-w-0">
+                                <p className="font-medium text-card-foreground truncate">{record.user_name || "Unknown"}</p>
+                                <p className="text-[11px] text-muted-foreground truncate">
+                                  {record.user_email || "No email"}
+                                  {record.user_role ? ` • ${record.user_role}` : ""}
+                                </p>
+                              </div>
                             </div>
                           </td>
                         )}

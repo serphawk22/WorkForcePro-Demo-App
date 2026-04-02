@@ -115,6 +115,8 @@ export interface AttendanceRecord {
   is_active?: boolean;  // Added for UI state synchronization
   user_name?: string;
   user_email?: string;
+  user_role?: "admin" | "employee";
+  user_profile_picture?: string;
 }
 
 export interface AttendanceStatus {
@@ -1148,7 +1150,7 @@ export async function getTaskRecurringInstances(
  */
 export async function updateTask(
   taskId: number,
-  taskData: Partial<TaskCreate> & { status?: string }
+  taskData: Partial<TaskCreate> & { status?: string; assigned_by?: number }
 ): Promise<ApiResponse<Task>> {
   return apiFetch<Task>(`/tasks/${taskId}`, {
     method: "PUT",

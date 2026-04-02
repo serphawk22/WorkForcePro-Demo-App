@@ -4,13 +4,14 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
+import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 import {
   Plus, Search, Circle, Loader2, X, CheckCircle2, Clock, AlertCircle,
   Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy, Repeat,
 } from "lucide-react";
 import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
-  deleteTask, getAssignableUsers, createSubtask, getTaskSubtasks,
+  deleteTask, getAssignableUsers, createSubtask, getTaskSubtasks, getApiBaseUrl,
   updateSubtaskStatus, deleteSubtask, searchByPublicId, updateSubtask,
   Task, TaskCreate, Subtask, SubtaskCreate, User, Workspace, getWorkspaces,
 } from "@/lib/api";
@@ -32,9 +33,21 @@ const statusColors: Record<string, string> = {
   approved: "text-green-400", rejected: "text-red-400",
 };
 
+type TaskEditForm = TaskCreate & {
+  status?: Task["status"];
+  assigned_by?: number;
+};
+
 function assigneeOptionLabel(u: User) {
   const roleLabel = u.role === "admin" ? "Admin" : "Employee";
   return `${u.name} (${roleLabel})`;
+}
+
+function getProfilePictureUrl(profilePicture?: string | null) {
+  if (!profilePicture) return null;
+  if (profilePicture.startsWith("data:")) return profilePicture;
+  if (profilePicture.startsWith("http")) return profilePicture;
+  return `${getApiBaseUrl()}${profilePicture}`;
 }
 
 interface ProjectsClientProps {
@@ -61,10 +74,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [selectedTaskForSubtask, setSelectedTaskForSubtask] = useState<number | null>(null);
   const [selectedParentSubtaskId, setSelectedParentSubtaskId] = useState<number | null>(null);
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
-  const [showEditLinksModal, setShowEditLinksModal] = useState(false);
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
-  const [editingLinks, setEditingLinks] = useState({ github_link: "", deployed_link: "" });
-  const [isUpdatingLinks, setIsUpdatingLinks] = useState(false);
+  const [editingTaskForm, setEditingTaskForm] = useState<TaskEditForm | null>(null);
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false);
   const [isSearchingById, setIsSearchingById] = useState(false);
   const [resolutionEdits, setResolutionEdits] = useState<Record<number, string>>({});
   const [newTask, setNewTask] = useState<TaskCreate>({
@@ -82,6 +95,70 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const WEEKDAY_OPTS = [
     { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
     { v: 4, l: "Fri" }, { v: 5, l: "Sat" }, { v: 6, l: "Sun" },
+  ];
+
+  const statusFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Status", icon: <Circle className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    ...(isAdmin ? [
+      { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
+      { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
+      { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+      { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
+    ] : [
+      { value: "submitted", label: "Done (Pending Review)", icon: <span className="text-yellow-400">●</span> },
+      { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+      { value: "rejected", label: "Needs Changes", icon: <span className="text-red-400">●</span> },
+    ]),
+  ], [isAdmin]);
+
+  const workspaceFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Workspaces", icon: <span className="text-muted-foreground">📁</span> },
+    ...workspaces.map((ws) => ({
+      value: String(ws.id),
+      label: `${ws.icon || "📁"} ${ws.name}`.trim(),
+      icon: <span>{ws.icon || "📁"}</span>,
+      description: ws.description || undefined,
+    })),
+  ], [workspaces]);
+
+  const priorityOptions: DropdownOption[] = [
+    { value: "low", label: "Low", icon: <span className="text-green-400">🟢</span> },
+    { value: "medium", label: "Medium", icon: <span className="text-amber-400">🟡</span> },
+    { value: "high", label: "High", icon: <span className="text-red-400">🔴</span> },
+  ];
+
+  const adminStatusOptions: DropdownOption[] = [
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
+  ];
+
+  const employeeStatusOptions: DropdownOption[] = [
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "done", label: "Done", icon: <span className="text-green-400">●</span> },
+  ];
+
+  const employeeOptions: DropdownOption[] = useMemo(() => employees.map((emp) => ({
+    value: String(emp.id),
+    label: assigneeOptionLabel(emp),
+    avatarSrc: getProfilePictureUrl(emp.profile_picture),
+    avatarFallback: emp.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+    icon: <span className="text-primary">{emp.role === "admin" ? "⭐" : "👤"}</span>,
+  })), [employees]);
+
+  const workspaceSelectOptions: DropdownOption[] = useMemo(() => workspaces.map((ws) => ({
+    value: String(ws.id),
+    label: `${ws.icon || "📁"} ${ws.name}`.trim(),
+    icon: <span>{ws.icon || "📁"}</span>,
+  })), [workspaces]);
+
+  const recurringFrequencyOptions: DropdownOption[] = [
+    { value: "daily", label: "Daily", icon: <span>🗓️</span> },
+    { value: "weekly", label: "Weekly", icon: <span>📅</span> },
+    { value: "monthly", label: "Monthly", icon: <span>🗓️</span> },
   ];
 
   const toggleRepeatDay = (d: number) => {
@@ -238,10 +315,50 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else { toast.success(selectedStatus === "done" ? "Task submitted for review!" : "Status updated!"); loadData(); }
   };
 
-  const handleAssigneeChange = async (taskId: number, userId: number) => {
+  const handleAssigneeChange = async (taskId: number, userId?: number) => {
     const result = await updateTask(taskId, { assigned_to: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Assignee updated!"); loadData(); }
+  };
+
+  const handleReporterChange = async (taskId: number, userId: number) => {
+    const result = await updateTask(taskId, { assigned_by: userId });
+    if (result.error) toast.error(result.error);
+    else { toast.success("Reporter updated!"); loadData(); }
+  };
+
+  const parseRepeatDays = (value?: string | null): number[] => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((day) => typeof day === "number") : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const handleOpenEditTask = (task: Task) => {
+    setSelectedTaskForEdit(task);
+    setEditingTaskForm({
+      title: task.title,
+      description: task.description || "",
+      priority: task.priority,
+      workspace_id: task.workspace_id || workspaceFilter || 0,
+      assigned_to: task.assigned_to ?? undefined,
+      due_date: task.due_date || undefined,
+      github_link: task.github_link || undefined,
+      deployed_link: task.deployed_link || undefined,
+      is_recurring: task.is_recurring,
+      recurrence_type: task.recurrence_type || undefined,
+      recurrence_interval: task.recurrence_interval || 1,
+      repeat_days: parseRepeatDays(task.repeat_days),
+      recurrence_start_date: task.recurrence_start_date || undefined,
+      recurrence_end_date: task.recurrence_end_date || undefined,
+      monthly_day: task.monthly_day || undefined,
+      status: task.status,
+      assigned_by: task.assigned_by,
+    });
+    setShowEditTaskModal(true);
   };
 
   const handleWorkspaceChange = async (taskId: number, nextWorkspaceId: number) => {
@@ -250,7 +367,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else { toast.success("Project moved to workspace"); loadData(true); }
   };
 
-  const handleSubtaskAssigneeChange = async (subtaskId: number, taskId: number, userId: number) => {
+  const handleSubtaskAssigneeChange = async (subtaskId: number, taskId: number, userId?: number) => {
     const result = await updateSubtask(subtaskId, { assigned_to: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Subtask assignee updated!"); await loadSubtasks(taskId); }
@@ -263,20 +380,37 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else { toast.success("Project deleted!"); loadData(); }
   };
 
-  const handleOpenEditLinks = (task: Task) => {
-    setSelectedTaskForEdit(task);
-    setEditingLinks({ github_link: task.github_link || "", deployed_link: task.deployed_link || "" });
-    setShowEditLinksModal(true);
-  };
-
-  const handleUpdateLinks = async (e: React.FormEvent) => {
+  const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTaskForEdit) return;
-    setIsUpdatingLinks(true);
-    const result = await updateTaskLinks(selectedTaskForEdit.id, editingLinks.github_link, editingLinks.deployed_link);
+    if (!editingTaskForm) return;
+    setIsUpdatingTask(true);
+    const result = await updateTask(selectedTaskForEdit.id, {
+      ...editingTaskForm,
+      title: editingTaskForm.title.trim(),
+      description: editingTaskForm.description || undefined,
+      workspace_id: editingTaskForm.workspace_id,
+      assigned_to: editingTaskForm.assigned_to ?? undefined,
+      assigned_by: editingTaskForm.assigned_by,
+      due_date: editingTaskForm.due_date || undefined,
+      github_link: editingTaskForm.github_link || undefined,
+      deployed_link: editingTaskForm.deployed_link || undefined,
+      recurrence_type: editingTaskForm.recurrence_type || undefined,
+      recurrence_interval: editingTaskForm.recurrence_interval || undefined,
+      repeat_days: editingTaskForm.repeat_days || undefined,
+      recurrence_start_date: editingTaskForm.recurrence_start_date || undefined,
+      recurrence_end_date: editingTaskForm.recurrence_end_date || undefined,
+      monthly_day: editingTaskForm.monthly_day || undefined,
+    });
     if (result.error) toast.error(result.error);
-    else { toast.success("Links updated!"); setShowEditLinksModal(false); setSelectedTaskForEdit(null); loadData(); }
-    setIsUpdatingLinks(false);
+    else {
+      toast.success("Task updated!");
+      setShowEditTaskModal(false);
+      setSelectedTaskForEdit(null);
+      setEditingTaskForm(null);
+      loadData();
+    }
+    setIsUpdatingTask(false);
   };
 
   const toggleExpandTask = async (taskId: number) => {
@@ -401,16 +535,16 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold bg-primary/15 text-primary border border-primary/20">
                   {subtask.assignee_name ? subtask.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
                 </div>
-                <select
-                  value={subtask.assigned_to || ""}
-                  onChange={(e) => handleSubtaskAssigneeChange(subtask.id, task.id, Number(e.target.value))}
-                  className="text-xs font-medium text-muted-foreground bg-transparent border-none focus:outline-none cursor-pointer hover:underline underline-offset-2"
-                >
-                  <option value="">Unassigned</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>
-                  ))}
-                </select>
+                <DropdownMenu
+                  value={subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned"}
+                  onValueChange={(value) => handleSubtaskAssigneeChange(subtask.id, task.id, value === "__unassigned" ? undefined : Number(value))}
+                  options={[
+                    { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
+                    ...employeeOptions,
+                  ]}
+                  placeholder="Assignee"
+                  triggerClassName="w-[220px] rounded-xl px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+                />
               </div>
             ) : subtask.assignee_name && (
               <div className="flex items-center gap-2 mt-2 ml-6">
@@ -433,26 +567,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   {subtask.status === "in_progress" ? "In Progress" : "To Do"}
                 </span>
               ) : subtask.status === "completed" ? (
-                <select
-                  defaultValue=""
-                  onChange={(e) => { if (e.target.value) handleSubtaskStatusChange(subtask.id, task.id, e.target.value); }}
-                  className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-400 focus:outline-none focus:ring-1 focus:ring-green-500/40 cursor-pointer"
-                >
-                  <option value="" disabled>Completed — Review…</option>
-                  <option value="reviewing">Reviewing</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
+                <DropdownMenu
+                  value="reviewing"
+                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
+                  options={adminStatusOptions}
+                  placeholder="Completed — Review…"
+                  triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-400"
+                />
               ) : (
-                <select
+                <DropdownMenu
                   value={subtask.status}
-                  onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
-                  className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer"
-                >
-                  <option value="reviewing">Reviewing</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
+                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
+                  options={adminStatusOptions}
+                  placeholder="Status"
+                  triggerClassName="w-[160px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-background border border-border text-foreground"
+                />
               )
             ) : (
               ["reviewing","approved","rejected"].includes(subtask.status) ? (
@@ -464,16 +593,18 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
                 </span>
               ) : (
-                <select
+                <DropdownMenu
                   value={subtask.status}
-                  onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
+                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
+                  options={[
+                    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
+                    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+                    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+                  ]}
+                  placeholder="Status"
                   disabled={subtask.assigned_to !== user?.id}
-                  className="text-xs rounded-lg px-3 py-1.5 font-semibold bg-background border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
+                  triggerClassName="w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-background border border-border text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                />
               )
             )}
             {(isAdmin || task.assigned_to === user?.id) && (
@@ -590,40 +721,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
             />
             {isSearchingById && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-purple-500" />}
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg glass-input px-3 py-2 text-sm"
-          >
-            <option value="">All Status</option>
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            {isAdmin ? (
-              <>
-                <option value="submitted">Submitted</option>
-                <option value="reviewing">Reviewing</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </>
-            ) : (
-              <>
-                <option value="submitted">Done (Pending Review)</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Needs Changes</option>
-              </>
-            )}
-          </select>
-          <select
-            value={workspaceFilter || ""}
-            onChange={(e) => setWorkspaceFilter(e.target.value ? Number(e.target.value) : undefined)}
-            className="rounded-lg glass-input px-3 py-2 text-sm"
+          <DropdownMenu
+            value={statusFilter || "__all"}
+            onValueChange={(value) => setStatusFilter(value === "__all" ? "" : value)}
+            options={statusFilterOptions}
+            placeholder="All Status"
+            triggerClassName="w-52"
+          />
+          <DropdownMenu
+            value={workspaceFilter ? String(workspaceFilter) : "__all"}
+            onValueChange={(value) => setWorkspaceFilter(value === "__all" ? undefined : Number(value))}
+            options={workspaceFilterOptions}
+            placeholder="All Workspaces"
+            triggerClassName="w-56"
             disabled={workspaceScopedView}
-          >
-            <option value="">All Workspaces</option>
-            {workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>{`${ws.icon || ""} ${ws.name}`.trim()}</option>
-            ))}
-          </select>
+          />
           {workspaceScopedView && selectedWorkspace && (
             <div className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
               <span
@@ -740,17 +852,15 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                       </td>
                       <td className="py-3.5 px-4 min-w-[140px]">
                         {isAdmin ? (
-                          <select
-                            value={task.workspace_id || ""}
-                            onChange={(e) => handleWorkspaceChange(task.id, Number(e.target.value))}
-                            onClick={(e) => e.stopPropagation()}
-                            className="rounded-md px-2 py-1 text-xs border border-border bg-background text-foreground"
-                          >
-                            <option value="" disabled>Select workspace</option>
-                            {workspaces.map((ws) => (
-                              <option key={ws.id} value={ws.id}>{`${ws.icon || ""} ${ws.name}`.trim()}</option>
-                            ))}
-                          </select>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu
+                              value={String(task.workspace_id || "")}
+                              onValueChange={(value) => handleWorkspaceChange(task.id, Number(value))}
+                              options={workspaceSelectOptions}
+                              placeholder="Select workspace"
+                              triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-xs"
+                            />
+                          </div>
                         ) : (
                           <div className="flex items-center gap-2 text-xs text-foreground">
                             <span
@@ -763,34 +873,42 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                         )}
                       </td>
                       <td className="py-3.5 px-4">
-                        <select
-                          value={task.priority}
-                          onChange={(e) => handlePriorityChange(task.id, e.target.value as "low" | "medium" | "high")}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize cursor-pointer border bg-transparent focus:outline-none focus:ring-1 focus:ring-primary/40 ${priorityColors[task.priority]}`}
-                        >
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                        </select>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu
+                            value={task.priority}
+                            onValueChange={(value) => handlePriorityChange(task.id, value as "low" | "medium" | "high")}
+                            options={priorityOptions}
+                            placeholder="Priority"
+                            triggerClassName={`w-[132px] rounded-xl px-2.5 py-1.5 text-[10px] font-semibold capitalize ${priorityColors[task.priority]}`}
+                          />
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        {isAdmin ? (
-                          <select value={task.status} onChange={(e) => handleStatusChange(task.id, e.target.value)} onClick={e => e.stopPropagation()} className={`text-xs font-medium bg-transparent border-none cursor-pointer ${statusColors[task.status]}`}>
-                            <option value="reviewing">Reviewing</option>
-                            <option value="approved">Approved</option>
-                            <option value="rejected">Rejected</option>
-                          </select>
-                        ) : (
-                          <select value={task.status === "submitted" ? "done" : task.status} onChange={(e) => handleStatusChange(task.id, e.target.value)} onClick={e => e.stopPropagation()} className={`text-xs font-medium bg-transparent border-none cursor-pointer ${statusColors[task.status]}`} disabled={task.status === "submitted" || task.status === "approved"}>
-                            <option value="todo">To Do</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="done">Done</option>
-                          </select>
-                        )}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu
+                            value={isAdmin ? task.status : (task.status === "submitted" ? "done" : task.status)}
+                            onValueChange={(value) => handleStatusChange(task.id, value)}
+                            options={isAdmin ? adminStatusOptions : employeeStatusOptions}
+                            placeholder="Status"
+                            disabled={!isAdmin && (task.status === "submitted" || task.status === "approved")}
+                            triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
+                          />
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px]">
-                        {getReporterName(task)}
+                        {isAdmin ? (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu
+                              value={String(task.assigned_by)}
+                              onValueChange={(value) => handleReporterChange(task.id, Number(value))}
+                              options={employeeOptions}
+                              placeholder="Reporter"
+                              triggerClassName="w-[190px] rounded-xl px-2.5 py-1.5 text-xs font-medium text-card-foreground"
+                            />
+                          </div>
+                        ) : (
+                          getReporterName(task)
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px]">
                         <input
@@ -817,17 +935,18 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                             {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
                           </div>
                           {isAdmin ? (
-                            <select
-                              value={task.assigned_to || ""}
-                              onChange={(e) => handleAssigneeChange(task.id, Number(e.target.value))}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-sm font-medium text-card-foreground bg-transparent border-none focus:outline-none cursor-pointer hover:underline underline-offset-4"
-                            >
-                              <option value="">Unassigned</option>
-                              {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>
-                              ))}
-                            </select>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu
+                                value={task.assigned_to ? String(task.assigned_to) : "__unassigned"}
+                                onValueChange={(value) => handleAssigneeChange(task.id, value === "__unassigned" ? undefined : Number(value))}
+                                options={[
+                                  { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
+                                  ...employeeOptions,
+                                ]}
+                                placeholder="Assignee"
+                                triggerClassName="w-[210px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                              />
+                            </div>
                           ) : (
                             <span className="text-sm font-medium text-card-foreground">
                               {task.assignee_name || "Unassigned"}
@@ -840,7 +959,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                       </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {isAdmin && (
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
+                          <div className="flex items-center justify-center gap-3">
+                            <button onClick={(e) => { e.stopPropagation(); handleOpenEditTask(task); }} className="text-primary hover:text-primary/80 text-xs">Edit</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -906,26 +1028,24 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Workspace *</label>
-                <select
-                  value={newTask.workspace_id || ""}
-                  onChange={e => setNewTask({ ...newTask, workspace_id: e.target.value ? Number(e.target.value) : 0 })}
-                  className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none"
-                  required
-                >
-                  <option value="" disabled>Select workspace</option>
-                  {workspaces.map((ws) => (
-                    <option key={ws.id} value={ws.id}>{`${ws.icon || ""} ${ws.name}`.trim()}</option>
-                  ))}
-                </select>
+                  <DropdownMenu
+                    value={newTask.workspace_id ? String(newTask.workspace_id) : ""}
+                    onValueChange={(value) => setNewTask({ ...newTask, workspace_id: value ? Number(value) : 0 })}
+                    options={workspaceSelectOptions}
+                    placeholder="Select workspace"
+                    triggerClassName="w-full"
+                  />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
-                  <select value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value as any })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+                  <DropdownMenu
+                    value={newTask.priority}
+                    onValueChange={(value) => setNewTask({ ...newTask, priority: value as any })}
+                    options={priorityOptions}
+                    placeholder="Priority"
+                    triggerClassName="w-full"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Due Date</label>
@@ -935,10 +1055,13 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               {isAdmin && (
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
-                  <select value={newTask.assigned_to || ""} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
-                    <option value="" disabled>Select team member</option>
-                    {employees.map(emp => <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>)}
-                  </select>
+                  <DropdownMenu
+                    value={newTask.assigned_to ? String(newTask.assigned_to) : ""}
+                    onValueChange={(value) => setNewTask({ ...newTask, assigned_to: value ? Number(value) : undefined })}
+                    options={employeeOptions}
+                    placeholder="Select team member"
+                    triggerClassName="w-full"
+                  />
                 </div>
               )}
               {isAdmin && (
@@ -958,15 +1081,13 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-muted-foreground mb-1">Frequency</label>
-                          <select
+                          <DropdownMenu
                             value={newTask.recurrence_type || "weekly"}
-                            onChange={e => setNewTask({ ...newTask, recurrence_type: e.target.value as any })}
-                            className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
-                          >
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                          </select>
+                            onValueChange={(value) => setNewTask({ ...newTask, recurrence_type: value as any })}
+                            options={recurringFrequencyOptions}
+                            placeholder="Frequency"
+                            triggerClassName="w-full"
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-muted-foreground mb-1">Every (interval)</label>
@@ -1071,10 +1192,13 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Assign To *</label>
-                <select value={newSubtask.assigned_to || ""} onChange={e => setNewSubtask({ ...newSubtask, assigned_to: e.target.value ? Number(e.target.value) : undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required>
-                  <option value="">Select team member</option>
-                  {employees.map(emp => <option key={emp.id} value={emp.id}>{assigneeOptionLabel(emp)}</option>)}
-                </select>
+                <DropdownMenu
+                  value={newSubtask.assigned_to ? String(newSubtask.assigned_to) : ""}
+                  onValueChange={(value) => setNewSubtask({ ...newSubtask, assigned_to: value ? Number(value) : undefined })}
+                  options={employeeOptions}
+                  placeholder="Select team member"
+                  triggerClassName="w-full"
+                />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); setSelectedParentSubtaskId(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
@@ -1087,35 +1211,218 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
         </div>
       )}
 
-      {/* ── Edit Links Modal ── */}
-      {showEditLinksModal && selectedTaskForEdit && (
+      {/* ── Edit Task Modal ── */}
+      {showEditTaskModal && selectedTaskForEdit && editingTaskForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl bg-card border border-border">
+          <div className="rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-2xl bg-card border border-border max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-foreground"><Link size={20} className="text-primary" /> Edit Project Links</h2>
-              <button onClick={() => { setShowEditLinksModal(false); setSelectedTaskForEdit(null); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+              <h2 className="text-lg font-bold flex items-center gap-2 text-foreground"><Link size={20} className="text-primary" /> Edit Task</h2>
+              <button onClick={() => { setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
               <p className="text-sm font-medium text-foreground">{selectedTaskForEdit.title}</p>
             </div>
-            <form onSubmit={handleUpdateLinks} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
-                  <Github size={14} /> GitHub Link
-                </label>
-                <input type="url" value={editingLinks.github_link} onChange={e => setEditingLinks({ ...editingLinks, github_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="https://github.com/user/repo" />
+            <form onSubmit={handleUpdateTask} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Task Name *</label>
+                  <input
+                    type="text"
+                    value={editingTaskForm.title}
+                    onChange={(e) => setEditingTaskForm({ ...editingTaskForm, title: e.target.value })}
+                    className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    placeholder="Task title"
+                    required
+                  />
+                </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-foreground">Workspace *</label>
+                    <DropdownMenu
+                      value={String(editingTaskForm.workspace_id)}
+                      onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, workspace_id: Number(value) })}
+                      options={workspaceSelectOptions}
+                      placeholder="Workspace"
+                      triggerClassName="w-full"
+                    />
+                  </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1 flex items-center gap-1 text-foreground">
-                  <ExternalLink size={14} /> Deployed Link
+                <label className="block text-sm font-semibold mb-1 text-foreground">Description</label>
+                <textarea
+                  value={editingTaskForm.description || ""}
+                  onChange={(e) => setEditingTaskForm({ ...editingTaskForm, description: e.target.value })}
+                  className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
+                  <DropdownMenu
+                    value={editingTaskForm.priority || "medium"}
+                    onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, priority: value as any })}
+                    options={priorityOptions}
+                    placeholder="Priority"
+                    triggerClassName="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Status</label>
+                  <DropdownMenu
+                    value={[
+                      "reviewing",
+                      "approved",
+                      "rejected",
+                    ].includes(editingTaskForm.status || selectedTaskForEdit.status)
+                      ? (editingTaskForm.status || selectedTaskForEdit.status)
+                      : "reviewing"}
+                    onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, status: value as Task["status"] })}
+                    options={adminStatusOptions}
+                    placeholder="Status"
+                    triggerClassName="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Due Date</label>
+                  <input
+                    type="date"
+                    value={editingTaskForm.due_date || ""}
+                    onChange={(e) => setEditingTaskForm({ ...editingTaskForm, due_date: e.target.value || undefined })}
+                    className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none"
+                  />
+                </div>
+              </div>
+              {isAdmin && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-foreground">Assignee</label>
+                    <DropdownMenu
+                      value={editingTaskForm.assigned_to ? String(editingTaskForm.assigned_to) : "__unassigned"}
+                      onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, assigned_to: value === "__unassigned" ? undefined : Number(value) })}
+                      options={[
+                        { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
+                        ...employeeOptions,
+                      ]}
+                      placeholder="Assignee"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-foreground">Reporter</label>
+                    <DropdownMenu
+                      value={String(editingTaskForm.assigned_by || selectedTaskForEdit.assigned_by)}
+                      onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, assigned_by: Number(value) })}
+                      options={employeeOptions}
+                      placeholder="Reporter"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-border/80 bg-primary/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!editingTaskForm.is_recurring}
+                    onChange={(e) => setEditingTaskForm({ ...editingTaskForm, is_recurring: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <Repeat size={16} className="text-amber-500" />
+                  Repeat task (recurring)
                 </label>
-                <input type="url" value={editingLinks.deployed_link} onChange={e => setEditingLinks({ ...editingLinks, deployed_link: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" placeholder="https://app.vercel.app" />
+                {editingTaskForm.is_recurring && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Frequency</label>
+                        <DropdownMenu
+                          value={editingTaskForm.recurrence_type || "weekly"}
+                          onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, recurrence_type: value as any })}
+                          options={recurringFrequencyOptions}
+                          placeholder="Frequency"
+                          triggerClassName="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Every (interval)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={52}
+                          value={editingTaskForm.recurrence_interval || 1}
+                          onChange={(e) => setEditingTaskForm({ ...editingTaskForm, recurrence_interval: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                          className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                        />
+                      </div>
+                    </div>
+                    {editingTaskForm.recurrence_type === "weekly" && (
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2">On weekdays</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {WEEKDAY_OPTS.map(({ v, l }) => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => {
+                                const cur = new Set(editingTaskForm.repeat_days || []);
+                                if (cur.has(v)) cur.delete(v);
+                                else cur.add(v);
+                                setEditingTaskForm({ ...editingTaskForm, repeat_days: Array.from(cur).sort((a, b) => a - b) });
+                              }}
+                              className={`px-2 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                                (editingTaskForm.repeat_days || []).includes(v)
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background border-border text-muted-foreground hover:border-primary/40"
+                              }`}
+                            >
+                              {l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {editingTaskForm.recurrence_type === "monthly" && (
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Day of month (1–31)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={editingTaskForm.monthly_day ?? ""}
+                          placeholder="e.g. 15"
+                          onChange={(e) => setEditingTaskForm({ ...editingTaskForm, monthly_day: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                          className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                        />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Series start</label>
+                        <input
+                          type="date"
+                          value={editingTaskForm.recurrence_start_date || editingTaskForm.due_date || ""}
+                          onChange={(e) => setEditingTaskForm({ ...editingTaskForm, recurrence_start_date: e.target.value || undefined })}
+                          className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Series end (optional)</label>
+                        <input
+                          type="date"
+                          value={editingTaskForm.recurrence_end_date || ""}
+                          onChange={(e) => setEditingTaskForm({ ...editingTaskForm, recurrence_end_date: e.target.value || undefined })}
+                          className="w-full rounded-lg py-2 px-2 text-sm bg-background border border-border"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowEditLinksModal(false); setSelectedTaskForEdit(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={isUpdatingLinks} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
-                  {isUpdatingLinks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
-                  {isUpdatingLinks ? "Saving..." : "Save Links"}
+                <button type="button" onClick={() => { setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isUpdatingTask} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
+                  {isUpdatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
+                  {isUpdatingTask ? "Saving..." : "Save Task"}
                 </button>
               </div>
             </form>

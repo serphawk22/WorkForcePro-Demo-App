@@ -357,6 +357,7 @@ class TaskUpdate(SQLModel):
     due_date: Optional[DateType] = None
     workspace_id: Optional[int] = None
     assigned_to: Optional[int] = None
+    assigned_by: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
     is_recurring: Optional[bool] = None

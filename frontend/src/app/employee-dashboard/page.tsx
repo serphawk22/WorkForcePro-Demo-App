@@ -16,6 +16,7 @@ import WeeklyProgressEmployeeSection from "@/components/dashboard/WeeklyProgress
 import { toast } from "sonner";
 import Link from "next/link";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
+import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 
 const priorityStyles: Record<string, string> = {
   high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
@@ -90,6 +91,24 @@ export default function EmployeeDashboard() {
   const [taskSubtasks, setTaskSubtasks] = useState<Record<number, Subtask[]>>({});
   const expandedTasksRef = useRef<Set<number>>(new Set());
   const [recurringSummary, setRecurringSummary] = useState<RecurringInstancesSummary | null>(null);
+
+  const recurringInstanceOptions: DropdownOption[] = [
+    { value: "todo", label: "To Do", icon: <span className="text-gray-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+  ];
+
+  const employeeTaskOptions: DropdownOption[] = [
+    { value: "todo", label: "To Do", icon: <span className="text-gray-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "done", label: "Done", icon: <span className="text-green-400">●</span> },
+  ];
+
+  const subtaskReviewOptions: DropdownOption[] = [
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
+  ];
 
   // Global persistent timer — provided by AttendanceTimerProvider at root layout level
   const {
@@ -204,15 +223,13 @@ export default function EmployeeDashboard() {
           {row.public_id} · {new Date(row.instance_date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
         </p>
       </div>
-      <select
+      <DropdownMenu
         value={row.status}
-        onChange={(e) => handleRecurringInstanceStatus(row.id, e.target.value as "todo" | "in_progress" | "completed")}
-        className="text-[10px] rounded-md px-2 py-1 bg-secondary border border-border cursor-pointer shrink-0"
-      >
-        <option value="todo">To Do</option>
-        <option value="in_progress">In Progress</option>
-        <option value="completed">Completed</option>
-      </select>
+        onValueChange={(value) => handleRecurringInstanceStatus(row.id, value as "todo" | "in_progress" | "completed")}
+        options={recurringInstanceOptions}
+        placeholder="Status"
+        triggerClassName="w-40 rounded-xl px-2.5 py-1.5 text-[10px] font-semibold bg-secondary border border-border shrink-0"
+      />
     </div>
   );
 
@@ -604,16 +621,14 @@ export default function EmployeeDashboard() {
                           </td>
                           <td className="py-3.5 text-right">
                             {task.assigned_to === user?.id ? (
-                              <select
+                              <DropdownMenu
                                 value={task.status === "submitted" ? "done" : task.status}
-                                onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
-                                className="bg-secondary border border-border rounded px-2 py-1 text-xs cursor-pointer"
+                                onValueChange={(value) => handleTaskStatusChange(task.id, value)}
+                                options={employeeTaskOptions}
+                                placeholder="Status"
                                 disabled={task.status === "submitted" || task.status === "approved"}
-                              >
-                                <option value="todo">To Do</option>
-                                <option value="in_progress">In Progress</option>
-                                <option value="done">Done</option>
-                              </select>
+                                triggerClassName="w-40 rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-secondary border border-border cursor-pointer"
+                              />
                             ) : (
                               <span className={`text-[10px] rounded-md px-2 py-1 font-semibold border ${
                                 task.status === "approved" ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400" :
@@ -665,16 +680,14 @@ export default function EmployeeDashboard() {
                                             {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
                                           </span>
                                         ) : (
-                                          <select
+                                          <DropdownMenu
                                             value={subtask.status}
-                                            onChange={(e) => handleSubtaskStatusChange(subtask.id, task.id, e.target.value)}
+                                            onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
+                                            options={recurringInstanceOptions}
+                                            placeholder="Status"
                                             disabled={subtask.assigned_to !== user?.id}
-                                            className="text-[10px] rounded-md px-2 py-1 bg-secondary border border-border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                                          >
-                                            <option value="todo">To Do</option>
-                                            <option value="in_progress">In Progress</option>
-                                            <option value="completed">Completed</option>
-                                          </select>
+                                            triggerClassName="w-40 rounded-xl px-2.5 py-1.5 text-[10px] font-semibold bg-secondary border border-border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                          />
                                         )}
                                       </div>
                                     ))}
