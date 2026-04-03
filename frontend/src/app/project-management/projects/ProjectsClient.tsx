@@ -38,6 +38,8 @@ type TaskEditForm = TaskCreate & {
   assigned_by?: number;
 };
 
+type SubtaskDraftStatus = Task["status"] | "done";
+
 function assigneeOptionLabel(u: User) {
   const roleLabel = u.role === "admin" ? "Admin" : "Employee";
   return `${u.name} (${roleLabel})`;
@@ -94,7 +96,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [detailDraft, setDetailDraft] = useState({
     title: "",
     description: "",
-    status: "todo" as Task["status"],
+    status: "todo" as SubtaskDraftStatus,
     priority: "medium" as Task["priority"],
     assigned_to: "__unassigned",
     assigned_by: "",
