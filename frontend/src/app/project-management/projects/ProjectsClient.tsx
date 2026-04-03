@@ -40,6 +40,20 @@ type TaskEditForm = TaskCreate & {
 
 type SubtaskDraftStatus = Task["status"] | "done";
 
+type SubtaskDetailDraft = {
+  title: string;
+  description: string;
+  status: SubtaskDraftStatus;
+  priority: Task["priority"];
+  assigned_to: string;
+  assigned_by: string;
+  start_date: string;
+  due_date: string;
+  completed_at: string;
+  estimated_hours: string;
+  actual_hours: string;
+};
+
 function assigneeOptionLabel(u: User) {
   const roleLabel = u.role === "admin" ? "Admin" : "Employee";
   return `${u.name} (${roleLabel})`;
@@ -93,7 +107,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [isCommentSaving, setIsCommentSaving] = useState(false);
   const [loadingSubtaskComments, setLoadingSubtaskComments] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
-  const [detailDraft, setDetailDraft] = useState({
+  const [detailDraft, setDetailDraft] = useState<SubtaskDetailDraft>({
     title: "",
     description: "",
     status: "todo" as SubtaskDraftStatus,
@@ -813,10 +827,13 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     setSelectedSubtaskForPanel(subtask);
     setSelectedSubtaskRootTaskForPanel(rootTask);
     setNewSubtaskComment("");
+    const draftStatus: SubtaskDraftStatus = !isAdmin && subtask.status === "submitted"
+      ? "done"
+      : subtask.status;
     setDetailDraft({
       title: subtask.title || "",
       description: subtask.description || "",
-      status: !isAdmin && subtask.status === "submitted" ? "done" : subtask.status,
+      status: draftStatus,
       priority: subtask.priority,
       assigned_to: subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned",
       assigned_by: String(subtask.assigned_by || ""),
@@ -920,11 +937,11 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
         description: detailDraft.description.trim(),
         priority: detailDraft.priority,
         status: normalizedStatus as Task["status"],
-        assigned_to: assignedToValue,
-        assigned_by: assignedByValue,
-        assignee_name: assignedToValue ? (selectedAssignee?.name || selectedSubtaskForPanel.assignee_name) : null,
-        assigned_by_name: assignedByValue ? (selectedReporter?.name || selectedSubtaskForPanel.assigned_by_name) : null,
-        start_date: detailDraft.start_date || null,
+        assigned_to: assignedToValue ?? null,
+        assigned_by: assignedByValue ?? selectedSubtaskForPanel.assigned_by,
+        assignee_name: assignedToValue != null ? (selectedAssignee?.name || selectedSubtaskForPanel.assignee_name) : undefined,
+        assigned_by_name: assignedByValue != null ? (selectedReporter?.name || selectedSubtaskForPanel.assigned_by_name) : undefined,
+        start_date: detailDraft.start_date || selectedSubtaskForPanel.start_date,
         due_date: detailDraft.due_date || null,
         completed_at: detailDraft.completed_at || null,
         estimated_hours: estimatedHoursValue ?? null,
