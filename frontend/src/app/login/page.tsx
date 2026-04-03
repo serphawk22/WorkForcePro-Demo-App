@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Mail, Lock, ArrowRight, Loader2, ServerCrash } from "lucide-react";
+import { Zap, Mail, Lock, Eye, EyeClosed, ArrowRight, Loader2, ServerCrash } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getApiBaseUrl } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [pendingMessage, setPendingMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -214,7 +215,7 @@ export default function LoginPage() {
             <div>
               <label className="block text-sm font-medium text-card-foreground mb-2">Email</label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Mail size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
                 <input
                   type="email"
                   placeholder="you@company.com"
@@ -230,15 +231,23 @@ export default function LoginPage() {
             <div>
               <label className="block text-sm font-medium text-card-foreground mb-2">Password</label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-10 text-sm"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/75 hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <Eye size={16} /> : <EyeClosed size={16} />}
+                </button>
               </div>
             </div>
 

@@ -133,6 +133,7 @@ export type RecurrenceType = "daily" | "weekly" | "monthly";
 export interface Task {
   id: number;
   public_id: string;
+  parent_task_id?: number | null;
   workspace_id?: number | null;
   workspace_name?: string | null;
   workspace_icon?: string | null;
@@ -140,8 +141,11 @@ export interface Task {
   title: string;
   description: string | null;
   priority: "low" | "medium" | "high";
-  start_date: string;  // Auto-recorded start date
+  start_date: string;
   due_date: string | null;
+  completed_at?: string | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
   assigned_to: number | null;
   assigned_by: number;
   status: "todo" | "in_progress" | "submitted" | "reviewing" | "approved" | "rejected";
@@ -169,10 +173,16 @@ export interface Task {
 export interface TaskCreate {
   title: string;
   workspace_id: number;
+  parent_task_id?: number;
   description?: string;
   priority?: "low" | "medium" | "high";
+  start_date?: string;
   due_date?: string;
+  completed_at?: string;
+  estimated_hours?: number;
+  actual_hours?: number;
   assigned_to?: number;
+  assigned_by?: number;
   github_link?: string;
   deployed_link?: string;
   is_recurring?: boolean;
@@ -305,6 +315,11 @@ export interface TaskStats {
   in_progress: number;
   overdue: number;  // Tasks past due date and not approved
   completion_percent: number;  // Overall completion percentage
+  tasks_assigned?: number;
+  tasks_completed?: number;
+  on_time_completion?: number;
+  delayed_tasks?: number;
+  average_completion_time?: number;
   // Legacy fields for backward compatibility
   todo: number;
   submitted: number;
@@ -482,6 +497,11 @@ export interface Subtask {
   parent_subtask_id?: number | null;  // For nested subtasks
   title: string;
   description: string | null;
+  start_date?: string;
+  due_date?: string | null;
+  completed_at?: string | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
   assigned_to: number | null;
   assigned_by: number;
   status: "todo" | "in_progress" | "completed" | "reviewing" | "approved" | "rejected";
@@ -1027,7 +1047,7 @@ export async function getMyTasks(
  */
 export async function updateTaskStatus(
   taskId: number,
-  status: "todo" | "in_progress" | "submitted" | "approved" | "rejected"
+  status: "todo" | "in_progress" | "submitted" | "reviewing" | "approved" | "rejected"
 ): Promise<ApiResponse<Task>> {
   return apiFetch<Task>(`/tasks/${taskId}/status?new_status=${status}`, {
     method: "PATCH",
@@ -1040,14 +1060,21 @@ export async function updateTaskStatus(
 export async function getAllTasks(
   statusFilter?: string,
   assignedTo?: number,
-  workspaceId?: number
+  workspaceId?: number,
+  opts?: { parentTaskId?: number; rootsOnly?: boolean }
 ): Promise<ApiResponse<Task[]>> {
   const params = new URLSearchParams();
   if (statusFilter) params.append("status_filter", statusFilter);
   if (assignedTo) params.append("assigned_to", String(assignedTo));
   if (workspaceId) params.append("workspace_id", String(workspaceId));
+  if (opts?.parentTaskId !== undefined) params.append("parent_task_id", String(opts.parentTaskId));
+  if (opts?.rootsOnly) params.append("roots_only", "true");
   const query = params.toString() ? `?${params.toString()}` : "";
   return apiFetch<Task[]>(`/tasks/${query}`);
+}
+
+export async function getTaskChildren(taskId: number): Promise<ApiResponse<Task[]>> {
+  return apiFetch<Task[]>(`/tasks/${taskId}/children`);
 }
 
 export async function getWorkspaces(): Promise<ApiResponse<Workspace[]>> {

@@ -343,21 +343,21 @@ export default function WorkspaceProjectsPage() {
               {projects.map((project) => (
                 <article
                   key={project.id}
-                  className="rounded-xl border border-white/30 bg-gradient-to-br from-white/70 to-white/40 dark:from-violet-900/20 dark:to-fuchsia-900/10 p-4 shadow-md shadow-purple-200/30 dark:shadow-[0_0_24px_rgba(168,85,247,0.2)] hover:border-primary/40 transition-colors"
+                  className="rounded-xl border border-purple-200/60 bg-gradient-to-br from-white/95 to-purple-50/65 dark:from-violet-900/20 dark:to-fuchsia-900/10 p-4 shadow-md shadow-purple-200/15 dark:shadow-[0_0_24px_rgba(168,85,247,0.2)] hover:border-primary/40 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold text-foreground leading-snug">{project.title}</h3>
                       {project.description && (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{project.description}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-muted-foreground">{project.description}</p>
                       )}
                     </div>
-                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <span className="rounded-md bg-purple-100/80 dark:bg-muted px-2 py-1 text-[11px] uppercase tracking-wide text-purple-700 dark:text-muted-foreground">
                       {project.status.replace("_", " ")}
                     </span>
                   </div>
 
-                  <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
+                  <div className="mt-4 space-y-1.5 text-xs text-slate-600 dark:text-muted-foreground">
                     <p>Owner: <span className="text-foreground font-medium">{project.assignee_name || "Unassigned"}</span></p>
                     <p>Tasks: <span className="text-foreground font-medium">{project.subtask_count ?? 0}</span></p>
                     <p>Recent Activity: <span className="text-foreground font-medium">{new Date(project.updated_at).toLocaleDateString("en-IN")}</span></p>
@@ -365,7 +365,7 @@ export default function WorkspaceProjectsPage() {
 
                   <button
                     onClick={() => router.push(`/project-management/workspaces/${workspace.id}/projects/${project.id}`)}
-                    className="mt-4 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                    className="mt-4 inline-flex items-center gap-2 rounded-md border border-purple-300/70 bg-white/90 px-3 py-1.5 text-xs font-semibold text-purple-800 shadow-sm shadow-purple-200/40 hover:border-purple-400 hover:bg-white hover:shadow-md hover:shadow-purple-300/35 dark:border-primary/35 dark:bg-transparent dark:text-primary dark:hover:bg-primary/10 transition-all"
                   >
                     <FolderOpen size={13} />
                     Open Project

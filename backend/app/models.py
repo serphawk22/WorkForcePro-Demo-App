@@ -303,6 +303,8 @@ class TaskBase(SQLModel):
     description: Optional[str] = None
     priority: TaskPriority = Field(default=TaskPriority.medium)
     due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    actual_hours: Optional[float] = Field(default=None, ge=0)
 
 
 class Task(TaskBase, table=True):
@@ -312,6 +314,7 @@ class Task(TaskBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
+    parent_task_id: Optional[int] = Field(default=None, foreign_key="tasks.id", index=True)
     workspace_id: Optional[int] = Field(default=None, foreign_key="workspaces.id", index=True)
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id")  # Admin who created/assigned the task
@@ -320,6 +323,7 @@ class Task(TaskBase, table=True):
     github_link: Optional[str] = Field(default=None, max_length=500)  # GitHub repository link
     deployed_link: Optional[str] = Field(default=None, max_length=500)  # Deployed application link
     start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))  # Auto-recorded start date
+    completed_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     # Recurring task rule (Jira-style template; occurrences live in task_instances)
@@ -335,7 +339,11 @@ class Task(TaskBase, table=True):
 class TaskCreate(TaskBase):
     """Schema for creating task."""
     workspace_id: int
+    parent_task_id: Optional[int] = None
+    start_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     assigned_to: Optional[int] = None
+    assigned_by: Optional[int] = None
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
     # Recurrence (optional)
@@ -355,6 +363,11 @@ class TaskUpdate(SQLModel):
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    actual_hours: Optional[float] = Field(default=None, ge=0)
+    start_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    parent_task_id: Optional[int] = None
     workspace_id: Optional[int] = None
     assigned_to: Optional[int] = None
     assigned_by: Optional[int] = None
@@ -374,6 +387,7 @@ class TaskRead(TaskBase):
     id: int
     organization_id: Optional[int] = None
     public_id: Optional[str] = None
+    parent_task_id: Optional[int] = None
     workspace_id: Optional[int] = None
     workspace_name: Optional[str] = None
     workspace_icon: Optional[str] = None
@@ -385,6 +399,7 @@ class TaskRead(TaskBase):
     github_link: Optional[str] = None
     deployed_link: Optional[str] = None
     start_date: datetime
+    completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     is_recurring: bool = False

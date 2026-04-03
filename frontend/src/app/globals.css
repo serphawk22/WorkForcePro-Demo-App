@@ -514,6 +514,42 @@
       0 8px 24px hsl(var(--primary) / 0.35),
       inset 0 1px 0 hsl(0 0% 100% / 0.25);
   }
+
+  .demo-cta {
+    color: hsl(var(--foreground));
+    border: 1px solid transparent;
+    background:
+      linear-gradient(hsl(var(--card) / 0.56), hsl(var(--card) / 0.42)) padding-box,
+      var(--gradient-primary) border-box;
+    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: blur(10px) saturate(150%);
+    box-shadow:
+      0 6px 20px hsl(var(--primary) / 0.18),
+      inset 0 1px 0 hsl(0 0% 100% / 0.3);
+    transform: translateY(0) scale(1);
+  }
+
+  .demo-cta:hover {
+    color: hsl(var(--primary-foreground));
+    background: var(--gradient-primary-btn);
+    box-shadow:
+      0 10px 28px hsl(var(--primary) / 0.3),
+      0 0 24px hsl(var(--primary-glow) / 0.2),
+      inset 0 1px 0 hsl(0 0% 100% / 0.2);
+    transform: translateY(-1px) scale(1.03);
+  }
+
+  .demo-cta:active {
+    transform: translateY(0) scale(0.985);
+  }
+
+  .dark .demo-cta {
+    color: hsl(var(--card-foreground));
+    box-shadow:
+      0 8px 24px hsl(var(--primary) / 0.28),
+      0 0 24px hsl(var(--primary-glow) / 0.12),
+      inset 0 1px 0 hsl(0 0% 100% / 0.12);
+  }
   
   .glass-input {
     background: hsl(var(--background) / 0.6);
@@ -1296,7 +1332,7 @@
   }
 
   /* ── 10. BUTTONS: tactile gradient + elevation ── */
-  html:not(.dark) button[class*="bg-primary"] {
+  html:not(.dark) button:is(.bg-primary, [class~="bg-primary"]) {
     background: linear-gradient(135deg, hsl(289 42% 30%), hsl(266 62% 22%)) !important;
     box-shadow:
       0 1px 3px  hsl(268 55% 40% / 0.20),
@@ -1319,7 +1355,7 @@
       inset 0 1px 0 hsl(0 0% 100% / 0.26);
   }
 
-  html:not(.dark) button[class*="bg-primary"]:hover:not(:disabled) {
+  html:not(.dark) button:is(.bg-primary, [class~="bg-primary"]):hover:not(:disabled) {
     background: linear-gradient(135deg, hsl(289 46% 34%), hsl(266 60% 27%)) !important;
     box-shadow:
       0 2px 6px  hsl(268 55% 40% / 0.26),

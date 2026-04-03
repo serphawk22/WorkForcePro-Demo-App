@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Zap } from "lucide-react";
+import { CalendarDays, Menu, X, Zap } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BookDemoModal } from "./BookDemoModal";
 
@@ -11,9 +11,9 @@ export function NavBar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-nav">
-      <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="h-16 px-6 md:px-8 relative flex items-center">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0 relative z-20">
           <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center shadow-primary">
             <Zap size={18} className="text-primary-foreground" />
           </div>
@@ -23,36 +23,38 @@ export function NavBar() {
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-          <a href="#features" className="hover:text-primary transition-colors">Features</a>
-          <a href="#how-it-works" className="hover:text-primary transition-colors">How It Works</a>
-          <a href="#ai-vision" className="hover:text-primary transition-colors">AI Vision</a>
+        <nav className="hidden md:flex items-center gap-10 text-sm font-medium text-muted-foreground absolute left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+          <a href="#features" className="hover:text-primary transition-colors pointer-events-auto">Features</a>
+          <a href="#how-it-works" className="hover:text-primary transition-colors pointer-events-auto">How It Works</a>
+          <a href="#ai-vision" className="hover:text-primary transition-colors pointer-events-auto">AI Vision</a>
         </nav>
 
         {/* Actions */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-3 absolute right-6 md:right-8 top-1/2 -translate-y-1/2 z-30 pointer-events-auto">
           <ThemeToggle />
           <Link
             href="/login"
-            className="px-4 py-2 text-sm font-semibold rounded-xl text-primary border border-primary/30
+            className="px-4 py-2 text-sm font-semibold rounded-full text-primary border border-primary/30
                        hover:bg-primary/10 transition-all duration-200"
           >
             Log In
           </Link>
           <Link
             href="/signup"
-            className="px-4 py-2 text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-[#854F6C] via-[#522B5B] to-[#2B124C] shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            style={{ boxShadow: '0 4px 24px 0 rgba(133,79,108,0.18)' }}
+            className="px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground gradient-primary shadow-primary hover:shadow-xl hover:scale-105 active:scale-95 border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             Get Started
           </Link>
-          <BookDemoModal buttonClassName="px-4 py-2 text-sm font-semibold rounded-xl text-[#2B124C] bg-gradient-to-r from-[#FBE4D8] via-[#DFB6B2] to-[#FFD580] shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/40" style={{ boxShadow: '0 4px 24px 0 rgba(255,213,128,0.18)' }} />
+          <BookDemoModal
+            buttonClassName="demo-cta px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200"
+            buttonIcon={<CalendarDays size={14} className="opacity-75 transition-opacity duration-200" aria-hidden="true" />}
+          />
         </div>
 
         {/* Mobile */}
-        <div className="flex md:hidden items-center gap-2">
+        <div className="flex md:hidden items-center gap-2 ml-auto relative z-30">
           <ThemeToggle />
-          <BookDemoModal />
+          <BookDemoModal buttonClassName="demo-cta px-3 py-2 text-sm font-semibold rounded-full" buttonIcon={<CalendarDays size={14} className="opacity-75 transition-opacity duration-200" aria-hidden="true" />} />
           <button
             onClick={() => setOpen(!open)}
             className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground"

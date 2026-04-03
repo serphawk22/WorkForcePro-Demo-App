@@ -19,7 +19,7 @@ export function ThemeToggle() {
         className="h-9 w-9 rounded-xl flex items-center justify-center
                    bg-white/60 border border-primary/20 text-primary"
       >
-        <Moon size={16} />
+        <Moon size={16} className="opacity-75" />
       </button>
     );
   }
@@ -40,7 +40,7 @@ export function ThemeToggle() {
           "bg-white/70 border border-primary/25 text-primary hover:bg-white/90 hover:border-primary/40 shadow-sm",
       ].join(" ")}
     >
-      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+      {isDark ? <Sun size={16} className="opacity-75 transition-opacity duration-200 hover:opacity-100" /> : <Moon size={16} className="opacity-75 transition-opacity duration-200 hover:opacity-100" />}
     </button>
   );
 }

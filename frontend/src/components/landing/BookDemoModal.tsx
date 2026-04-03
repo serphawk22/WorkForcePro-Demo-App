@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogTrigger,
@@ -65,11 +65,13 @@ const INITIAL_FORM: FormData = {
 
 /* ─── component ─── */
 export function BookDemoModal({
-  buttonClassName = "",
+  buttonClassName = "demo-cta px-4 py-2 text-sm font-semibold rounded-full",
   style = {},
+  buttonIcon,
 }: {
   buttonClassName?: string;
   style?: React.CSSProperties;
+  buttonIcon?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -147,7 +149,10 @@ export function BookDemoModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <button className={buttonClassName} style={style}>
-          Book a Demo
+          <span className="inline-flex items-center gap-2">
+            {buttonIcon}
+            <span>Book a Demo</span>
+          </span>
         </button>
       </DialogTrigger>
 

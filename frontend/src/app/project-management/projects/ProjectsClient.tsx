@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
-  deleteTask, getAssignableUsers, createSubtask, getTaskSubtasks, getApiBaseUrl,
-  updateSubtaskStatus, deleteSubtask, searchByPublicId, updateSubtask,
-  Task, TaskCreate, Subtask, SubtaskCreate, User, Workspace, getWorkspaces,
+  deleteTask, getAssignableUsers, getApiBaseUrl, getTaskChildren,
+  searchByPublicId, Task, TaskCreate, User, Workspace, getWorkspaces,
+  TaskComment, getTaskComments, createTaskComment, deleteTaskComment,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -74,14 +74,36 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
-  const [taskSubtasks, setTaskSubtasks] = useState<Record<number, Subtask[]>>({});
+  const [taskChildren, setTaskChildren] = useState<Record<number, Task[]>>({});
   const [showSubtaskModal, setShowSubtaskModal] = useState(false);
   const [selectedTaskForSubtask, setSelectedTaskForSubtask] = useState<number | null>(null);
   const [selectedParentSubtaskId, setSelectedParentSubtaskId] = useState<number | null>(null);
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
+  const [expandedSubtasks, setExpandedSubtasks] = useState<Set<number>>(new Set());
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [editingTaskForm, setEditingTaskForm] = useState<TaskEditForm | null>(null);
+  const [selectedSubtaskForPanel, setSelectedSubtaskForPanel] = useState<Task | null>(null);
+  const [selectedSubtaskRootTaskForPanel, setSelectedSubtaskRootTaskForPanel] = useState<Task | null>(null);
+  const [isDetailSaving, setIsDetailSaving] = useState(false);
+  const [subtaskComments, setSubtaskComments] = useState<TaskComment[]>([]);
+  const [newSubtaskComment, setNewSubtaskComment] = useState("");
+  const [isCommentSaving, setIsCommentSaving] = useState(false);
+  const [loadingSubtaskComments, setLoadingSubtaskComments] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
+  const [detailDraft, setDetailDraft] = useState({
+    title: "",
+    description: "",
+    status: "todo" as Task["status"],
+    priority: "medium" as Task["priority"],
+    assigned_to: "__unassigned",
+    assigned_by: "",
+    start_date: "",
+    due_date: "",
+    completed_at: "",
+    estimated_hours: "",
+    actual_hours: "",
+  });
   const [isUpdatingTask, setIsUpdatingTask] = useState(false);
   const [isSearchingById, setIsSearchingById] = useState(false);
   const [resolutionEdits, setResolutionEdits] = useState<Record<number, string>>({});
@@ -172,8 +194,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else cur.add(d);
     setNewTask({ ...newTask, repeat_days: Array.from(cur).sort((a, b) => a - b) });
   };
-  const [newSubtask, setNewSubtask] = useState<SubtaskCreate>({
-    title: "", description: "", assigned_to: undefined,
+  const [newSubtask, setNewSubtask] = useState<Partial<TaskCreate>>({
+    title: "", description: "", assigned_to: undefined, priority: "medium",
   });
 
   // Auto-redirect on 6-char Ref ID
@@ -200,7 +222,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
     const [tasksResult, empResult, workspaceResult] = await Promise.all([
-      getAllTasks(statusFilter || undefined, undefined, workspaceFilter),
+      getAllTasks(statusFilter || undefined, undefined, workspaceFilter, { rootsOnly: true }),
       getAssignableUsers(),
       getWorkspaces(),
     ]);
@@ -231,11 +253,25 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const expandedTasksRef = React.useRef(expandedTasks);
   useEffect(() => { expandedTasksRef.current = expandedTasks; }, [expandedTasks]);
 
+  const fetchAllDescendants = useCallback(async (parentId: number): Promise<Task[]> => {
+    const result = await getTaskChildren(parentId);
+    if (!result.data || result.data.length === 0) {
+      return [];
+    }
+
+    const directChildren = result.data;
+    const descendantGroups = await Promise.all(
+      directChildren.map((child) => fetchAllDescendants(child.id))
+    );
+
+    return [...directChildren, ...descendantGroups.flat()];
+  }, []);
+
   // Silent background fetch — no spinner, just updates state
   const loadSubtasksQuietly = useCallback(async (taskId: number) => {
-    const result = await getTaskSubtasks(taskId);
-    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
-  }, []);
+    const descendants = await fetchAllDescendants(taskId);
+    setTaskChildren(prev => ({ ...prev, [taskId]: descendants }));
+  }, [fetchAllDescendants]);
 
   // Visible fetch — shows spinner inside the expansion panel
   const loadSubtasks = useCallback(async (taskId: number) => {
@@ -244,10 +280,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
       next.add(taskId);
       return next;
     });
-    const result = await getTaskSubtasks(taskId);
-    if (result.data) setTaskSubtasks(prev => ({ ...prev, [taskId]: result.data! }));
+    const descendants = await fetchAllDescendants(taskId);
+    setTaskChildren(prev => ({ ...prev, [taskId]: descendants }));
     setLoadingSubtasksFor(prev => { const next = new Set(prev); next.delete(taskId); return next; });
-  }, []);
+  }, [fetchAllDescendants]);
 
   useEffect(() => {
     try {
@@ -332,6 +368,24 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else { toast.success("Reporter updated!"); loadData(); }
   };
 
+  const handleSubtaskDateChange = async (
+    taskId: number,
+    field: "start_date" | "due_date",
+    value: string
+  ) => {
+    const payload = { [field]: value || undefined } as Pick<TaskCreate, "start_date" | "due_date">;
+    const result = await updateTask(taskId, payload);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(field === "due_date" ? "Due date updated!" : "Start date updated!");
+    await loadData(true);
+    expandedTasksRef.current.forEach((expandedTaskId) => {
+      loadSubtasksQuietly(expandedTaskId);
+    });
+  };
+
   const parseRepeatDays = (value?: string | null): number[] => {
     if (!value) return [];
     try {
@@ -372,17 +426,23 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else { toast.success("Project moved to workspace"); loadData(true); }
   };
 
-  const handleSubtaskAssigneeChange = async (subtaskId: number, taskId: number, userId?: number) => {
-    const result = await updateSubtask(subtaskId, { assigned_to: userId });
-    if (result.error) toast.error(result.error);
-    else { toast.success("Subtask assignee updated!"); await loadSubtasks(taskId); }
-  };
-
   const handleDeleteTask = async (taskId: number) => {
     if (!confirm("Delete this project?")) return;
     const result = await deleteTask(taskId);
-    if (result.error) toast.error(result.error);
-    else { toast.success("Project deleted!"); loadData(); }
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    if (selectedSubtaskForPanel?.id === taskId) {
+      setSelectedSubtaskForPanel(null);
+      setSelectedSubtaskRootTaskForPanel(null);
+      setSubtaskComments([]);
+      setNewSubtaskComment("");
+    }
+
+    toast.success("Project deleted!");
+    loadData();
   };
 
   const handleUpdateTask = async (e: React.FormEvent) => {
@@ -431,45 +491,47 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSubtask.title.trim()) { toast.error("Subtask title is required"); return; }
-    // Capture immediately so closures stay valid after state resets
+    if (!newSubtask.title?.trim()) { toast.error("Subtask title is required"); return; }
     const taskId = selectedTaskForSubtask;
     if (!taskId) { toast.error("No task selected"); return; }
+    const parentTask = tasks.find((task) => task.id === taskId) || taskChildren[taskId]?.find((task) => task.id === taskId) || null;
+    if (!parentTask) {
+      toast.error("Parent task not found");
+      return;
+    }
+
     setIsCreatingSubtask(true);
-    const payload: SubtaskCreate = {
-      ...newSubtask,
-      parent_subtask_id: selectedParentSubtaskId ?? undefined,
+    const payload: TaskCreate = {
+      title: newSubtask.title,
+      description: newSubtask.description || "",
+      priority: newSubtask.priority as TaskCreate["priority"],
+      workspace_id: parentTask.workspace_id || workspaceFilter || 0,
+      parent_task_id: selectedParentSubtaskId ?? taskId,
+      assigned_to: newSubtask.assigned_to,
+      assigned_by: user?.id,
+      due_date: newSubtask.due_date,
+      estimated_hours: typeof newSubtask.estimated_hours === "number" ? newSubtask.estimated_hours : undefined,
     };
-    const result = await createSubtask(taskId, payload);
+    const result = await createTask(payload);
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success("Subtask created!");
-      // Optimistically add the returned subtask immediately — no need to wait for a reload
-      if (result.data) {
-        setTaskSubtasks(prev => ({
-          ...prev,
-          [taskId]: [...(prev[taskId] ?? []), result.data!],
-        }));
-      }
-      // Ensure the task row is expanded so the subtask is visible
+      toast.success("Child task created");
       setExpandedTasks((prev) => {
         const next = new Set(prev);
         next.add(taskId);
         return next;
       });
-      // Reset modal state
       setShowSubtaskModal(false);
-      setNewSubtask({ title: "", description: "", assigned_to: undefined });
+      setNewSubtask({ title: "", description: "", assigned_to: undefined, priority: "medium" });
       setSelectedTaskForSubtask(null);
       setSelectedParentSubtaskId(null);
-      // Sync with server in the background to get latest data (assignee names, etc.)
-      loadSubtasks(taskId);
+      await loadSubtasks(taskId);
     }
     setIsCreatingSubtask(false);
   };
 
-  type SubtaskNode = Subtask & { children: SubtaskNode[] };
+  type HierarchyTaskNode = Task & { children: HierarchyTaskNode[] };
 
   const openSubtaskModal = (taskId: number, parentSubtaskId: number | null = null) => {
     setSelectedTaskForSubtask(taskId);
@@ -477,17 +539,17 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     setShowSubtaskModal(true);
   };
 
-  const buildSubtaskTree = (subtasks: Subtask[]): SubtaskNode[] => {
-    const nodeMap = new Map<number, SubtaskNode>();
-    subtasks.forEach((subtask) => {
-      nodeMap.set(subtask.id, { ...subtask, children: [] });
+  const buildSubtaskTree = (children: Task[]): HierarchyTaskNode[] => {
+    const nodeMap = new Map<number, HierarchyTaskNode>();
+    children.forEach((child) => {
+      nodeMap.set(child.id, { ...child, children: [] });
     });
 
-    const roots: SubtaskNode[] = [];
-    subtasks.forEach((subtask) => {
-      const node = nodeMap.get(subtask.id)!;
-      if (subtask.parent_subtask_id && nodeMap.has(subtask.parent_subtask_id)) {
-        nodeMap.get(subtask.parent_subtask_id)!.children.push(node);
+    const roots: HierarchyTaskNode[] = [];
+    children.forEach((child) => {
+      const node = nodeMap.get(child.id)!;
+      if (child.parent_task_id && nodeMap.has(child.parent_task_id)) {
+        nodeMap.get(child.parent_task_id)!.children.push(node);
       } else {
         roots.push(node);
       }
@@ -496,154 +558,396 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     return roots;
   };
 
-  const renderSubtaskTree = (nodes: SubtaskNode[], task: Task, depth = 0): React.ReactNode => {
-    return nodes.map((subtask) => (
-      <div key={subtask.id} className="space-y-2" style={{ marginLeft: `${depth * 22}px` }}>
-        <div
-          className="relative rounded-xl p-4 flex items-center justify-between transition-all duration-200 shadow-sm bg-card border border-border hover:border-primary/30"
+  const renderSubtaskRows = (nodes: HierarchyTaskNode[], rootTask: Task, depth = 0): React.ReactNode[] => {
+    return nodes.flatMap((subtask) => {
+      const hasChildren = subtask.children.length > 0;
+      const isExpanded = expandedSubtasks.has(subtask.id);
+      const row = (
+        <tr
+          key={subtask.id}
+          className="cursor-pointer transition-all duration-200 hover:bg-secondary/40 hover:shadow-[0_0_0_1px_rgba(168,85,247,0.26)] hover:scale-[1.002] active:scale-[0.998]"
+          onClick={() => openSubtaskPanel(subtask, rootTask)}
         >
-          <span className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${
-            subtask.status === "completed" || subtask.status === "approved" ? "bg-green-500" :
-            subtask.status === "in_progress" ? "bg-blue-500" :
-            subtask.status === "reviewing" ? "bg-amber-500" :
-            subtask.status === "rejected" ? "bg-red-500" :
-            "bg-primary/40"
-          }`} />
-
-          <div className="flex-1 ml-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <ListTree size={14} className="text-primary shrink-0" />
-              {subtask.public_id && (
-                <>
-                  <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded select-all tracking-wider bg-primary/10 text-primary border border-primary/20">
-                    {subtask.public_id}
-                  </span>
-                  <button onClick={(e) => handleCopyRefId(e, subtask.public_id)} className="text-muted-foreground hover:text-primary transition-colors">
-                    <Copy size={10} />
-                  </button>
-                </>
-              )}
-              <span className="text-sm font-medium text-card-foreground">{subtask.title}</span>
-              {(isAdmin || task.assigned_to === user?.id) && (
+          <td className="py-3.5 pl-4">
+            <div className="flex items-center justify-center">
+              {hasChildren ? (
                 <button
-                  onClick={() => openSubtaskModal(task.id, subtask.id)}
-                  className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-500 hover:bg-blue-500/20 transition-colors"
-                  title="Add sub-subtask"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedSubtasks((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(subtask.id)) next.delete(subtask.id);
+                      else next.add(subtask.id);
+                      return next;
+                    });
+                  }}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                  aria-label={isExpanded ? "Collapse child tasks" : "Expand child tasks"}
                 >
-                  <Plus size={10} />
+                  {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
+              ) : (
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary/20 bg-background/70 text-primary/40 dark:border-primary/30 dark:bg-white/5 dark:text-primary/60">
+                  <ChevronRight size={12} />
+                </span>
               )}
             </div>
-
-            {(isAdmin || task.assigned_to === user?.id) ? (
-              <div className="flex items-center gap-2 mt-2 ml-6">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold bg-primary/15 text-primary border border-primary/20">
-                  {subtask.assignee_name ? subtask.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
-                </div>
-                <DropdownMenu
-                  value={subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned"}
-                  onValueChange={(value) => handleSubtaskAssigneeChange(subtask.id, task.id, value === "__unassigned" ? undefined : Number(value))}
-                  options={[
-                    { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
-                    ...employeeOptions,
-                  ]}
-                  placeholder="Assignee"
-                  triggerClassName="w-[220px] rounded-xl px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+          </td>
+          <td className="py-3.5 px-4">
+            {subtask.public_id ? (
+              <div className="flex items-center gap-1">
+                <span className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
+                  {subtask.public_id}
+                </span>
+                <button onClick={(e) => handleCopyRefId(e, subtask.public_id)} className="text-muted-foreground hover:text-purple-400 transition-colors p-0.5">
+                  <Copy size={11} />
+                </button>
+              </div>
+            ) : <span className="text-[10px] text-muted-foreground italic">—</span>}
+          </td>
+          <td className="py-3.5 px-4 min-w-[280px]">
+            <div className="relative" style={{ paddingLeft: `${depth * 20 + 14}px` }}>
+              <span className="pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-y-1/2 bg-primary/30 dark:bg-primary/45" />
+              <span className="pointer-events-none absolute left-3 top-0 h-full w-px bg-primary/20 dark:bg-primary/35" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-card-foreground">{subtask.title}</span>
+                {(isAdmin || rootTask.assigned_to === user?.id) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openSubtaskModal(rootTask.id, subtask.id); }}
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-500 hover:bg-blue-500/20 transition-colors"
+                    title="Add sub-subtask"
+                  >
+                    <Plus size={10} />
+                  </button>
+                )}
+              </div>
+              {subtask.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{subtask.description}</p>}
+            </div>
+          </td>
+          <td className="py-3.5 px-4 min-w-[140px]">
+            <div onClick={(e) => e.stopPropagation()}>
+              <div className="inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-card-foreground opacity-90">
+                <span
+                  className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
+                  style={{ backgroundColor: subtask.workspace_color || rootTask.workspace_color || "#6b7280" }}
                 />
+                <span>{subtask.workspace_icon || rootTask.workspace_icon || "•"}</span>
+                <span>{subtask.workspace_name || rootTask.workspace_name || "Inherited"}</span>
               </div>
-            ) : subtask.assignee_name && (
-              <div className="flex items-center gap-2 mt-2 ml-6">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold bg-primary/15 text-primary border border-primary/20">
-                  {subtask.assignee_name.split(" ").map(n => n[0]).join("")}
-                </div>
-                <span className="text-xs font-medium text-muted-foreground">{subtask.assignee_name}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
+            </div>
+          </td>
+          <td className="py-3.5 px-4">
+            <div onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu
+                value={subtask.priority}
+                onValueChange={(value) => handlePriorityChange(subtask.id, value as "low" | "medium" | "high")}
+                options={priorityOptions}
+                placeholder="Priority"
+                triggerClassName={`w-[132px] rounded-xl px-2.5 py-1.5 text-[10px] font-semibold capitalize ${priorityColors[subtask.priority]}`}
+              />
+            </div>
+          </td>
+          <td className="py-3.5 px-4">
+            <div onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu
+                value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
+                onValueChange={(value) => handleStatusChange(subtask.id, value)}
+                options={isAdmin ? adminStatusOptions : employeeStatusOptions}
+                placeholder="Status"
+                disabled={!isAdmin && (subtask.status === "submitted" || subtask.status === "approved")}
+                triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
+              />
+            </div>
+          </td>
+          <td className="py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px]">
             {isAdmin ? (
-              subtask.status === "todo" || subtask.status === "in_progress" ? (
-                <span className={`text-xs rounded-lg px-3 py-1.5 font-semibold border ${
-                  subtask.status === "in_progress"
-                    ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
-                    : "bg-muted border-border text-muted-foreground"
-                }`}>
-                  {subtask.status === "in_progress" ? "In Progress" : "To Do"}
-                </span>
-              ) : subtask.status === "completed" ? (
+              <div onClick={(e) => e.stopPropagation()}>
                 <DropdownMenu
-                  value="reviewing"
-                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
-                  options={adminStatusOptions}
-                  placeholder="Completed — Review…"
-                  triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-400"
+                  value={String(subtask.assigned_by)}
+                  onValueChange={(value) => handleReporterChange(subtask.id, Number(value))}
+                  options={employeeOptions}
+                  placeholder="Reporter"
+                  triggerClassName="w-[190px] rounded-xl px-2.5 py-1.5 text-xs font-medium text-card-foreground"
                 />
-              ) : (
-                <DropdownMenu
-                  value={subtask.status}
-                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
-                  options={adminStatusOptions}
-                  placeholder="Status"
-                  triggerClassName="w-[160px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-background border border-border text-foreground"
-                />
-              )
+              </div>
             ) : (
-              ["reviewing","approved","rejected"].includes(subtask.status) ? (
-                <span className={`text-xs rounded-lg px-3 py-1.5 font-semibold border ${
-                  subtask.status === "approved" ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400" :
-                  subtask.status === "rejected" ? "bg-red-500/10 border-red-500/30 text-red-500" :
-                  "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
-                }`}>
-                  {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
-                </span>
+              getReporterName(subtask)
+            )}
+          </td>
+          <td className="py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px]">
+            <input
+              type="text"
+              value={getEditableResolution(subtask)}
+              onChange={(e) => handleResolutionEdit(subtask.id, e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Enter resolution"
+              className="w-full rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-xs text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/40"
+            />
+          </td>
+          <td className="py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap">
+            <input
+              type="date"
+              value={subtask.start_date ? new Date(subtask.start_date).toISOString().slice(0, 10) : ""}
+              onChange={(e) => handleSubtaskDateChange(subtask.id, "start_date", e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-card-foreground"
+            />
+          </td>
+          <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+            {getTaskUpdatedDate(subtask)}
+          </td>
+          <td className="py-3.5 px-4 min-w-[220px]">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
+                {subtask.assignee_name ? subtask.assignee_name.split(" ").map((n) => n[0]).join("") : "?"}
+              </div>
+              {isAdmin ? (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu
+                    value={subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned"}
+                    onValueChange={(value) => handleAssigneeChange(subtask.id, value === "__unassigned" ? undefined : Number(value))}
+                    options={[
+                      { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
+                      ...employeeOptions,
+                    ]}
+                    placeholder="Assignee"
+                    triggerClassName="w-[210px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                  />
+                </div>
               ) : (
-                <DropdownMenu
-                  value={subtask.status}
-                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, task.id, value)}
-                  options={[
-                    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
-                    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-                    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
-                  ]}
-                  placeholder="Status"
-                  disabled={subtask.assigned_to !== user?.id}
-                  triggerClassName="w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-semibold bg-background border border-border text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-              )
+                <span className="text-sm font-medium text-card-foreground">
+                  {subtask.assignee_name || "Unassigned"}
+                  {subtask.assigned_to === user?.id && (
+                    <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
+                  )}
+                </span>
+              )}
+            </div>
+          </td>
+          <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+            <input
+              type="date"
+              value={subtask.due_date ? new Date(subtask.due_date).toISOString().slice(0, 10) : ""}
+              onChange={(e) => handleSubtaskDateChange(subtask.id, "due_date", e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-card-foreground"
+            />
+          </td>
+          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+            {isAdmin && (
+              <div className="flex items-center justify-center gap-3">
+                <button onClick={(e) => { e.stopPropagation(); openSubtaskPanel(subtask, rootTask); }} className="text-primary hover:text-primary/80 text-xs">Edit</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(subtask.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
+              </div>
             )}
-            {(isAdmin || task.assigned_to === user?.id) && (
-              <button
-                onClick={() => handleDeleteSubtask(subtask.id, task.id)}
-                className="text-xs font-medium text-red-500 hover:text-red-400 border border-red-500/30 hover:border-red-400/50 rounded-lg px-2.5 py-1.5 transition-colors"
-              >
-                Delete
-              </button>
-            )}
-          </div>
-        </div>
+          </td>
+        </tr>
+      );
 
-        {subtask.children.length > 0 && renderSubtaskTree(subtask.children, task, depth + 1)}
-      </div>
-    ));
-  };
+      if (!hasChildren || !isExpanded) {
+        return [row];
+      }
 
-  const handleSubtaskStatusChange = async (subtaskId: number, taskId: number, status: string) => {
-    const result = await updateSubtaskStatus(subtaskId, status);
-    if (result.error) toast.error(result.error);
-    else { toast.success("Subtask updated!"); await loadSubtasks(taskId); }
-  };
-
-  const handleDeleteSubtask = async (subtaskId: number, taskId: number) => {
-    if (!confirm("Delete this subtask?")) return;
-    const result = await deleteSubtask(subtaskId);
-    if (result.error) toast.error(result.error);
-    else { toast.success("Subtask deleted!"); await loadSubtasks(taskId); }
+      return [row, ...renderSubtaskRows(subtask.children, rootTask, depth + 1)];
+    });
   };
 
   const handleCopyRefId = (e: React.MouseEvent, refId: string) => {
     e.stopPropagation();
     navigator.clipboard.writeText(refId).then(() => toast.success(`Copied ${refId}`));
+  };
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return "-";
+    return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const getTimelineChip = (task: Task) => {
+    if (task.completed_at && task.start_date) {
+      const start = new Date(task.start_date).getTime();
+      const done = new Date(task.completed_at).getTime();
+      const days = Math.max(1, Math.ceil((done - start) / (1000 * 60 * 60 * 24)));
+      return { label: `Completed in ${days} day${days === 1 ? "" : "s"}`, tone: "green" };
+    }
+
+    if (!task.due_date) {
+      return { label: "No due date", tone: "neutral" };
+    }
+
+    const now = new Date();
+    const due = new Date(task.due_date);
+    const delta = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (delta < 0) {
+      const over = Math.abs(delta);
+      return { label: `Overdue by ${over} day${over === 1 ? "" : "s"}`, tone: "red" };
+    }
+    if (delta <= 2) {
+      return { label: `Due in ${delta} day${delta === 1 ? "" : "s"}`, tone: "orange" };
+    }
+    return { label: `Due in ${delta} days`, tone: "neutral" };
+  };
+
+  const getTimelineChipClass = (tone: string) => {
+    if (tone === "green") return "bg-green-500/12 border-green-500/30 text-green-600 dark:text-green-400";
+    if (tone === "orange") return "bg-amber-500/12 border-amber-500/30 text-amber-600 dark:text-amber-400";
+    if (tone === "red") return "bg-red-500/12 border-red-500/30 text-red-500";
+    return "bg-muted border-border text-muted-foreground";
+  };
+
+  const loadSubtaskComments = useCallback(async (taskId: number) => {
+    setLoadingSubtaskComments(true);
+    const response = await getTaskComments(taskId);
+    if (response.error) {
+      toast.error(response.error);
+      setSubtaskComments([]);
+    } else {
+      setSubtaskComments(response.data || []);
+    }
+    setLoadingSubtaskComments(false);
+  }, []);
+
+  const openSubtaskPanel = (subtask: Task, rootTask: Task) => {
+    setSelectedSubtaskForPanel(subtask);
+    setSelectedSubtaskRootTaskForPanel(rootTask);
+    setNewSubtaskComment("");
+    setDetailDraft({
+      title: subtask.title || "",
+      description: subtask.description || "",
+      status: !isAdmin && subtask.status === "submitted" ? "done" : subtask.status,
+      priority: subtask.priority,
+      assigned_to: subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned",
+      assigned_by: String(subtask.assigned_by || ""),
+      start_date: subtask.start_date ? new Date(subtask.start_date).toISOString().slice(0, 10) : "",
+      due_date: subtask.due_date || "",
+      completed_at: subtask.completed_at ? new Date(subtask.completed_at).toISOString().slice(0, 10) : "",
+      estimated_hours: subtask.estimated_hours != null ? String(subtask.estimated_hours) : "",
+      actual_hours: subtask.actual_hours != null ? String(subtask.actual_hours) : "",
+    });
+
+    loadSubtaskComments(subtask.id);
+  };
+
+  const handleAddSubtaskComment = async () => {
+    if (!selectedSubtaskForPanel || !newSubtaskComment.trim()) return;
+
+    setIsCommentSaving(true);
+    const response = await createTaskComment({
+      task_id: selectedSubtaskForPanel.id,
+      comment: newSubtaskComment.trim(),
+    });
+
+    if (response.error) {
+      toast.error(response.error);
+    } else {
+      setNewSubtaskComment("");
+      toast.success("Comment added");
+      await loadSubtaskComments(selectedSubtaskForPanel.id);
+    }
+    setIsCommentSaving(false);
+  };
+
+  const handleDeleteSubtaskComment = async (commentId: number) => {
+    setDeletingCommentId(commentId);
+    const response = await deleteTaskComment(commentId);
+    if (response.error) {
+      toast.error(response.error);
+    } else if (selectedSubtaskForPanel) {
+      await loadSubtaskComments(selectedSubtaskForPanel.id);
+      toast.success("Comment deleted");
+    }
+    setDeletingCommentId(null);
+  };
+
+  const saveTaskDetails = async () => {
+    if (!selectedSubtaskForPanel) return;
+
+    const title = detailDraft.title.trim();
+    if (!title) {
+      toast.error("Subtask title is required");
+      return;
+    }
+
+    const parseOptionalNumber = (value: string) => {
+      if (!value.trim()) return undefined;
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    };
+
+    const assignedToValue = detailDraft.assigned_to === "__unassigned"
+      ? undefined
+      : parseOptionalNumber(detailDraft.assigned_to);
+    const assignedByValue = parseOptionalNumber(detailDraft.assigned_by);
+    const estimatedHoursValue = parseOptionalNumber(detailDraft.estimated_hours);
+    const actualHoursValue = parseOptionalNumber(detailDraft.actual_hours);
+
+    setIsDetailSaving(true);
+    try {
+      const updateResult = await updateTask(selectedSubtaskForPanel.id, {
+        title,
+        description: detailDraft.description.trim(),
+        priority: detailDraft.priority,
+        assigned_to: assignedToValue,
+        assigned_by: assignedByValue,
+        start_date: detailDraft.start_date || undefined,
+        due_date: detailDraft.due_date || undefined,
+        completed_at: detailDraft.completed_at || undefined,
+        estimated_hours: estimatedHoursValue,
+        actual_hours: actualHoursValue,
+      });
+
+      if (updateResult.error) {
+        toast.error(updateResult.error);
+        return;
+      }
+
+      const normalizedStatus = detailDraft.status === "done" ? "submitted" : detailDraft.status;
+      if (normalizedStatus !== selectedSubtaskForPanel.status) {
+        const statusResult = await updateTaskStatus(selectedSubtaskForPanel.id, normalizedStatus as Task["status"]);
+        if (statusResult.error) {
+          toast.error(statusResult.error);
+          return;
+        }
+      }
+
+      const selectedAssignee = employees.find((emp) => emp.id === assignedToValue);
+      const selectedReporter = employees.find((emp) => emp.id === assignedByValue);
+      const updatedSubtask: Task = {
+        ...selectedSubtaskForPanel,
+        title,
+        description: detailDraft.description.trim(),
+        priority: detailDraft.priority,
+        status: normalizedStatus as Task["status"],
+        assigned_to: assignedToValue,
+        assigned_by: assignedByValue,
+        assignee_name: assignedToValue ? (selectedAssignee?.name || selectedSubtaskForPanel.assignee_name) : null,
+        assigned_by_name: assignedByValue ? (selectedReporter?.name || selectedSubtaskForPanel.assigned_by_name) : null,
+        start_date: detailDraft.start_date || null,
+        due_date: detailDraft.due_date || null,
+        completed_at: detailDraft.completed_at || null,
+        estimated_hours: estimatedHoursValue ?? null,
+        actual_hours: actualHoursValue ?? null,
+      };
+
+      setSelectedSubtaskForPanel(updatedSubtask);
+      setTaskChildren((prev) => {
+        const next: Record<number, Task[]> = {};
+        Object.entries(prev).forEach(([taskId, subtasks]) => {
+          next[Number(taskId)] = subtasks.map((subtask) =>
+            subtask.id === updatedSubtask.id ? { ...subtask, ...updatedSubtask } : subtask
+          );
+        });
+        return next;
+      });
+
+      toast.success("Subtask updated");
+      await loadData(true);
+      expandedTasksRef.current.forEach((taskId) => {
+        loadSubtasksQuietly(taskId);
+      });
+    } finally {
+      setIsDetailSaving(false);
+    }
   };
 
   const filteredTasks = tasks.filter(t =>
@@ -653,7 +957,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   );
 
   const getTaskUpdatedDate = (task: Task) => {
-    const subtasks = taskSubtasks[task.id] || [];
+    const subtasks = taskChildren[task.id] || [];
     const latestSubtaskTs = subtasks.reduce<number>(
       (latest, s) => {
         const ts = Date.parse(s.updated_at || s.created_at || "");
@@ -773,8 +1077,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Resolution</th>
                   <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Start Date</th>
                   <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Updated Date</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Due Date</th>
                   <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Assignee</th>
+                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Due Date</th>
                   <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -782,16 +1086,14 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 {filteredTasks.map((task) => (
                   <React.Fragment key={task.id}>
                     <tr
-                      className="hover:bg-secondary/30 transition-colors cursor-pointer"
-                      onClick={() => {
-                        if (task.workspace_id) router.push(`/project-management/workspaces/${task.workspace_id}/projects/${task.id}`);
-                        else router.push(`/project-management/${task.id}`);
-                      }}
+                      className="cursor-pointer transition-all duration-200 hover:bg-secondary/40 hover:shadow-[0_0_0_1px_rgba(168,85,247,0.26)] hover:scale-[1.002] active:scale-[0.998]"
+                      onClick={() => router.push(`/project-management/${task.id}`)}
                     >
                       <td className="py-3.5 pl-4">
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleExpandTask(task.id); }}
                           className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={expandedTasks.has(task.id) ? "Collapse subtasks" : "Expand subtasks"}
                         >
                           {expandedTasks.has(task.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
@@ -826,33 +1128,14 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                                 <Plus size={10} />
                               </button>
                             )}
-                            {!isAdmin && task.assigned_to === user?.id && (
-                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
-                                Assigned to You
-                              </span>
-                            )}
-                            {taskSubtasks[task.id]?.length > 0 && (
+                            {taskChildren[task.id]?.length > 0 && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-500">
                                 <ListTree size={10} />
-                                {taskSubtasks[task.id].filter(s => s.status === "completed").length}/{taskSubtasks[task.id].length}
+                                {taskChildren[task.id].filter((s) => s.status === "approved").length}/{taskChildren[task.id].length}
                               </span>
                             )}
                           </div>
                           {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
-                          {(task.github_link || task.deployed_link) && (
-                            <div className="flex gap-2 mt-1.5">
-                              {task.github_link && (
-                                <a href={task.github_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600" onClick={e => e.stopPropagation()}>
-                                  <Github size={12} /> GitHub
-                                </a>
-                              )}
-                              {task.deployed_link && (
-                                <a href={task.deployed_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-green-500 hover:text-green-600" onClick={e => e.stopPropagation()}>
-                                  <ExternalLink size={12} /> Live Demo
-                                </a>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 min-w-[140px]">
@@ -931,10 +1214,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                       <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
                         {getTaskUpdatedDate(task)}
                       </td>
-                      <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
-                        {task.due_date ? new Date(task.due_date).toLocaleDateString("en-IN") : "--"}
-                      </td>
-                      <td className="py-3.5 px-4 min-w-[180px]">
+                      <td className="py-3.5 px-4 min-w-[220px]">
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                             {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
@@ -962,6 +1242,14 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           )}
                         </div>
                       </td>
+                      <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          <span>{formatDate(task.due_date)}</span>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getTimelineChipClass(getTimelineChip(task).tone)}`}>
+                            {getTimelineChip(task).label}
+                          </span>
+                        </div>
+                      </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {isAdmin && (
                           <div className="flex items-center justify-center gap-3">
@@ -974,23 +1262,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
                     {/* Subtasks expansion */}
                     {expandedTasks.has(task.id) && (
-                      <tr>
-                        <td colSpan={13} className="py-0 px-0 bg-primary/[0.04] dark:bg-white/[0.02]">
-                          <div className="px-12 py-4">
-                            {loadingSubtasksFor.has(task.id) ? (
-                              <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-                                <Loader2 size={13} className="animate-spin" /> Loading subtasks…
-                              </div>
-                            ) : taskSubtasks[task.id]?.length > 0 ? (
-                              <div className="space-y-2.5">
-                                {renderSubtaskTree(buildSubtaskTree(taskSubtasks[task.id]), task)}
-                              </div>
-                            ) : (
-                              <p className="text-center text-muted-foreground text-xs py-4">No subtasks yet. Click &ldquo;+&rdquo; next to the task name to create one.</p>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                      loadingSubtasksFor.has(task.id) ? (
+                        <tr>
+                          <td colSpan={13} className="py-3 px-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <Loader2 size={13} className="animate-spin" /> Loading subtasks…
+                            </div>
+                          </td>
+                        </tr>
+                      ) : taskChildren[task.id]?.length > 0 ? (
+                        renderSubtaskRows(buildSubtaskTree(taskChildren[task.id]), task)
+                      ) : (
+                        <tr>
+                          <td colSpan={13} className="py-3 px-4 text-center text-muted-foreground text-xs">No subtasks yet. Click &ldquo;+&rdquo; next to the task name to create one.</td>
+                        </tr>
+                      )
                     )}
                   </React.Fragment>
                 ))}

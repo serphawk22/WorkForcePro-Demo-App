@@ -57,6 +57,50 @@ def _workspace_kwargs(workspace: Optional[Workspace], task: Task) -> dict:
         "workspace_color": workspace.color if workspace else None,
     }
 
+def _task_to_with_assignee(session: Session, task: Task) -> TaskWithAssignee:
+    assignee = None
+    if task.assigned_to:
+        assignee_stmt = select(User).where(User.id == task.assigned_to)
+        assignee = session.exec(assignee_stmt).first()
+
+    workspace = None
+    if task.workspace_id:
+        workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
+        workspace = session.exec(workspace_stmt).first()
+
+    assigner = None
+    if task.assigned_by:
+        assigner_stmt = select(User).where(User.id == task.assigned_by)
+        assigner = session.exec(assigner_stmt).first()
+
+    return TaskWithAssignee(
+        id=task.id,
+        public_id=task.public_id,
+        title=task.title,
+        description=task.description,
+        priority=task.priority,
+        due_date=task.due_date,
+        estimated_hours=task.estimated_hours,
+        actual_hours=task.actual_hours,
+        parent_task_id=task.parent_task_id,
+        assigned_to=task.assigned_to,
+        assigned_by=task.assigned_by,
+        status=task.status,
+        done_by_employee=task.done_by_employee,
+        github_link=task.github_link,
+        deployed_link=task.deployed_link,
+        **_workspace_kwargs(workspace, task),
+        start_date=task.start_date,
+        completed_at=task.completed_at,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+        assignee_name=assignee.name if assignee else None,
+        assignee_email=assignee.email if assignee else None,
+        assigned_by_name=assigner.name if assigner else None,
+        progress=calculate_task_progress(task, session),
+        **_recurrence_kwargs(task),
+    )
+
 
 # Helper function to calculate task progress
 def calculate_task_progress(task: Task, session: Session) -> int:
@@ -164,6 +208,9 @@ async def get_my_tasks(
             description=task.description,
             priority=task.priority,
             due_date=task.due_date,
+            estimated_hours=task.estimated_hours,
+            actual_hours=task.actual_hours,
+            parent_task_id=task.parent_task_id,
             assigned_to=task.assigned_to,
             assigned_by=task.assigned_by,
             status=task.status,
@@ -172,6 +219,7 @@ async def get_my_tasks(
             deployed_link=task.deployed_link,
             **_workspace_kwargs(workspace, task),
             start_date=task.start_date,
+            completed_at=task.completed_at,
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
@@ -499,6 +547,10 @@ async def update_task_status(
                 )
     
     task.status = new_status
+    if new_status == TaskStatus.approved:
+        task.completed_at = task.completed_at or datetime.now(timezone.utc)
+    elif new_status in [TaskStatus.todo, TaskStatus.in_progress, TaskStatus.submitted, TaskStatus.reviewing, TaskStatus.rejected]:
+        task.completed_at = None
     task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()
@@ -570,6 +622,21 @@ async def create_task(
         )
     ensure_same_organization(admin, workspace.organization_id, "workspace")
 
+    parent_task = None
+    if task_data.parent_task_id:
+        parent_task = session.exec(select(Task).where(Task.id == task_data.parent_task_id)).first()
+        if not parent_task:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent task not found",
+            )
+        ensure_same_organization(admin, parent_task.organization_id, "parent task")
+        if parent_task.workspace_id != task_data.workspace_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Child task must belong to the same workspace as the parent task",
+            )
+
     # Verify assignee exists if provided
     assignee = None
     if task_data.assigned_to:
@@ -625,12 +692,17 @@ async def create_task(
         description=task_data.description,
         priority=task_data.priority,
         due_date=task_data.due_date,
+        estimated_hours=task_data.estimated_hours,
+        actual_hours=task_data.actual_hours,
         workspace_id=task_data.workspace_id,
+        parent_task_id=task_data.parent_task_id,
         assigned_to=task_data.assigned_to,
-        assigned_by=admin.id,
+        assigned_by=task_data.assigned_by or admin.id,
         github_link=task_data.github_link,
         deployed_link=task_data.deployed_link,
         public_id=generate_public_id(session, Task),
+        start_date=task_data.start_date or datetime.now(timezone.utc),
+        completed_at=task_data.completed_at,
         is_recurring=is_rec,
         recurrence_type=recurrence_type if is_rec else None,
         recurrence_interval=recurrence_interval if is_rec else 1,
@@ -666,6 +738,8 @@ async def get_all_tasks(
     status_filter: Optional[TaskStatus] = None,
     assigned_to: Optional[int] = None,
     workspace_id: Optional[int] = None,
+    parent_task_id: Optional[int] = None,
+    roots_only: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -678,6 +752,10 @@ async def get_all_tasks(
         statement = statement.where(Task.assigned_to == assigned_to)
     if workspace_id:
         statement = statement.where(Task.workspace_id == workspace_id)
+    if parent_task_id is not None:
+        statement = statement.where(Task.parent_task_id == parent_task_id)
+    elif roots_only:
+        statement = statement.where(Task.parent_task_id.is_(None))
     
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
@@ -706,6 +784,9 @@ async def get_all_tasks(
             description=task.description,
             priority=task.priority,
             due_date=task.due_date,
+            estimated_hours=task.estimated_hours,
+            actual_hours=task.actual_hours,
+            parent_task_id=task.parent_task_id,
             assigned_to=task.assigned_to,
             assigned_by=task.assigned_by,
             status=task.status,
@@ -714,6 +795,7 @@ async def get_all_tasks(
             deployed_link=task.deployed_link,
             **_workspace_kwargs(workspace, task),
             start_date=task.start_date,
+            completed_at=task.completed_at,
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignee_name=assignee.name if assignee else None,
@@ -724,6 +806,34 @@ async def get_all_tasks(
         ))
     
     return result
+
+
+@router.get("/{task_id}/children", response_model=List[TaskWithAssignee])
+async def get_task_children(
+    task_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get direct children (subtasks/sub-subtasks) for a parent task."""
+    parent_task = session.exec(select(Task).where(Task.id == task_id)).first()
+    if not parent_task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        )
+    ensure_same_organization(current_user, parent_task.organization_id, "task")
+
+    children = session.exec(
+        select(Task)
+        .where(
+            Task.organization_id == current_user.organization_id,
+            Task.parent_task_id == task_id,
+        )
+        .order_by(Task.created_at.asc())
+    ).all()
+
+    return [_task_to_with_assignee(session, child) for child in children]
 
 
 @router.get("/{task_id}", response_model=TaskWithAssignee)
@@ -768,6 +878,9 @@ async def get_task(
         description=task.description,
         priority=task.priority,
         due_date=task.due_date,
+        estimated_hours=task.estimated_hours,
+        actual_hours=task.actual_hours,
+        parent_task_id=task.parent_task_id,
         assigned_to=task.assigned_to,
         assigned_by=task.assigned_by,
         status=task.status,
@@ -776,6 +889,7 @@ async def get_task(
         deployed_link=task.deployed_link,
         **_workspace_kwargs(workspace, task),
         start_date=task.start_date,
+        completed_at=task.completed_at,
         created_at=task.created_at,
         updated_at=task.updated_at,
         assignee_name=assignee.name if assignee else None,
@@ -844,6 +958,10 @@ async def get_task_details(
         "workspace_icon": workspace.icon if workspace else None,
         "workspace_color": workspace.color if workspace else None,
         "start_date": task.start_date,
+        "completed_at": task.completed_at,
+        "estimated_hours": task.estimated_hours,
+        "actual_hours": task.actual_hours,
+        "parent_task_id": task.parent_task_id,
         "assigned_to": task.assigned_to,
         "assigned_by": task.assigned_by,
         "status": task.status,
@@ -921,6 +1039,19 @@ async def update_task(
     
     # Update fields
     update_data = task_data.model_dump(exclude_unset=True)
+    if "parent_task_id" in update_data and update_data["parent_task_id"] is not None:
+        parent_task = session.exec(select(Task).where(Task.id == update_data["parent_task_id"])).first()
+        if not parent_task:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent task not found"
+            )
+        ensure_same_organization(admin, parent_task.organization_id, "parent task")
+        if parent_task.id == task.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Task cannot be its own parent"
+            )
     if "workspace_id" in update_data and update_data["workspace_id"] is not None:
         workspace = session.exec(select(Workspace).where(Workspace.id == update_data["workspace_id"])).first()
         if not workspace:
@@ -934,6 +1065,12 @@ async def update_task(
         update_data["repeat_days"] = json.dumps(rd) if isinstance(rd, list) else rd
     for key, value in update_data.items():
         setattr(task, key, value)
+
+    if "status" in update_data:
+        if task.status == TaskStatus.approved:
+            task.completed_at = task.completed_at or datetime.now(timezone.utc)
+        elif "completed_at" not in update_data:
+            task.completed_at = None
     
     task.updated_at = datetime.now(timezone.utc)
     session.add(task)
@@ -1041,6 +1178,28 @@ async def get_task_stats(
     
     # Completion percentage
     completion_percent = round((completed / total * 100), 2) if total > 0 else 0
+
+    tasks_assigned = sum(1 for task in all_tasks if task.assigned_to is not None)
+    tasks_completed = completed
+    delayed_tasks = sum(
+        1
+        for task in all_tasks
+        if task.completed_at and task.due_date and task.completed_at.date() > task.due_date
+    )
+    completed_with_due = [
+        task
+        for task in all_tasks
+        if task.completed_at and task.due_date
+    ]
+    on_time_count = sum(1 for task in completed_with_due if task.completed_at.date() <= task.due_date)
+    on_time_completion = round((on_time_count / len(completed_with_due) * 100), 2) if completed_with_due else 0
+
+    completion_hours = [
+        (task.completed_at - task.start_date).total_seconds() / 3600
+        for task in all_tasks
+        if task.completed_at and task.start_date
+    ]
+    average_completion_time = round(sum(completion_hours) / len(completion_hours), 2) if completion_hours else 0
     
     return {
         "total": total,
@@ -1048,6 +1207,11 @@ async def get_task_stats(
         "in_progress": in_progress,
         "overdue": overdue,
         "completion_percent": completion_percent,
+        "tasks_assigned": tasks_assigned,
+        "tasks_completed": tasks_completed,
+        "on_time_completion": on_time_completion,
+        "delayed_tasks": delayed_tasks,
+        "average_completion_time": average_completion_time,
         # Legacy fields for backward compatibility
         "todo": todo,
         "submitted": submitted,

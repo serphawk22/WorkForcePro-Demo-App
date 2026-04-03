@@ -151,6 +151,11 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',
         # Task start_date column
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_task_id INTEGER',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_hours DOUBLE PRECISION',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_hours DOUBLE PRECISION',
+        'CREATE INDEX IF NOT EXISTS ix_tasks_parent_task_id ON tasks(parent_task_id)',
         # Subtask parent_subtask_id column
         'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',
         # Recurring task rule columns on tasks
@@ -188,6 +193,26 @@ async def lifespan(app: FastAPI):
                             ALTER TABLE tasks
                             ADD CONSTRAINT fk_tasks_workspace_id
                             FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT;
+                        END IF;
+                    END$$;
+                """))
+                conn.commit()
+        except Exception:
+            pass
+
+    if not is_sqlite:
+        # Add task self-reference FK only if missing
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'fk_tasks_parent_task_id'
+                        ) THEN
+                            ALTER TABLE tasks
+                            ADD CONSTRAINT fk_tasks_parent_task_id
+                            FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE CASCADE;
                         END IF;
                     END$$;
                 """))

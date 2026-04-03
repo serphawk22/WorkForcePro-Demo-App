@@ -544,8 +544,8 @@ export default function ProjectDetailPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => {
-                if (workspaceId) router.push(`/project-management/workspaces/${workspaceId}`);
-                else router.push("/project-management");
+                if (workspaceId) router.push(`/project-management/projects?workspace=${workspaceId}`);
+                else router.push("/project-management/projects");
               }}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
