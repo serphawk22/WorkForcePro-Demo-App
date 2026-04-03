@@ -63,6 +63,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<ProjectDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedSubtasks, setExpandedSubtasks] = useState<Set<number>>(new Set());
   
   // Links editing
@@ -127,6 +128,7 @@ export default function ProjectDetailPage() {
     if (!taskId) return;
     
     setIsLoading(true);
+    setLoadError(null);
     try {
       const response = await getProjectDetails(taskId);
       if (response.data) {
@@ -136,12 +138,18 @@ export default function ProjectDetailPage() {
           deployed_link: response.data.task.deployed_link || "",
         });
       } else {
-        toast.error(response.error || "Failed to load project details");
+        const message = response.error || "Failed to load project details";
+        setProject(null);
+        setLoadError(message);
+        toast.error(message);
         router.push("/project-management/projects");
       }
     } catch (error) {
       console.error("Error loading project:", error);
-      toast.error("Failed to load project details");
+      const message = "Failed to load project details";
+      setProject(null);
+      setLoadError(message);
+      toast.error(message);
       router.push("/project-management/projects");
     } finally {
       setIsLoading(false);
@@ -478,7 +486,39 @@ export default function ProjectDetailPage() {
   }
 
   if (!project) {
-    return null;
+    return (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <div className="min-h-screen flex items-center justify-center px-6 py-12">
+            <div className="w-full max-w-md rounded-2xl border border-white/20 bg-white/20 dark:bg-white/5 backdrop-blur-xl p-8 text-center shadow-lg">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                <AlertCircle size={22} />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground">Project unavailable</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {loadError || "We could not load this project right now."}
+              </p>
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => loadProjectDetails()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                >
+                  <Loader2 size={16} className="animate-spin" />
+                  Retry
+                </button>
+                <button
+                  onClick={() => router.push("/project-management/projects")}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  <ArrowLeft size={16} />
+                  Back to Projects
+                </button>
+              </div>
+            </div>
+          </div>
+        </DashboardLayout>
+      </ProtectedRoute>
+    );
   }
 
   const { task, subtasks, comments } = project;
