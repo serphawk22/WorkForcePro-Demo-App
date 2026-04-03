@@ -8,6 +8,7 @@ from datetime import datetime, timezone, date, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
 
@@ -34,6 +35,26 @@ from app.routers.notifications import create_notification
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+
+def _task_visibility_clause(user: User):
+    """Allow org-scoped tasks and legacy null-org tasks created by this user."""
+    return or_(
+        Task.organization_id == user.organization_id,
+        and_(Task.organization_id.is_(None), Task.assigned_by == user.id),
+    )
+
+
+def _ensure_task_access(user: User, task: Task, resource_name: str = "task") -> None:
+    """Back-compat access for legacy tasks that predate organization scoping."""
+    if task.organization_id == user.organization_id:
+        return
+    if task.organization_id is None and task.assigned_by == user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Not authorized to access this {resource_name}",
+    )
 
 
 def _recurrence_kwargs(task: Task) -> dict:
@@ -175,7 +196,7 @@ async def get_my_tasks(
     """Get tasks assigned to current user."""
     statement = select(Task).where(
         Task.assigned_to == current_user.id,
-        Task.organization_id == current_user.organization_id,
+        _task_visibility_clause(current_user),
     )
     
     if status_filter:
@@ -248,7 +269,7 @@ async def get_my_recurring_instances_summary(
     stmt = select(Task).where(
         Task.is_recurring == True,  # noqa: E712
         Task.assigned_to == current_user.id,
-        Task.organization_id == current_user.organization_id,
+        _task_visibility_clause(current_user),
     )
     recurring_tasks = session.exec(stmt).all()
     for t in recurring_tasks:
@@ -323,7 +344,7 @@ async def get_recurring_task_instances(
     task = session.exec(select(Task).where(Task.id == task_id)).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    ensure_same_organization(current_user, task.organization_id, "task")
+    _ensure_task_access(current_user, task, "task")
 
     if not getattr(task, "is_recurring", False):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task is not recurring")
@@ -409,7 +430,7 @@ async def update_task_instance_status(
     task = session.exec(select(Task).where(Task.id == inst.task_id)).first()
     if not task:
         raise HTTPException(status_code=404, detail="Parent task not found")
-    ensure_same_organization(current_user, task.organization_id, "task")
+    _ensure_task_access(current_user, task, "task")
     if current_user.role != UserRole.admin and task.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this instance")
 
@@ -469,7 +490,7 @@ async def update_task_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    ensure_same_organization(current_user, task.organization_id, "task")
+    _ensure_task_access(current_user, task, "task")
     
     # Check permission: must be assigned to task or be admin
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -576,7 +597,7 @@ async def update_task_links(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    ensure_same_organization(current_user, task.organization_id, "task")
+    _ensure_task_access(current_user, task, "task")
     
     # Check permission: must be assigned to task or be admin
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -744,7 +765,7 @@ async def get_all_tasks(
     current_user: User = Depends(get_current_user)
 ):
     """Get all organization tasks visible to every authenticated user."""
-    statement = select(Task).where(Task.organization_id == current_user.organization_id)
+    statement = select(Task).where(_task_visibility_clause(current_user))
     
     if status_filter:
         statement = statement.where(Task.status == status_filter)
@@ -822,12 +843,12 @@ async def get_task_children(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
-    ensure_same_organization(current_user, parent_task.organization_id, "task")
+    _ensure_task_access(current_user, parent_task, "task")
 
     children = session.exec(
         select(Task)
         .where(
-            Task.organization_id == current_user.organization_id,
+            _task_visibility_clause(current_user),
             Task.parent_task_id == task_id,
         )
         .order_by(Task.created_at.asc())
@@ -852,7 +873,7 @@ async def get_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    ensure_same_organization(current_user, task.organization_id, "task")
+    _ensure_task_access(current_user, task, "task")
     
     # Check permission
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -920,7 +941,7 @@ async def get_task_details(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
-    ensure_same_organization(current_user, task.organization_id, "project")
+    _ensure_task_access(current_user, task, "project")
     
     # Check permission
     if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
@@ -1032,7 +1053,7 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    ensure_same_organization(admin, task.organization_id, "task")
+    _ensure_task_access(admin, task, "task")
     
     # Track original assignee for notification logic
     original_assignee_id = task.assigned_to
@@ -1109,7 +1130,7 @@ async def delete_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found"
         )
-    ensure_same_organization(admin, task.organization_id, "task")
+    _ensure_task_access(admin, task, "task")
     
     # Delete related records first to avoid foreign key constraint violations
 
