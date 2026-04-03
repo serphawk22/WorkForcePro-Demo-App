@@ -238,13 +238,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-10 text-sm"
+                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-16 text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/75 hover:text-foreground transition-colors"
+                  className="absolute right-10 top-1/2 -translate-y-1/2 text-foreground/75 hover:text-foreground transition-colors"
                 >
                   {showPassword ? <Eye size={16} /> : <EyeClosed size={16} />}
                 </button>
