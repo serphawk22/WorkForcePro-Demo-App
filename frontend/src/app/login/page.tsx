@@ -230,21 +230,23 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <label className="block text-sm font-medium text-card-foreground mb-2">Password</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-16 text-sm"
-                />
+              <div className="flex items-stretch gap-2">
+                <div className="relative flex-1">
+                  <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-10 top-1/2 -translate-y-1/2 text-foreground/75 hover:text-foreground transition-colors"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/50 text-foreground/75 transition-colors hover:text-foreground"
                 >
                   {showPassword ? <Eye size={16} /> : <EyeClosed size={16} />}
                 </button>
