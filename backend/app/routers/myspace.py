@@ -1,5 +1,5 @@
 from typing import List
-from datetime import date as DateType
+from datetime import date as DateType, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
 from sqlalchemy import and_
@@ -21,6 +21,14 @@ from app.models import (
     HappySheetComment,
     HappySheetCommentCreate,
     HappySheetCommentRead,
+    HappySheetAppreciation,
+    HappySheetAppreciationCreate,
+    HappySheetAppreciationRead,
+    HappySheetStreak,
+    HappySheetStreakRead,
+    HappySheetWeeklyHighlight,
+    HappySheetLeaderboardItem,
+    HappySheetAiInsights,
     DailyHappySheetReportRow,
     DreamProject,
     DreamProjectCreate,
@@ -35,6 +43,52 @@ from app.models import (
 from app.auth import get_current_user, get_current_admin_user
 
 router = APIRouter(prefix="/my-space", tags=["My Space"])
+
+
+def _recompute_user_streak(session: Session, user_id: int) -> HappySheetStreak:
+    dates = session.exec(
+        select(HappySheet.date)
+        .where(HappySheet.user_id == user_id)
+        .order_by(HappySheet.date.desc())
+    ).all()
+    unique_dates = sorted(set(dates), reverse=True)
+    date_set = set(unique_dates)
+
+    today = DateType.today()
+    yesterday = today - timedelta(days=1)
+
+    current_streak = 0
+    start = today if today in date_set else (yesterday if yesterday in date_set else None)
+    if start:
+        cursor = start
+        while cursor in date_set:
+            current_streak += 1
+            cursor = cursor - timedelta(days=1)
+
+    longest_streak = 0
+    if unique_dates:
+        asc = sorted(unique_dates)
+        run = 1
+        longest_streak = 1
+        for i in range(1, len(asc)):
+            if asc[i] == asc[i - 1] + timedelta(days=1):
+                run += 1
+            else:
+                run = 1
+            if run > longest_streak:
+                longest_streak = run
+
+    streak = session.get(HappySheetStreak, user_id)
+    if not streak:
+        streak = HappySheetStreak(user_id=user_id)
+
+    streak.current_streak = current_streak
+    streak.longest_streak = longest_streak
+    streak.last_entry_date = unique_dates[0] if unique_dates else None
+    session.add(streak)
+    session.commit()
+    session.refresh(streak)
+    return streak
 
 # ==================== TASK SHEET ROUTES ====================
 
@@ -125,6 +179,7 @@ async def create_happy_sheet(
             session.add(existing)
             session.commit()
             session.refresh(existing)
+            _recompute_user_streak(session, current_user.id)
             return existing
         happy_sheet = HappySheet(
             user_id=current_user.id,
@@ -138,6 +193,7 @@ async def create_happy_sheet(
         session.add(happy_sheet)
         session.commit()
         session.refresh(happy_sheet)
+        _recompute_user_streak(session, current_user.id)
         return happy_sheet
     except Exception as e:
         print(f"[ERROR] Happy Sheet POST failed: {str(e)}")
@@ -258,7 +314,7 @@ async def get_daily_happy_sheet_report(
     ]
 
 
-@router.get("/happy-sheet/{entry_id}/reactions", response_model=List[HappySheetReactionSummary])
+@router.get("/happy-sheet/entry/{entry_id}/reactions", response_model=List[HappySheetReactionSummary])
 async def get_happy_sheet_reactions(
     entry_id: int,
     session: Session = Depends(get_session),
@@ -291,7 +347,7 @@ async def get_happy_sheet_reactions(
     return result
 
 
-@router.post("/happy-sheet/{entry_id}/reactions")
+@router.post("/happy-sheet/entry/{entry_id}/reactions")
 async def toggle_happy_sheet_reaction(
     entry_id: int,
     payload: HappySheetReactionToggle,
@@ -325,7 +381,7 @@ async def toggle_happy_sheet_reaction(
     return {"active": True}
 
 
-@router.get("/happy-sheet/{entry_id}/comments", response_model=List[HappySheetCommentRead])
+@router.get("/happy-sheet/entry/{entry_id}/comments", response_model=List[HappySheetCommentRead])
 async def get_happy_sheet_comments(
     entry_id: int,
     session: Session = Depends(get_session),
@@ -353,7 +409,7 @@ async def get_happy_sheet_comments(
     ]
 
 
-@router.post("/happy-sheet/{entry_id}/comments", response_model=HappySheetCommentRead, status_code=status.HTTP_201_CREATED)
+@router.post("/happy-sheet/entry/{entry_id}/comments", response_model=HappySheetCommentRead, status_code=status.HTTP_201_CREATED)
 async def add_happy_sheet_comment(
     entry_id: int,
     payload: HappySheetCommentCreate,
@@ -389,6 +445,231 @@ async def add_happy_sheet_comment(
         user_email=current_user.email,
         profile_picture=current_user.profile_picture,
     )
+
+
+@router.get("/happy-sheet/entry/{entry_id}/appreciations", response_model=List[HappySheetAppreciationRead])
+async def get_happy_sheet_appreciations(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    rows = session.exec(
+        select(HappySheetAppreciation, User)
+        .join(User, User.id == HappySheetAppreciation.from_user_id)
+        .where(HappySheetAppreciation.entry_id == entry_id)
+        .order_by(HappySheetAppreciation.created_at.desc())
+    ).all()
+
+    return [
+        HappySheetAppreciationRead(
+            **app.model_dump(),
+            from_user_name=user.name,
+            from_user_email=user.email,
+        )
+        for app, user in rows
+    ]
+
+
+@router.post("/happy-sheet/entry/{entry_id}/appreciations", response_model=HappySheetAppreciationRead, status_code=status.HTTP_201_CREATED)
+async def upsert_happy_sheet_appreciation(
+    entry_id: int,
+    payload: HappySheetAppreciationCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    text = (payload.message or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Appreciation message is required")
+
+    existing = session.exec(
+        select(HappySheetAppreciation).where(
+            HappySheetAppreciation.entry_id == entry_id,
+            HappySheetAppreciation.from_user_id == current_user.id,
+        )
+    ).first()
+
+    if existing:
+        existing.message = text
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        return HappySheetAppreciationRead(
+            **existing.model_dump(),
+            from_user_name=current_user.name,
+            from_user_email=current_user.email,
+        )
+
+    app = HappySheetAppreciation(entry_id=entry_id, from_user_id=current_user.id, message=text)
+    session.add(app)
+    session.commit()
+    session.refresh(app)
+    return HappySheetAppreciationRead(
+        **app.model_dump(),
+        from_user_name=current_user.name,
+        from_user_email=current_user.email,
+    )
+
+
+@router.get("/happy-sheet/streaks", response_model=List[HappySheetStreakRead])
+async def get_happy_sheet_streaks(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    rows = session.exec(
+        select(HappySheetStreak, User)
+        .join(User, User.id == HappySheetStreak.user_id)
+        .order_by(HappySheetStreak.current_streak.desc())
+    ).all()
+    return [
+        HappySheetStreakRead(
+            **streak.model_dump(),
+            user_name=user.name,
+        )
+        for streak, user in rows
+    ]
+
+
+@router.get("/happy-sheet/weekly/highlights", response_model=List[HappySheetWeeklyHighlight])
+async def get_happy_sheet_weekly_highlights(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    today = DateType.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    entries = session.exec(
+        select(HappySheet, User)
+        .join(User, User.id == HappySheet.user_id)
+        .where(HappySheet.date >= week_start, HappySheet.date <= week_end)
+    ).all()
+
+    entry_ids = [entry.id for entry, _ in entries]
+    if not entry_ids:
+        return []
+
+    apps = session.exec(
+        select(HappySheetAppreciation)
+        .where(HappySheetAppreciation.entry_id.in_(entry_ids))
+    ).all()
+
+    counts: dict[int, int] = {}
+    for app in apps:
+        counts[app.entry_id] = counts.get(app.entry_id, 0) + 1
+
+    highlights = []
+    for entry, user in entries:
+        highlights.append(
+            HappySheetWeeklyHighlight(
+                entry_id=entry.id,
+                user_id=user.id,
+                user_name=user.name,
+                date=entry.date,
+                excerpt=(entry.what_made_you_happy or "")[:120],
+                appreciation_count=counts.get(entry.id, 0),
+            )
+        )
+
+    highlights.sort(key=lambda h: (-h.appreciation_count, h.date), reverse=False)
+    return highlights[:3]
+
+
+@router.get("/happy-sheet/weekly/leaderboard", response_model=List[HappySheetLeaderboardItem])
+async def get_happy_sheet_weekly_leaderboard(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    today = DateType.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    entries = session.exec(
+        select(HappySheet)
+        .where(HappySheet.date >= week_start, HappySheet.date <= week_end)
+    ).all()
+    if not entries:
+        return []
+
+    entry_owner = {entry.id: entry.user_id for entry in entries}
+    apps = session.exec(
+        select(HappySheetAppreciation)
+        .where(HappySheetAppreciation.entry_id.in_(list(entry_owner.keys())))
+    ).all()
+
+    counts: dict[int, int] = {}
+    for app in apps:
+        owner_id = entry_owner.get(app.entry_id)
+        if owner_id:
+            counts[owner_id] = counts.get(owner_id, 0) + 1
+
+    if not counts:
+        return []
+
+    users = session.exec(select(User).where(User.id.in_(list(counts.keys())))).all()
+    user_names = {u.id: u.name for u in users}
+    rows = [
+        HappySheetLeaderboardItem(
+            user_id=user_id,
+            user_name=user_names.get(user_id, f"User #{user_id}"),
+            appreciation_count=count,
+        )
+        for user_id, count in counts.items()
+    ]
+    rows.sort(key=lambda r: (-r.appreciation_count, r.user_name.lower()))
+    return rows[:3]
+
+
+@router.get("/happy-sheet/weekly/ai-insights", response_model=HappySheetAiInsights)
+async def get_happy_sheet_weekly_ai_insights(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    today = DateType.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    entries = session.exec(
+        select(HappySheet)
+        .where(HappySheet.date >= week_start, HappySheet.date <= week_end)
+    ).all()
+
+    text = " ".join([
+        f"{e.what_made_you_happy} {e.what_made_others_happy} {e.goals_without_greed} {e.dreams_supported} {e.goals_without_greed_impossible}"
+        for e in entries
+    ]).lower()
+
+    positive_words = ["happy", "great", "help", "thanks", "good", "support", "learn", "team", "collaborat", "positive"]
+    negative_words = ["stress", "blocked", "sad", "delay", "issue", "problem", "difficult"]
+    pos = sum(text.count(w) for w in positive_words)
+    neg = sum(text.count(w) for w in negative_words)
+
+    sentiment = "Positive" if pos >= neg else "Needs Attention"
+
+    themes = []
+    if any(k in text for k in ["team", "collaborat", "help", "support"]):
+        themes.append("teamwork")
+    if any(k in text for k in ["learn", "training", "study", "mentor"]):
+        themes.append("learning")
+    if any(k in text for k in ["onboard", "intern", "new member"]):
+        themes.append("onboarding")
+    if not themes:
+        themes.append("general positivity")
+
+    bullets = [
+        f"Team sentiment this week is {sentiment.lower()}.",
+        f"Most common themes: {', '.join(themes)}.",
+        "Strong collaboration signals detected." if "teamwork" in themes else "Keep encouraging peer recognition and support.",
+    ]
+
+    return HappySheetAiInsights(sentiment=sentiment, themes=themes, bullets=bullets)
 
 
 # ==================== VISIONARY CANVAS ROUTES ====================

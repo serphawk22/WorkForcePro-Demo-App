@@ -199,9 +199,28 @@ async def lifespan(app: FastAPI):
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
         ''',
+        '''
+        CREATE TABLE IF NOT EXISTS happy_sheet_appreciations (
+            id SERIAL PRIMARY KEY,
+            entry_id INTEGER NOT NULL REFERENCES happy_sheets(id) ON DELETE CASCADE,
+            from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            message VARCHAR(1000) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS happy_sheet_streaks (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            current_streak INTEGER NOT NULL DEFAULT 0,
+            longest_streak INTEGER NOT NULL DEFAULT 0,
+            last_entry_date DATE
+        )
+        ''',
         'CREATE UNIQUE INDEX IF NOT EXISTS uq_happy_sheet_reaction_entry_user_emoji ON happy_sheet_reactions(entry_id, user_id, emoji)',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_happy_sheet_appreciation_entry_from_user ON happy_sheet_appreciations(entry_id, from_user_id)',
         'CREATE INDEX IF NOT EXISTS ix_happy_sheet_reactions_entry_id ON happy_sheet_reactions(entry_id)',
         'CREATE INDEX IF NOT EXISTS ix_happy_sheet_comments_entry_id ON happy_sheet_comments(entry_id)',
+        'CREATE INDEX IF NOT EXISTS ix_happy_sheet_appreciations_entry_id ON happy_sheet_appreciations(entry_id)',
         ]
 
         for migration in additional_migrations:

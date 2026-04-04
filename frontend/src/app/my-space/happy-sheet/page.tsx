@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus } from "lucide-react";
+import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
@@ -18,6 +18,17 @@ import {
   toggleHappySheetReaction,
   getHappySheetComments,
   addHappySheetComment,
+  HappySheetAppreciationEntry,
+  HappySheetStreakEntry,
+  HappySheetWeeklyHighlightEntry,
+  HappySheetLeaderboardEntry,
+  HappySheetAiInsights,
+  getHappySheetAppreciations,
+  addHappySheetAppreciation,
+  getHappySheetStreaks,
+  getHappySheetWeeklyHighlights,
+  getHappySheetWeeklyLeaderboard,
+  getHappySheetWeeklyAiInsights,
 } from "@/lib/api";
 
 const AVATAR_COLORS = [
@@ -63,6 +74,14 @@ export default function HappySheetPage() {
   const [replyTargetByEntry, setReplyTargetByEntry] = useState<Record<number, HappySheetCommentEntry | null>>({});
   const [customReactionByEntry, setCustomReactionByEntry] = useState<Record<number, string>>({});
   const [customReactionOpenEntryId, setCustomReactionOpenEntryId] = useState<number | null>(null);
+  const [appreciationsByEntry, setAppreciationsByEntry] = useState<Record<number, HappySheetAppreciationEntry[]>>({});
+  const [appreciationInputByEntry, setAppreciationInputByEntry] = useState<Record<number, string>>({});
+  const [appreciationOpenEntryId, setAppreciationOpenEntryId] = useState<number | null>(null);
+
+  const [streakByUser, setStreakByUser] = useState<Record<number, HappySheetStreakEntry>>({});
+  const [weeklyHighlights, setWeeklyHighlights] = useState<HappySheetWeeklyHighlightEntry[]>([]);
+  const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<HappySheetLeaderboardEntry[]>([]);
+  const [aiInsights, setAiInsights] = useState<HappySheetAiInsights | null>(null);
 
   const [isExportingPng, setIsExportingPng] = useState(false);
 
@@ -93,6 +112,7 @@ export default function HappySheetPage() {
     if (filteredTeam.length === 0) {
       setReactionsByEntry({});
       setCommentsByEntry({});
+      setAppreciationsByEntry({});
       return;
     }
 
@@ -109,9 +129,28 @@ export default function HappySheetPage() {
           return [entry.id, res.data || []] as const;
         })
       );
+      const appreciationPairs = await Promise.all(
+        filteredTeam.map(async (entry) => {
+          const res = await getHappySheetAppreciations(entry.id);
+          return [entry.id, res.data || []] as const;
+        })
+      );
+      const [streakRes, highlightsRes, leaderboardRes, insightsRes] = await Promise.all([
+        getHappySheetStreaks(),
+        getHappySheetWeeklyHighlights(),
+        getHappySheetWeeklyLeaderboard(),
+        getHappySheetWeeklyAiInsights(),
+      ]);
 
       setReactionsByEntry(Object.fromEntries(reactionPairs));
       setCommentsByEntry(Object.fromEntries(commentPairs));
+      setAppreciationsByEntry(Object.fromEntries(appreciationPairs));
+      setStreakByUser(
+        Object.fromEntries((streakRes.data || []).map((s) => [s.user_id, s]))
+      );
+      setWeeklyHighlights(highlightsRes.data || []);
+      setWeeklyLeaderboard(leaderboardRes.data || []);
+      setAiInsights(insightsRes.data || null);
     };
 
     load();
@@ -199,9 +238,10 @@ export default function HappySheetPage() {
   };
 
   const refreshEntryInteractions = async (entryId: number) => {
-    const [reactionRes, commentRes] = await Promise.all([
+    const [reactionRes, commentRes, appreciationRes] = await Promise.all([
       getHappySheetReactions(entryId),
       getHappySheetComments(entryId),
+      getHappySheetAppreciations(entryId),
     ]);
 
     setReactionsByEntry((prev) => ({
@@ -211,6 +251,10 @@ export default function HappySheetPage() {
     setCommentsByEntry((prev) => ({
       ...prev,
       [entryId]: commentRes.data || [],
+    }));
+    setAppreciationsByEntry((prev) => ({
+      ...prev,
+      [entryId]: appreciationRes.data || [],
     }));
   };
 
@@ -243,6 +287,28 @@ export default function HappySheetPage() {
     setCommentInputByEntry((prev) => ({ ...prev, [entryId]: "" }));
     setReplyTargetByEntry((prev) => ({ ...prev, [entryId]: null }));
     await refreshEntryInteractions(entryId);
+  };
+
+  const handleAddAppreciation = async (entryId: number) => {
+    const message = (appreciationInputByEntry[entryId] || "").trim();
+    if (!message) return;
+
+    const res = await addHappySheetAppreciation(entryId, { message });
+    if (res.error) {
+      showFloatingToast({ type: "error", message: res.error });
+      return;
+    }
+
+    setAppreciationInputByEntry((prev) => ({ ...prev, [entryId]: "" }));
+    setAppreciationOpenEntryId(null);
+    await refreshEntryInteractions(entryId);
+
+    const [highlightsRes, leaderboardRes] = await Promise.all([
+      getHappySheetWeeklyHighlights(),
+      getHappySheetWeeklyLeaderboard(),
+    ]);
+    setWeeklyHighlights(highlightsRes.data || []);
+    setWeeklyLeaderboard(leaderboardRes.data || []);
   };
 
   const displayEntries = filteredTeam;
@@ -418,6 +484,60 @@ export default function HappySheetPage() {
   return (
     <MySpaceShell>
       <div className="max-w-3xl mx-auto space-y-6 pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="lg:col-span-2 rounded-2xl p-4 lighthouse-card">
+            <div className="flex items-center gap-2 mb-3 text-[#2B124C] dark:text-purple-100">
+              <Sparkles size={16} />
+              <h3 className="text-sm font-semibold">Weekly Highlights</h3>
+            </div>
+            {weeklyHighlights.length === 0 ? (
+              <p className="text-xs text-[#854F6C] dark:text-purple-300">No appreciations yet this week.</p>
+            ) : (
+              <div className="space-y-2">
+                {weeklyHighlights.map((item) => (
+                  <div key={item.entry_id} className="rounded-lg p-2 bg-white/70 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
+                    <div className="text-xs font-semibold text-[#2B124C] dark:text-purple-100">{item.user_name}</div>
+                    <div className="text-xs text-[#522B5B] dark:text-purple-200 truncate">{item.excerpt || "Shared a positive update"}</div>
+                    <div className="text-[11px] text-[#854F6C] dark:text-purple-300 mt-1">⭐ {item.appreciation_count} Appreciations</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl p-4 lighthouse-card space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-[#2B124C] dark:text-purple-100 mb-2">Top Positive Contributors</div>
+              {weeklyLeaderboard.length === 0 ? (
+                <p className="text-xs text-[#854F6C] dark:text-purple-300">No leaderboard data yet.</p>
+              ) : (
+                <div className="space-y-1 text-xs">
+                  {weeklyLeaderboard.map((item, idx) => (
+                    <div key={item.user_id} className="flex items-center justify-between text-[#522B5B] dark:text-purple-200">
+                      <span>{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {item.user_name}</span>
+                      <span>⭐ {item.appreciation_count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="pt-2 border-t border-slate-200/70 dark:border-white/10">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#2B124C] dark:text-purple-100 mb-2">
+                <Brain size={14} /> AI Insights
+              </div>
+              {aiInsights ? (
+                <ul className="space-y-1 text-xs text-[#522B5B] dark:text-purple-200">
+                  {aiInsights.bullets.map((b, i) => (
+                    <li key={i}>• {b}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[#854F6C] dark:text-purple-300">Insights are generating...</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Form Card */}
         <div className="rounded-2xl p-6 md:p-8 shadow-sm lighthouse-card">
           {/* Header row: title + date picker */}
@@ -558,9 +678,14 @@ export default function HappySheetPage() {
                       <p className="text-sm font-semibold truncate text-[#2B124C] dark:text-purple-100">
                         {entry.user_name ?? entry.user_email ?? `User #${entry.user_id}`}
                       </p>
-                      <div className="flex items-center gap-1 text-xs text-[#854F6C] dark:text-purple-400">
+                      <div className="flex items-center gap-2 text-xs text-[#854F6C] dark:text-purple-400">
                         <Calendar size={11} />
                         {new Date(entry.date + "T00:00:00").toLocaleDateString()}
+                        {(streakByUser[entry.user_id]?.current_streak || 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-orange-100/80 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300">
+                            <Flame size={10} /> {streakByUser[entry.user_id].current_streak} days
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -603,7 +728,7 @@ export default function HappySheetPage() {
                       ))}
                       {(reactionsByEntry[entry.id] || []).length > 3 && (
                         <span className="text-xs text-[#854F6C] dark:text-purple-300">
-                          +{(reactionsByEntry[entry.id] || []).length - 3}
+                          +{(reactionsByEntry[entry.id] || []).length - 3} more
                         </span>
                       )}
                     </div>
@@ -649,6 +774,56 @@ export default function HappySheetPage() {
                     </div>
 
                     <div className="space-y-2">
+                      <div className="rounded-md p-2 bg-white/80 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs text-[#522B5B] dark:text-purple-200">⭐ {(appreciationsByEntry[entry.id] || []).length} Appreciations</div>
+                          <button
+                            type="button"
+                            className="h-7 px-2 rounded-md border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 flex items-center gap-1 hover:bg-slate-200/70 dark:hover:bg-white/15"
+                            onClick={() => setAppreciationOpenEntryId((prev) => (prev === entry.id ? null : entry.id))}
+                          >
+                            <Star size={12} /> Appreciate
+                          </button>
+                        </div>
+                        {appreciationOpenEntryId === entry.id && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              value={appreciationInputByEntry[entry.id] || ""}
+                              onChange={(e) =>
+                                setAppreciationInputByEntry((prev) => ({ ...prev, [entry.id]: e.target.value }))
+                              }
+                              onKeyDown={async (e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  await handleAddAppreciation(entry.id);
+                                }
+                              }}
+                              placeholder="Write appreciation message..."
+                              className="flex-1 h-8 px-2 rounded-md text-xs lighthouse-input-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddAppreciation(entry.id)}
+                              className="h-8 w-8 rounded-md bg-[#522B5B] text-white flex items-center justify-center hover:opacity-90"
+                              title="Send appreciation"
+                            >
+                              <Send size={14} />
+                            </button>
+                          </div>
+                        )}
+
+                        {(appreciationsByEntry[entry.id] || []).length > 0 && (
+                          <div className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-1">
+                            {(appreciationsByEntry[entry.id] || []).map((a) => (
+                              <div key={a.id} className="text-xs text-[#522B5B] dark:text-purple-200">
+                                <span className="font-semibold">⭐ Appreciated by {a.from_user_name || a.from_user_email || `User #${a.from_user_id}`}</span>
+                                <div className="text-[#854F6C] dark:text-purple-300">&quot;{a.message}&quot;</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex items-center gap-2 text-xs text-[#854F6C] dark:text-purple-300">
                         <MessageSquare size={13} /> Comments
                       </div>

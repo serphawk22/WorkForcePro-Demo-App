@@ -929,6 +929,71 @@ class HappySheetCommentRead(SQLModel):
     profile_picture: Optional[str] = None
 
 
+class HappySheetAppreciation(SQLModel, table=True):
+    __tablename__ = "happy_sheet_appreciations"
+    __table_args__ = (
+        UniqueConstraint("entry_id", "from_user_id", name="uq_happy_sheet_appreciation_entry_from_user"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entry_id: int = Field(foreign_key="happy_sheets.id", index=True)
+    from_user_id: int = Field(foreign_key="users.id", index=True)
+    message: str = Field(max_length=1000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class HappySheetAppreciationCreate(SQLModel):
+    message: str = Field(max_length=1000)
+
+
+class HappySheetAppreciationRead(SQLModel):
+    id: int
+    entry_id: int
+    from_user_id: int
+    message: str
+    created_at: datetime
+    from_user_name: Optional[str] = None
+    from_user_email: Optional[str] = None
+
+
+class HappySheetStreak(SQLModel, table=True):
+    __tablename__ = "happy_sheet_streaks"
+
+    user_id: int = Field(primary_key=True, foreign_key="users.id")
+    current_streak: int = Field(default=0)
+    longest_streak: int = Field(default=0)
+    last_entry_date: Optional[DateType] = None
+
+
+class HappySheetStreakRead(SQLModel):
+    user_id: int
+    current_streak: int
+    longest_streak: int
+    last_entry_date: Optional[DateType] = None
+    user_name: Optional[str] = None
+
+
+class HappySheetWeeklyHighlight(SQLModel):
+    entry_id: int
+    user_id: int
+    user_name: str
+    date: DateType
+    excerpt: str
+    appreciation_count: int
+
+
+class HappySheetLeaderboardItem(SQLModel):
+    user_id: int
+    user_name: str
+    appreciation_count: int
+
+
+class HappySheetAiInsights(SQLModel):
+    sentiment: str
+    themes: List[str] = []
+    bullets: List[str] = []
+
+
 class DailyHappySheetReportRow(SQLModel):
     """Admin daily happy sheet row with nullable entry fields for missing submissions."""
     user_id: int

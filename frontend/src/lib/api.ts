@@ -1822,6 +1822,45 @@ export interface HappySheetCommentEntry {
   profile_picture?: string | null;
 }
 
+export interface HappySheetAppreciationEntry {
+  id: number;
+  entry_id: number;
+  from_user_id: number;
+  message: string;
+  created_at: string;
+  from_user_name?: string | null;
+  from_user_email?: string | null;
+}
+
+export interface HappySheetStreakEntry {
+  user_id: number;
+  current_streak: number;
+  longest_streak: number;
+  last_entry_date?: string | null;
+  user_name?: string | null;
+}
+
+export interface HappySheetWeeklyHighlightEntry {
+  entry_id: number;
+  user_id: number;
+  user_name: string;
+  date: string;
+  excerpt: string;
+  appreciation_count: number;
+}
+
+export interface HappySheetLeaderboardEntry {
+  user_id: number;
+  user_name: string;
+  appreciation_count: number;
+}
+
+export interface HappySheetAiInsights {
+  sentiment: string;
+  themes: string[];
+  bullets: string[];
+}
+
 export interface DreamProjectEntry {
   id: number;
   user_id: number;
@@ -1898,28 +1937,58 @@ export async function getAdminDailyHappySheetReport(date: string): Promise<ApiRe
 }
 
 export async function getHappySheetReactions(entryId: number): Promise<ApiResponse<HappySheetReactionSummary[]>> {
-  return apiFetch<HappySheetReactionSummary[]>(`/my-space/happy-sheet/${entryId}/reactions`);
+  return apiFetch<HappySheetReactionSummary[]>(`/my-space/happy-sheet/entry/${entryId}/reactions`);
 }
 
 export async function toggleHappySheetReaction(entryId: number, emoji: string): Promise<ApiResponse<{ active: boolean }>> {
-  return apiFetch<{ active: boolean }>(`/my-space/happy-sheet/${entryId}/reactions`, {
+  return apiFetch<{ active: boolean }>(`/my-space/happy-sheet/entry/${entryId}/reactions`, {
     method: "POST",
     body: JSON.stringify({ emoji }),
   });
 }
 
 export async function getHappySheetComments(entryId: number): Promise<ApiResponse<HappySheetCommentEntry[]>> {
-  return apiFetch<HappySheetCommentEntry[]>(`/my-space/happy-sheet/${entryId}/comments`);
+  return apiFetch<HappySheetCommentEntry[]>(`/my-space/happy-sheet/entry/${entryId}/comments`);
 }
 
 export async function addHappySheetComment(
   entryId: number,
   data: { comment_text: string; parent_comment_id?: number | null }
 ): Promise<ApiResponse<HappySheetCommentEntry>> {
-  return apiFetch<HappySheetCommentEntry>(`/my-space/happy-sheet/${entryId}/comments`, {
+  return apiFetch<HappySheetCommentEntry>(`/my-space/happy-sheet/entry/${entryId}/comments`, {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export async function getHappySheetAppreciations(entryId: number): Promise<ApiResponse<HappySheetAppreciationEntry[]>> {
+  return apiFetch<HappySheetAppreciationEntry[]>(`/my-space/happy-sheet/entry/${entryId}/appreciations`);
+}
+
+export async function addHappySheetAppreciation(
+  entryId: number,
+  data: { message: string }
+): Promise<ApiResponse<HappySheetAppreciationEntry>> {
+  return apiFetch<HappySheetAppreciationEntry>(`/my-space/happy-sheet/entry/${entryId}/appreciations`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getHappySheetStreaks(): Promise<ApiResponse<HappySheetStreakEntry[]>> {
+  return apiFetch<HappySheetStreakEntry[]>("/my-space/happy-sheet/streaks");
+}
+
+export async function getHappySheetWeeklyHighlights(): Promise<ApiResponse<HappySheetWeeklyHighlightEntry[]>> {
+  return apiFetch<HappySheetWeeklyHighlightEntry[]>("/my-space/happy-sheet/weekly/highlights");
+}
+
+export async function getHappySheetWeeklyLeaderboard(): Promise<ApiResponse<HappySheetLeaderboardEntry[]>> {
+  return apiFetch<HappySheetLeaderboardEntry[]>("/my-space/happy-sheet/weekly/leaderboard");
+}
+
+export async function getHappySheetWeeklyAiInsights(): Promise<ApiResponse<HappySheetAiInsights>> {
+  return apiFetch<HappySheetAiInsights>("/my-space/happy-sheet/weekly/ai-insights");
 }
 
 // Dream Project (Visionary Canvas)
