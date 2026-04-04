@@ -621,7 +621,8 @@ async def update_task_links(
 
 
 # Admin routes
-@router.post("/", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=TaskRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_task(
     task_data: TaskCreate,
     request: Request,
@@ -753,7 +754,8 @@ async def create_task(
     return task
 
 
-@router.get("/", response_model=List[TaskWithAssignee])
+@router.get("", response_model=List[TaskWithAssignee])
+@router.get("/", response_model=List[TaskWithAssignee], include_in_schema=False)
 async def get_all_tasks(
     request: Request,
     status_filter: Optional[TaskStatus] = None,

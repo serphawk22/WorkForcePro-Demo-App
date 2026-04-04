@@ -9,10 +9,19 @@ const isDevServer =
   process.env.NODE_ENV === "development" ||
   process.env.npm_lifecycle_event === "dev";
 
-const normalizeBackendUrl = (value, fallback) => {
+const normalizeBackendUrl = (value, fallback, allowLocalHttp = false) => {
   const raw = (value || "").trim();
   if (!raw) return fallback;
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+
+  if (raw.startsWith("https://")) return raw;
+
+  if (raw.startsWith("http://")) {
+    if (allowLocalHttp && (raw.startsWith("http://localhost") || raw.startsWith("http://127.0.0.1"))) {
+      return raw;
+    }
+    return raw.replace(/^http:\/\//, "https://");
+  }
+
   return `https://${raw}`;
 };
 
@@ -30,7 +39,8 @@ const nextConfig = {
   async rewrites() {
     const localBackend = normalizeBackendUrl(
       process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_API_URL,
-      "http://127.0.0.1:8000"
+      "http://127.0.0.1:8000",
+      true
     );
     // Do not trust NEXT_PUBLIC_API_URL in production rewrites; it is often set for client use and can be stale/wrong.
     const productionBackend = normalizeBackendUrl(
