@@ -1853,6 +1853,7 @@ export async function submitHappySheet(data: {
   what_made_others_happy: string;
   goals_without_greed: string;
   dreams_supported: string;
+  goals_without_greed_impossible: string;
   date?: string; // YYYY-MM-DD; defaults to today if omitted
 }): Promise<ApiResponse<HappySheetEntry>> {
   return apiFetch<HappySheetEntry>("/my-space/happy-sheet", {
