@@ -105,33 +105,37 @@ async def create_happy_sheet(
     current_user: User = Depends(get_current_user),
 ):
     """Submit or update a happy sheet for the given date (upsert). Defaults to today."""
-    target_date = sheet_data.date if sheet_data.date else DateType.today()
-    existing = session.exec(
-        select(HappySheet).where(HappySheet.user_id == current_user.id, HappySheet.date == target_date)
-    ).first()
-    if existing:
-        existing.what_made_you_happy = sheet_data.what_made_you_happy
-        existing.what_made_others_happy = sheet_data.what_made_others_happy
-        existing.goals_without_greed = sheet_data.goals_without_greed
-        existing.dreams_supported = sheet_data.dreams_supported
-        existing.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
-        session.add(existing)
+    try:
+        target_date = sheet_data.date if sheet_data.date else DateType.today()
+        existing = session.exec(
+            select(HappySheet).where(HappySheet.user_id == current_user.id, HappySheet.date == target_date)
+        ).first()
+        if existing:
+            existing.what_made_you_happy = sheet_data.what_made_you_happy
+            existing.what_made_others_happy = sheet_data.what_made_others_happy
+            existing.goals_without_greed = sheet_data.goals_without_greed
+            existing.dreams_supported = sheet_data.dreams_supported
+            existing.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+            return existing
+        happy_sheet = HappySheet(
+            user_id=current_user.id,
+            date=target_date,
+            what_made_you_happy=sheet_data.what_made_you_happy,
+            what_made_others_happy=sheet_data.what_made_others_happy,
+            goals_without_greed=sheet_data.goals_without_greed,
+            dreams_supported=sheet_data.dreams_supported,
+            goals_without_greed_impossible=sheet_data.goals_without_greed_impossible,
+        )
+        session.add(happy_sheet)
         session.commit()
-        session.refresh(existing)
-        return existing
-    happy_sheet = HappySheet(
-        user_id=current_user.id,
-        date=target_date,
-        what_made_you_happy=sheet_data.what_made_you_happy,
-        what_made_others_happy=sheet_data.what_made_others_happy,
-        goals_without_greed=sheet_data.goals_without_greed,
-        dreams_supported=sheet_data.dreams_supported,
-        goals_without_greed_impossible=sheet_data.goals_without_greed_impossible,
-    )
-    session.add(happy_sheet)
-    session.commit()
-    session.refresh(happy_sheet)
-    return happy_sheet
+        session.refresh(happy_sheet)
+        return happy_sheet
+    except Exception as e:
+        print(f"[ERROR] Happy Sheet POST failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save happy sheet: {str(e)}")
 
 
 @router.get("/happy-sheet/me", response_model=List[HappySheetRead])

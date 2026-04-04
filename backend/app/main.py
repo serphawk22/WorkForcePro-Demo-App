@@ -493,6 +493,7 @@ origins = [
     "https://work-force-pro-4jae.vercel.app",  # Your Vercel deployment
     "https://work-force-pro-demo-app.vercel.app", # New Vercel demo app
     "https://attendence-dashboard.allytechcourses.com",  # Custom domain
+    "https://www.work-force-pro-demo-app.vercel.app", # With www prefix
 ]
 
 # Add production frontend URL if set
