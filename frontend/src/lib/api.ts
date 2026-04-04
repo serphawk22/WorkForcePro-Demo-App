@@ -10,18 +10,16 @@
  * - Server-side (RSC / SSR) → direct loopback URL.
  */
 export function getApiBaseUrl(): string {
+  const explicitApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
   // If we are executing inside the user's browser:
   if (typeof window !== "undefined") {
-    // If they are running this on their local computer via `npm run dev`:
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-      return "/api"; // Leverage Next.js rewrites to bypass browser CORS
-    }
-    // If they are accessing the Vercel production domain:
-    return "https://work-force-pro-demo-app-production.up.railway.app";
+    // Always use same-origin proxy in the browser to avoid CORS preflight issues.
+    return "/api";
   }
-  
+
   // If we are executing server-side (Next.js RSC/SSR):
-  return "https://work-force-pro-demo-app-production.up.railway.app";
+  return explicitApiUrl || "https://work-force-pro-demo-app-production.up.railway.app";
 }
 
 if (typeof window !== "undefined") {

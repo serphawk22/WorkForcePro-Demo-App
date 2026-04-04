@@ -22,7 +22,7 @@ const nextConfig = {
    */
   async rewrites() {
     const localBackend = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    const productionBackend = "https://workforcepro-demo-app-production.up.railway.app";
+    const productionBackend = process.env.NEXT_PUBLIC_API_URL || "https://work-force-pro-demo-app-production.up.railway.app";
     const backend = isDevServer ? localBackend : productionBackend;
     return [
       {
