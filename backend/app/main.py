@@ -20,14 +20,22 @@ async def lifespan(app: FastAPI):
     # Startup: Create database tables
     create_db_and_tables()
 
+    is_sqlite = engine.url.drivername == "sqlite"
+
     # Local/dev default: skip heavy bootstrap migrations/backfills after core tables exist.
-    # Set SKIP_STARTUP_BOOTSTRAP=0 to run the full migration/backfill flow.
-    if os.getenv("SKIP_STARTUP_BOOTSTRAP", "1") == "1":
+    # Default behavior:
+    # - SQLite (local dev): skip heavy bootstrap
+    # - PostgreSQL (prod/staging): run bootstrap
+    # Override with SKIP_STARTUP_BOOTSTRAP=1/0 when needed.
+    skip_startup_bootstrap = os.getenv("SKIP_STARTUP_BOOTSTRAP")
+    if skip_startup_bootstrap is None:
+        skip_startup_bootstrap = "1" if is_sqlite else "0"
+
+    if skip_startup_bootstrap == "1":
         print("[startup] SKIP_STARTUP_BOOTSTRAP=1 -> core tables ready, skipping heavy startup bootstrap")
         yield
         return
 
-    is_sqlite = engine.url.drivername == "sqlite"
     if is_sqlite:
         print("✅ SQLite dev: skipping PostgreSQL-only migrations (tables from SQLModel metadata)")
     from sqlalchemy import text
