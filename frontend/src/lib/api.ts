@@ -36,6 +36,7 @@ interface CacheEntry<T> {
 
 const cache = new Map<string, CacheEntry<any>>();
 const CACHE_DURATION = 2000; // 2 seconds - shorter to prevent stale data
+let hasTriedWakeupRetry = false;
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -68,6 +69,24 @@ function clearCache(keyPattern?: string): void {
   });
   
   keysToDelete.forEach(key => cache.delete(key));
+}
+
+async function wakeBackendIfNeeded(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (hasTriedWakeupRetry) return;
+
+  hasTriedWakeupRetry = true;
+  try {
+    await fetch(`${getApiBaseUrl()}/health`, {
+      method: "GET",
+      mode: "no-cors",
+      cache: "no-store",
+    });
+  } catch {
+    // Best-effort warm-up only.
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
 }
 
 // ==================== TYPES ====================
@@ -663,6 +682,10 @@ async function apiFetch<T>(
     
     // Check for CORS errors
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      if (retries > 0) {
+        await wakeBackendIfNeeded();
+        return apiFetch<T>(endpoint, options, retries - 1);
+      }
       console.error("[API] CORS or Network Error:", {
         endpoint,
         apiBaseUrl: getApiBaseUrl(),

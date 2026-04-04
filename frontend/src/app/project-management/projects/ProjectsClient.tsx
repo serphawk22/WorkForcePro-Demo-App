@@ -242,17 +242,41 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
       getAssignableUsers(),
       getWorkspaces(),
     ]);
-    if (tasksResult.data) setTasks(tasksResult.data);
+    let tasksToPrime: Task[] = tasksResult.data || [];
+
+    const workspaceFilterInvalid = Boolean(
+      workspaceFilter &&
+      workspaceResult.data &&
+      !workspaceResult.data.some((ws) => ws.id === workspaceFilter)
+    );
+
+    if (workspaceFilterInvalid) {
+      const fallbackTasks = await getAllTasks(statusFilter || undefined, undefined, undefined, { rootsOnly: true });
+      if (fallbackTasks.data) {
+        setTasks(fallbackTasks.data);
+        tasksToPrime = fallbackTasks.data;
+      } else {
+        tasksToPrime = [];
+      }
+      setWorkspaceFilter(undefined);
+      if (workspaceQuery) {
+        router.replace("/project-management/projects");
+      }
+      toast.error("Selected workspace no longer exists. Showing all projects.");
+    } else if (tasksResult.data) {
+      setTasks(tasksResult.data);
+    }
+
     if (empResult.data) setEmployees(empResult.data);
     if (workspaceResult.data) setWorkspaces(workspaceResult.data);
     if (!silent) setIsLoading(false);
     // Pre-fetch subtasks for every task so they're ready on expand (and the count badge shows)
-    if (tasksResult.data) {
-      tasksResult.data.forEach(task => loadSubtasksQuietly(task.id));
+    if (tasksToPrime.length > 0) {
+      tasksToPrime.forEach(task => loadSubtasksQuietly(task.id));
     }
   // loadSubtasksQuietly is stable (defined below with useCallback + no deps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, workspaceFilter]);
+  }, [router, statusFilter, workspaceFilter, workspaceQuery]);
 
   useEffect(() => {
     if (!workspaceQuery) return;

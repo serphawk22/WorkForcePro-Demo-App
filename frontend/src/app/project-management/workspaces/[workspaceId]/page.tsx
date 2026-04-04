@@ -93,7 +93,11 @@ export default function WorkspaceProjectsPage() {
   ];
 
   const loadData = useCallback(async () => {
-    if (!workspaceId || Number.isNaN(workspaceId)) return;
+    if (!workspaceId || Number.isNaN(workspaceId)) {
+      toast.error("Invalid workspace link. Redirecting...");
+      router.replace("/project-management");
+      return;
+    }
     setLoading(true);
 
     const [workspaceProjectsRes, usersRes, workspacesRes] = await Promise.all([
@@ -106,8 +110,31 @@ export default function WorkspaceProjectsPage() {
       getWorkspaces(),
     ]);
 
+    if (workspacesRes.data) setAllWorkspaces(workspacesRes.data);
+    if (usersRes.data) setUsers(usersRes.data);
+
     if (workspaceProjectsRes.error) {
-      toast.error(workspaceProjectsRes.error);
+      const normalized = workspaceProjectsRes.error.toLowerCase();
+      const workspaceUnavailable =
+        normalized.includes("workspace not found") ||
+        normalized.includes("forbidden") ||
+        normalized.includes("access forbidden");
+
+      if (workspaceUnavailable) {
+        const fallback = workspacesRes.data?.find((ws) => ws.id !== workspaceId) || workspacesRes.data?.[0];
+        if (fallback) {
+          toast.error("Workspace unavailable. Redirecting to an available workspace.");
+          router.replace(`/project-management/workspaces/${fallback.id}`);
+        } else {
+          toast.error("No accessible workspace found. Redirecting to project overview.");
+          router.replace("/project-management");
+        }
+      } else {
+        toast.error(workspaceProjectsRes.error);
+      }
+
+      setWorkspace(null);
+      setProjects([]);
       setLoading(false);
       return;
     }
@@ -122,10 +149,8 @@ export default function WorkspaceProjectsPage() {
         color: workspaceProjectsRes.data.workspace.color || "#4F46E5",
       });
     }
-    if (usersRes.data) setUsers(usersRes.data);
-    if (workspacesRes.data) setAllWorkspaces(workspacesRes.data);
     setLoading(false);
-  }, [ownerFilter, recentDays, statusFilter, workspaceId]);
+  }, [ownerFilter, recentDays, router, statusFilter, workspaceId]);
 
   useEffect(() => {
     loadData();

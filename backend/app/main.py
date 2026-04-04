@@ -471,7 +471,7 @@ FRONTEND_URLS = os.getenv("FRONTEND_URLS", "")
 # Can be overridden from env with FRONTEND_ORIGIN_REGEX.
 FRONTEND_ORIGIN_REGEX = os.getenv(
     "FRONTEND_ORIGIN_REGEX",
-    r"https://work-force-pro-demo-[a-z0-9-]+-serp-hawks-projects\.vercel\.app",
+    r"https://([a-z0-9-]+\.)?vercel\.app",
 )
 
 origins = [
