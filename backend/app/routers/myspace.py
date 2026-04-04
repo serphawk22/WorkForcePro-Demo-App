@@ -139,6 +139,56 @@ async def get_my_task_sheets(
     return session.exec(stmt).all()
 
 
+@router.put("/task-sheet/{entry_id}", response_model=TaskSheetRead)
+async def update_task_sheet_entry(
+    entry_id: int,
+    sheet_data: TaskSheetCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(TaskSheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Task sheet entry not found")
+    if entry.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this entry")
+
+    target_date = sheet_data.date if sheet_data.date else entry.date
+    duplicate = session.exec(
+        select(TaskSheet).where(
+            TaskSheet.user_id == current_user.id,
+            TaskSheet.date == target_date,
+            TaskSheet.id != entry_id,
+        )
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Task sheet already exists for this date")
+
+    entry.date = target_date
+    entry.achievements = sheet_data.achievements
+    entry.repo_link = sheet_data.repo_link
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return entry
+
+
+@router.delete("/task-sheet/{entry_id}")
+async def delete_task_sheet_entry(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(TaskSheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Task sheet entry not found")
+    if entry.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this entry")
+
+    session.delete(entry)
+    session.commit()
+    return {"message": "Task sheet entry deleted"}
+
+
 @router.get("/task-sheet/all", response_model=List[TaskSheetWithUser])
 async def get_all_task_sheets(
     limit: int = 50,
@@ -214,6 +264,61 @@ async def get_my_happy_sheets(
         .limit(limit)
     )
     return session.exec(stmt).all()
+
+
+@router.put("/happy-sheet/{entry_id}", response_model=HappySheetRead)
+async def update_happy_sheet_entry(
+    entry_id: int,
+    sheet_data: HappySheetCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy sheet entry not found")
+    if entry.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this entry")
+
+    target_date = sheet_data.date if sheet_data.date else entry.date
+    duplicate = session.exec(
+        select(HappySheet).where(
+            HappySheet.user_id == current_user.id,
+            HappySheet.date == target_date,
+            HappySheet.id != entry_id,
+        )
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Happy sheet already exists for this date")
+
+    entry.date = target_date
+    entry.what_made_you_happy = sheet_data.what_made_you_happy
+    entry.what_made_others_happy = sheet_data.what_made_others_happy
+    entry.goals_without_greed = sheet_data.goals_without_greed
+    entry.dreams_supported = sheet_data.dreams_supported
+    entry.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    _recompute_user_streak(session, current_user.id)
+    return entry
+
+
+@router.delete("/happy-sheet/{entry_id}")
+async def delete_happy_sheet_entry(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy sheet entry not found")
+    if entry.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this entry")
+
+    session.delete(entry)
+    session.commit()
+    _recompute_user_streak(session, current_user.id)
+    return {"message": "Happy sheet entry deleted"}
 
 
 @router.get("/happy-sheet/team/by-date", response_model=List[HappySheetWithUser])
@@ -715,6 +820,48 @@ async def get_all_dream_projects(
     ]
 
 
+@router.put("/dream-project/{entry_id}", response_model=DreamProjectWithUser)
+async def update_dream_project(
+    entry_id: int,
+    data: DreamProjectCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    project = session.get(DreamProject, entry_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Dream project entry not found")
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this entry")
+
+    project.description = data.description
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return DreamProjectWithUser(
+        **project.model_dump(),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        profile_picture=current_user.profile_picture,
+    )
+
+
+@router.delete("/dream-project/{entry_id}")
+async def delete_dream_project(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    project = session.get(DreamProject, entry_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Dream project entry not found")
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this entry")
+
+    session.delete(project)
+    session.commit()
+    return {"message": "Dream project entry deleted"}
+
+
 # ==================== LEARNING CANVAS ROUTES ====================
 
 @router.post("/learning-focus", response_model=LearningFocusWithUser, status_code=status.HTTP_201_CREATED)
@@ -758,6 +905,48 @@ async def get_all_learning_focuses(
     ]
 
 
+@router.put("/learning-focus/{entry_id}", response_model=LearningFocusWithUser)
+async def update_learning_focus(
+    entry_id: int,
+    data: LearningFocusCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    focus = session.get(LearningFocus, entry_id)
+    if not focus:
+        raise HTTPException(status_code=404, detail="Learning focus entry not found")
+    if focus.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this entry")
+
+    focus.focus = data.focus
+    session.add(focus)
+    session.commit()
+    session.refresh(focus)
+    return LearningFocusWithUser(
+        **focus.model_dump(),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        profile_picture=current_user.profile_picture,
+    )
+
+
+@router.delete("/learning-focus/{entry_id}")
+async def delete_learning_focus(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    focus = session.get(LearningFocus, entry_id)
+    if not focus:
+        raise HTTPException(status_code=404, detail="Learning focus entry not found")
+    if focus.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this entry")
+
+    session.delete(focus)
+    session.commit()
+    return {"message": "Learning focus entry deleted"}
+
+
 @router.post("/personal-project", response_model=PersonalProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_personal_project(
     data: PersonalProjectCreate,
@@ -787,3 +976,41 @@ async def get_my_personal_projects(
         .limit(limit)
     )
     return session.exec(stmt).all()
+
+
+@router.put("/personal-project/{entry_id}", response_model=PersonalProjectRead)
+async def update_personal_project(
+    entry_id: int,
+    data: PersonalProjectCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    project = session.get(PersonalProject, entry_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Personal project entry not found")
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this entry")
+
+    project.title = data.title
+    project.tag = data.tag
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return project
+
+
+@router.delete("/personal-project/{entry_id}")
+async def delete_personal_project(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    project = session.get(PersonalProject, entry_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Personal project entry not found")
+    if project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this entry")
+
+    session.delete(project)
+    session.commit()
+    return {"message": "Personal project entry deleted"}

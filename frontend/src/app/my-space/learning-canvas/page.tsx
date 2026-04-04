@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Folder, Lightbulb, Users, Plus, X } from "lucide-react";
-import { submitLearningFocus, getAllLearningFocuses, LearningFocusEntry, submitPersonalProject, getMyPersonalProjects, PersonalProjectEntry } from "@/lib/api";
+import { Folder, Lightbulb, Users, Plus, X, Pencil, Trash2 } from "lucide-react";
+import { submitLearningFocus, getAllLearningFocuses, LearningFocusEntry, submitPersonalProject, getMyPersonalProjects, PersonalProjectEntry, updateLearningFocusEntry, deleteLearningFocusEntry, updatePersonalProjectEntry, deletePersonalProjectEntry } from "@/lib/api";
 import { toast } from "sonner";
 
 function getInitials(name: string) { return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2); }
@@ -15,12 +15,14 @@ function colorFor(userId: number) { return AVATAR_COLORS[userId % AVATAR_COLORS.
 export default function LearningCanvasPage() {
   const { user } = useAuth();
   const [focus, setFocus] = useState("");
+  const [editingFocusId, setEditingFocusId] = useState<number | null>(null);
   const [isSubmittingFocus, setIsSubmittingFocus] = useState(false);
   const [teamFocuses, setTeamFocuses] = useState<LearningFocusEntry[]>([]);
   const [isLoadingFocuses, setIsLoadingFocuses] = useState(true);
   const [projects, setProjects] = useState<PersonalProjectEntry[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [showAddProject, setShowAddProject] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newTag, setNewTag] = useState("");
   const [isAddingProject, setIsAddingProject] = useState(false);
@@ -34,8 +36,15 @@ export default function LearningCanvasPage() {
     e.preventDefault();
     if (!focus.trim()) { toast.error("Please describe what you are learning."); return; }
     setIsSubmittingFocus(true);
-    const result = await submitLearningFocus({ focus });
-    if (result.error) { toast.error(result.error); } else { toast.success("Focus shared!"); setFocus(""); await loadFocuses(); }
+    const result = editingFocusId
+      ? await updateLearningFocusEntry(editingFocusId, { focus })
+      : await submitLearningFocus({ focus });
+    if (result.error) { toast.error(result.error); } else {
+      toast.success(editingFocusId ? "Learning focus updated!" : "Focus shared!");
+      setFocus("");
+      setEditingFocusId(null);
+      await loadFocuses();
+    }
     setIsSubmittingFocus(false);
   };
 
@@ -43,9 +52,65 @@ export default function LearningCanvasPage() {
     e.preventDefault();
     if (!newTitle.trim()) { toast.error("Project title is required."); return; }
     setIsAddingProject(true);
-    const result = await submitPersonalProject({ title: newTitle, tag: newTag || undefined });
-    if (result.error) { toast.error(result.error); } else { toast.success("Project added!"); setNewTitle(""); setNewTag(""); setShowAddProject(false); await loadProjects(); }
+    const payload = { title: newTitle, tag: newTag || undefined };
+    const result = editingProjectId
+      ? await updatePersonalProjectEntry(editingProjectId, payload)
+      : await submitPersonalProject(payload);
+    if (result.error) { toast.error(result.error); } else {
+      toast.success(editingProjectId ? "Project updated!" : "Project added!");
+      setNewTitle("");
+      setNewTag("");
+      setShowAddProject(false);
+      setEditingProjectId(null);
+      await loadProjects();
+    }
     setIsAddingProject(false);
+  };
+
+  const handleEditFocus = (entry: LearningFocusEntry) => {
+    setFocus(entry.focus);
+    setEditingFocusId(entry.id);
+  };
+
+  const handleDeleteFocus = async (entry: LearningFocusEntry) => {
+    const ok = window.confirm("Delete your learning focus entry?");
+    if (!ok) return;
+    const result = await deleteLearningFocusEntry(entry.id);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (editingFocusId === entry.id) {
+      setEditingFocusId(null);
+      setFocus("");
+    }
+    toast.success("Learning focus deleted.");
+    await loadFocuses();
+  };
+
+  const handleEditProject = (entry: PersonalProjectEntry) => {
+    setEditingProjectId(entry.id);
+    setNewTitle(entry.title);
+    setNewTag(entry.tag || "");
+    setShowAddProject(true);
+  };
+
+  const handleDeleteProject = async (entry: PersonalProjectEntry) => {
+    const ok = window.confirm(`Delete project \"${entry.title}\"?`);
+    if (!ok) return;
+    const result = await deletePersonalProjectEntry(entry.id);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (editingProjectId === entry.id) {
+      setEditingProjectId(null);
+      setNewTitle("");
+      setNewTag("");
+      setShowAddProject(false);
+    }
+    toast.success("Project deleted.");
+    await loadProjects();
   };
 
   const uniqueByUser = teamFocuses.reduce<LearningFocusEntry[]>((acc, f) => { if (!acc.find((x) => x.user_id === f.user_id)) acc.push(f); return acc; }, []);
@@ -75,7 +140,7 @@ export default function LearningCanvasPage() {
             <form onSubmit={handleAddProject} className="flex flex-wrap gap-3 mb-4 items-end">
               <div className="flex-1 min-w-[180px]"><input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Project title" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" /></div>
               <div className="w-32"><input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value.toUpperCase())} placeholder="Tag (optional)" maxLength={20} className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" /></div>
-              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isAddingProject ? "Adding..." : "Add"}</button>
+              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isAddingProject ? "Saving..." : editingProjectId ? "Update" : "Add"}</button>
             </form>
           )}
           {isLoadingProjects ? (
@@ -87,9 +152,25 @@ export default function LearningCanvasPage() {
               {projects.map((proj) => (
                 <div key={proj.id} className="flex items-start gap-3 rounded-xl p-4 hover:shadow-md transition-shadow lighthouse-inner-card" style={{ minWidth: "180px" }}>
                   <Folder size={20} className="text-[#D97706] dark:text-amber-400 flex-shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-[#2B124C] dark:text-purple-100">{proj.title}</p>
                     {proj.tag && <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded mt-1 inline-block lighthouse-tag">{proj.tag}</span>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleEditProject(proj)}
+                      className="h-7 px-2 rounded-md border border-slate-300/70 dark:border-white/20 text-[11px] text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProject(proj)}
+                      className="h-7 px-2 rounded-md border border-red-300/70 dark:border-red-400/30 text-[11px] text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                    >
+                      <Trash2 size={11} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -104,7 +185,7 @@ export default function LearningCanvasPage() {
             <form onSubmit={handleSubmitFocus} className="space-y-4">
               <p className="text-xs text-[#854F6C] dark:text-purple-400">What are you reading or learning right now?</p>
               <input type="text" value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="Learning code igniter..." className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
-              <button type="submit" disabled={isSubmittingFocus} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isSubmittingFocus ? "Sharing..." : "Share Focus"}</button>
+              <button type="submit" disabled={isSubmittingFocus} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isSubmittingFocus ? "Saving..." : editingFocusId ? "Update Focus" : "Share Focus"}</button>
             </form>
           </div>
           <div>
@@ -118,7 +199,25 @@ export default function LearningCanvasPage() {
                 {uniqueByUser.map((f) => (
                   <div key={f.id} className="flex items-center gap-3 rounded-xl p-3.5 shadow-sm lighthouse-inner-card">
                     {f.profile_picture ? (<NextImage src={f.profile_picture} alt={f.user_name ? `${f.user_name}'s profile picture` : "User profile picture"} width={32} height={32} className="h-8 w-8 rounded-full object-cover flex-shrink-0" unoptimized />) : (<div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: colorFor(f.user_id) }}>{getInitials(f.user_name || "?")}</div>)}
-                    <p className="text-sm text-[#2B124C] dark:text-purple-100"><span className="font-semibold">{f.user_name}</span>{" "}<span className="text-[#854F6C] dark:text-purple-400">is learning:</span>{" "}{f.focus}</p>
+                    <p className="text-sm text-[#2B124C] dark:text-purple-100 flex-1"><span className="font-semibold">{f.user_name}</span>{" "}<span className="text-[#854F6C] dark:text-purple-400">is learning:</span>{" "}{f.focus}</p>
+                    {f.user_id === user.id && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEditFocus(f)}
+                          className="h-7 px-2 rounded-md border border-slate-300/70 dark:border-white/20 text-[11px] text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFocus(f)}
+                          className="h-7 px-2 rounded-md border border-red-300/70 dark:border-red-400/30 text-[11px] text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

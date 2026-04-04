@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Rocket, Users } from "lucide-react";
-import { submitDreamProject, getAllDreamProjects, DreamProjectEntry } from "@/lib/api";
+import { Rocket, Users, Pencil, Trash2 } from "lucide-react";
+import { submitDreamProject, getAllDreamProjects, DreamProjectEntry, updateDreamProjectEntry, deleteDreamProjectEntry } from "@/lib/api";
 import { toast } from "sonner";
 
 function getInitials(name: string) {
@@ -17,6 +17,7 @@ function colorFor(userId: number) { return AVATAR_COLORS[userId % AVATAR_COLORS.
 export default function VisionaryCanvasPage() {
   const { user } = useAuth();
   const [description, setDescription] = useState("");
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [teamAspirations, setTeamAspirations] = useState<DreamProjectEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,10 +35,38 @@ export default function VisionaryCanvasPage() {
     e.preventDefault();
     if (!description.trim()) { toast.error("Please describe your dream project."); return; }
     setIsSubmitting(true);
-    const result = await submitDreamProject({ description });
+    const result = editingEntryId
+      ? await updateDreamProjectEntry(editingEntryId, { description })
+      : await submitDreamProject({ description });
     if (result.error) { toast.error(result.error); }
-    else { toast.success("Aspiration saved!"); setDescription(""); await loadTeamAspirations(); }
+    else {
+      toast.success(editingEntryId ? "Aspiration updated!" : "Aspiration saved!");
+      setDescription("");
+      setEditingEntryId(null);
+      await loadTeamAspirations();
+    }
     setIsSubmitting(false);
+  };
+
+  const handleEdit = (entry: DreamProjectEntry) => {
+    setEditingEntryId(entry.id);
+    setDescription(entry.description);
+  };
+
+  const handleDelete = async (entry: DreamProjectEntry) => {
+    const ok = window.confirm("Delete your visionary canvas entry?");
+    if (!ok) return;
+    const result = await deleteDreamProjectEntry(entry.id);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (editingEntryId === entry.id) {
+      setEditingEntryId(null);
+      setDescription("");
+    }
+    toast.success("Aspiration deleted.");
+    await loadTeamAspirations();
   };
 
   if (!user) return null;
@@ -65,7 +94,7 @@ export default function VisionaryCanvasPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Dream project is to..." rows={5} className="w-full p-3 rounded-xl text-sm focus:outline-none resize-y lighthouse-input" />
               <button type="submit" disabled={isSubmitting} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#522B5B" }}>
-                {isSubmitting ? "Saving..." : "Save Aspiration"}
+                {isSubmitting ? "Saving..." : editingEntryId ? "Update Aspiration" : "Save Aspiration"}
               </button>
             </form>
           </div>
@@ -83,13 +112,33 @@ export default function VisionaryCanvasPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {uniqueByUser.map((proj) => (
                   <div key={proj.id} className="rounded-xl p-4 shadow-sm lighthouse-aspiration-card" style={{ borderLeft: `4px solid ${colorFor(proj.user_id)}`, border: `1px solid ${colorFor(proj.user_id)}` }}>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
                       {proj.profile_picture ? (
                         <NextImage src={proj.profile_picture} alt={proj.user_name ? `${proj.user_name}'s profile picture` : "User profile picture"} width={32} height={32} className="h-8 w-8 rounded-full object-cover" unoptimized />
                       ) : (
                         <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: colorFor(proj.user_id) }}>{getInitials(proj.user_name || "?")}</div>
                       )}
                       <span className="font-semibold text-sm text-[#2B124C] dark:text-purple-100">{proj.user_name}</span>
+                      </div>
+                      {proj.user_id === user.id && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(proj)}
+                            className="h-7 px-2 rounded-md border border-slate-300/70 dark:border-white/20 text-[11px] text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                          >
+                            <Pencil size={11} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(proj)}
+                            className="h-7 px-2 rounded-md border border-red-300/70 dark:border-red-400/30 text-[11px] text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                          >
+                            <Trash2 size={11} /> Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <p className="text-xs leading-relaxed text-[#522B5B] dark:text-purple-300">{proj.description}</p>
                   </div>

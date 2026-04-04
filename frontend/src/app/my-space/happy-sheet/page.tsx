@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain } from "lucide-react";
+import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
+  updateHappySheetEntry,
+  deleteHappySheetEntry,
   getMyHappySheets,
   getAllTeamHappySheets,
   getTeamHappySheetsByDate,
@@ -61,6 +63,7 @@ export default function HappySheetPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
 
   // ── Joy Log state ───────────────────────────────────────────
   const [teamHistory, setTeamHistory] = useState<HappySheetEntry[]>([]);
@@ -164,6 +167,7 @@ export default function HappySheetPage() {
       if (res.data) {
         const entry = res.data.find((e) => e.date === date);
         if (entry) {
+          setEditingEntryId(entry.id);
           setWhatMadeYouHappy(entry.what_made_you_happy);
           setWhatMadeOthersHappy(entry.what_made_others_happy);
           setDreamsForSerphawk(entry.goals_without_greed);
@@ -171,6 +175,7 @@ export default function HappySheetPage() {
           setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
           setIsUpdate(true);
         } else {
+          setEditingEntryId(null);
           setWhatMadeYouHappy("");
           setWhatMadeOthersHappy("");
           setDreamsForSerphawk("");
@@ -205,29 +210,36 @@ export default function HappySheetPage() {
     setIsSubmitting(true);
     setSuccess(false);
     try {
-      const res = await submitHappySheet({
+      const payload = {
         what_made_you_happy: whatMadeYouHappy,
         what_made_others_happy: whatMadeOthersHappy,
         goals_without_greed: dreamsForSerphawk,
         dreams_supported: dreamsWithSerphawk,
         goals_without_greed_impossible: goalsWithoutGreedImpossible,
         date: selectedDate,
-      });
+      };
+      const res = editingEntryId
+        ? await updateHappySheetEntry(editingEntryId, payload)
+        : await submitHappySheet(payload);
       if (res.error) {
         showFloatingToast({ type: "error", message: res.error });
       } else {
         setSuccess(true);
         setIsUpdate(true);
-        setWhatMadeYouHappy("");
-        setWhatMadeOthersHappy("");
-        setDreamsForSerphawk("");
-        setDreamsWithSerphawk("");
-        setGoalsWithoutGreedImpossible("");
+        setEditingEntryId(res.data?.id ?? null);
+        if (!editingEntryId) {
+          setWhatMadeYouHappy("");
+          setWhatMadeOthersHappy("");
+          setDreamsForSerphawk("");
+          setDreamsWithSerphawk("");
+          setGoalsWithoutGreedImpossible("");
+        }
         // Refresh filtered view if active
         if (logFilterDate === selectedDate) {
           const r2 = await getTeamHappySheetsByDate(logFilterDate);
           if (r2.data) setFilteredTeam(r2.data);
         }
+        await loadPersonalForDate(selectedDate);
         setTimeout(() => setSuccess(false), 5000);
       }
     } catch (err: any) {
@@ -235,6 +247,45 @@ export default function HappySheetPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleEditEntry = (entry: HappySheetEntry) => {
+    setSelectedDate(entry.date);
+    setEditingEntryId(entry.id);
+    setWhatMadeYouHappy(entry.what_made_you_happy);
+    setWhatMadeOthersHappy(entry.what_made_others_happy);
+    setDreamsForSerphawk(entry.goals_without_greed);
+    setDreamsWithSerphawk(entry.dreams_supported);
+    setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
+    setIsUpdate(true);
+    showFloatingToast({ type: "success", message: "Entry loaded for editing." });
+  };
+
+  const handleDeleteEntry = async (entry: HappySheetEntry) => {
+    const ok = window.confirm(`Delete your happy sheet entry for ${fmtLongDate(entry.date)}?`);
+    if (!ok) return;
+    const res = await deleteHappySheetEntry(entry.id);
+    if (res.error) {
+      showFloatingToast({ type: "error", message: res.error });
+      return;
+    }
+
+    if (editingEntryId === entry.id) {
+      setEditingEntryId(null);
+      setIsUpdate(false);
+      setWhatMadeYouHappy("");
+      setWhatMadeOthersHappy("");
+      setDreamsForSerphawk("");
+      setDreamsWithSerphawk("");
+      setGoalsWithoutGreedImpossible("");
+    }
+
+    if (logFilterDate === entry.date) {
+      const r2 = await getTeamHappySheetsByDate(logFilterDate);
+      setFilteredTeam(r2.data || []);
+    }
+    await loadTeamHistory();
+    showFloatingToast({ type: "success", message: "Entry deleted." });
   };
 
   const refreshEntryInteractions = async (entryId: number) => {
@@ -604,7 +655,7 @@ export default function HappySheetPage() {
               >
                 {isSubmitting
                   ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  : isUpdate ? "Update Reflection" : "Sync Personal Pulse"}
+                  : editingEntryId ? "Save Edited Reflection" : isUpdate ? "Update Reflection" : "Sync Personal Pulse"}
               </button>
             </div>
           </form>
@@ -688,6 +739,24 @@ export default function HappySheetPage() {
                         )}
                       </div>
                     </div>
+                    {entry.user_id === user.id && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEditEntry(entry)}
+                          className="h-8 px-2.5 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                        >
+                          <Pencil size={12} /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEntry(entry)}
+                          className="h-8 px-2.5 rounded-lg border border-red-300/70 dark:border-red-400/30 text-xs text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {/* All 5 fields */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Link2, Swords } from "lucide-react";
-import { submitTaskSheet, getMyTaskSheets, TaskSheetEntry } from "@/lib/api";
+import { Calendar, CheckCircle2, Link2, Swords, Pencil, Trash2 } from "lucide-react";
+import { submitTaskSheet, getMyTaskSheets, TaskSheetEntry, updateTaskSheetEntry, deleteTaskSheetEntry } from "@/lib/api";
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
@@ -16,6 +16,7 @@ export default function TaskSheetPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<TaskSheetEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -71,17 +72,48 @@ export default function TaskSheetPage() {
     if (!achievements.trim()) { setError("Please describe your achievements for the selected date."); return; }
     setIsSubmitting(true); setError(null); setSuccess(false);
     try {
-      const res = await submitTaskSheet({ achievements, repo_link: repoLink || undefined, date: selectedDate });
+      const payload = { achievements, repo_link: repoLink || undefined, date: selectedDate };
+      const res = editingEntryId
+        ? await updateTaskSheetEntry(editingEntryId, payload)
+        : await submitTaskSheet(payload);
       if (res.error) { setError(res.error); }
       else {
         setSuccess(true);
         setIsUpdate(true);
+        setEditingEntryId(null);
         await refreshHistoryList();
         setTimeout(() => setSuccess(false), 5000);
       }
     } catch (err: any) {
       setError(err.message || "Failed to submit task sheet.");
     } finally { setIsSubmitting(false); }
+  };
+
+  const handleEditEntry = (entry: TaskSheetEntry) => {
+    setSelectedDate(entry.date);
+    setAchievements(entry.achievements);
+    setRepoLink(entry.repo_link || "");
+    setIsUpdate(true);
+    setEditingEntryId(entry.id);
+    setSuccess(false);
+    setError(null);
+  };
+
+  const handleDeleteEntry = async (entry: TaskSheetEntry) => {
+    const ok = window.confirm(`Delete your task sheet entry for ${new Date(entry.date + "T00:00:00").toLocaleDateString()}?`);
+    if (!ok) return;
+    const res = await deleteTaskSheetEntry(entry.id);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    if (editingEntryId === entry.id) {
+      setEditingEntryId(null);
+      setAchievements("");
+      setRepoLink("");
+      setIsUpdate(false);
+    }
+    await refreshHistoryList();
   };
 
   if (!user) return null;
@@ -130,7 +162,7 @@ export default function TaskSheetPage() {
             </div>
             <div className="pt-2">
               <button type="submit" disabled={isSubmitting} className="w-full h-11 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90" style={{ background: "#522B5B" }}>
-                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : isUpdate ? "Update Selected Date Log" : "Publish Strategic Log"}
+                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : editingEntryId ? "Save Edited Entry" : isUpdate ? "Update Selected Date Log" : "Publish Strategic Log"}
               </button>
             </div>
           </form>
@@ -147,9 +179,27 @@ export default function TaskSheetPage() {
             <div className="space-y-3">
               {history.map((entry) => (
                 <div key={entry.id} className="rounded-xl p-5 shadow-sm transition-shadow hover:shadow-md lighthouse-inner-card">
-                  <div className="flex items-center gap-1.5 font-semibold text-sm mb-3 text-[#522B5B] dark:text-purple-300">
-                    <Calendar size={14} />
-                    {new Date(entry.date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-1.5 font-semibold text-sm text-[#522B5B] dark:text-purple-300">
+                      <Calendar size={14} />
+                      {new Date(entry.date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEditEntry(entry)}
+                        className="h-8 px-2.5 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEntry(entry)}
+                        className="h-8 px-2.5 rounded-lg border border-red-300/70 dark:border-red-400/30 text-xs text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
                   </div>
                   <p className="whitespace-pre-wrap leading-relaxed text-sm text-[#2B124C] dark:text-purple-100">{entry.achievements}</p>
                   {entry.repo_link && (

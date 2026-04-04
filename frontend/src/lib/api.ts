@@ -1925,6 +1925,22 @@ export async function getMyTaskSheets(limit = 30): Promise<ApiResponse<TaskSheet
   return apiFetch<TaskSheetEntry[]>(`/my-space/task-sheet/me?limit=${limit}`);
 }
 
+export async function updateTaskSheetEntry(
+  entryId: number,
+  data: { achievements: string; repo_link?: string; date?: string }
+): Promise<ApiResponse<TaskSheetEntry>> {
+  return apiFetch<TaskSheetEntry>(`/my-space/task-sheet/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteTaskSheetEntry(entryId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/my-space/task-sheet/${entryId}`, {
+    method: "DELETE",
+  });
+}
+
 // Happy Sheet
 export async function submitHappySheet(data: {
   what_made_you_happy: string;
@@ -1942,6 +1958,29 @@ export async function submitHappySheet(data: {
 
 export async function getMyHappySheets(limit = 30): Promise<ApiResponse<HappySheetEntry[]>> {
   return apiFetch<HappySheetEntry[]>(`/my-space/happy-sheet/me?limit=${limit}`);
+}
+
+export async function updateHappySheetEntry(
+  entryId: number,
+  data: {
+    what_made_you_happy: string;
+    what_made_others_happy: string;
+    goals_without_greed: string;
+    dreams_supported: string;
+    goals_without_greed_impossible: string;
+    date?: string;
+  }
+): Promise<ApiResponse<HappySheetEntry>> {
+  return apiFetch<HappySheetEntry>(`/my-space/happy-sheet/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteHappySheetEntry(entryId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/my-space/happy-sheet/${entryId}`, {
+    method: "DELETE",
+  });
 }
 
 export async function getAllTeamHappySheets(limit = 100): Promise<ApiResponse<HappySheetEntry[]>> {
@@ -2025,6 +2064,22 @@ export async function getAllDreamProjects(limit = 50): Promise<ApiResponse<Dream
   return apiFetch<DreamProjectEntry[]>(`/my-space/dream-project/all?limit=${limit}`);
 }
 
+export async function updateDreamProjectEntry(
+  entryId: number,
+  data: { description: string }
+): Promise<ApiResponse<DreamProjectEntry>> {
+  return apiFetch<DreamProjectEntry>(`/my-space/dream-project/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteDreamProjectEntry(entryId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/my-space/dream-project/${entryId}`, {
+    method: "DELETE",
+  });
+}
+
 // Learning Focus (Learning Canvas)
 export async function submitLearningFocus(data: {
   focus: string;
@@ -2037,6 +2092,22 @@ export async function submitLearningFocus(data: {
 
 export async function getAllLearningFocuses(limit = 50): Promise<ApiResponse<LearningFocusEntry[]>> {
   return apiFetch<LearningFocusEntry[]>(`/my-space/learning-focus/all?limit=${limit}`);
+}
+
+export async function updateLearningFocusEntry(
+  entryId: number,
+  data: { focus: string }
+): Promise<ApiResponse<LearningFocusEntry>> {
+  return apiFetch<LearningFocusEntry>(`/my-space/learning-focus/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteLearningFocusEntry(entryId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/my-space/learning-focus/${entryId}`, {
+    method: "DELETE",
+  });
 }
 
 // Personal Projects (Learning Canvas)
@@ -2052,6 +2123,22 @@ export async function submitPersonalProject(data: {
 
 export async function getMyPersonalProjects(limit = 30): Promise<ApiResponse<PersonalProjectEntry[]>> {
   return apiFetch<PersonalProjectEntry[]>(`/my-space/personal-project/me?limit=${limit}`);
+}
+
+export async function updatePersonalProjectEntry(
+  entryId: number,
+  data: { title: string; tag?: string }
+): Promise<ApiResponse<PersonalProjectEntry>> {
+  return apiFetch<PersonalProjectEntry>(`/my-space/personal-project/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePersonalProjectEntry(entryId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/my-space/personal-project/${entryId}`, {
+    method: "DELETE",
+  });
 }
 
 // ==================== TEAMS MEETINGS ====================
