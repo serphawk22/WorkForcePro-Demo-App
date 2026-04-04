@@ -12,6 +12,27 @@
 export function getApiBaseUrl(): string {
   const explicitApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
+  const normalizeServerApiUrl = (rawUrl: string): string => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return "";
+
+    // Accept already secure URLs as-is.
+    if (trimmed.startsWith("https://")) return trimmed.replace(/\/$/, "");
+
+    // Keep local dev URLs over HTTP.
+    if (trimmed.startsWith("http://localhost") || trimmed.startsWith("http://127.0.0.1")) {
+      return trimmed.replace(/\/$/, "");
+    }
+
+    // If protocol is missing, default to HTTPS.
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+      return `https://${trimmed}`.replace(/\/$/, "");
+    }
+
+    // Any remaining non-local HTTP URL is upgraded to HTTPS to avoid mixed-content issues.
+    return trimmed.replace(/^http:\/\//, "https://").replace(/\/$/, "");
+  };
+
   // If we are executing inside the user's browser:
   if (typeof window !== "undefined") {
     // Always use same-origin proxy in the browser to avoid CORS preflight issues.
@@ -19,7 +40,7 @@ export function getApiBaseUrl(): string {
   }
 
   // If we are executing server-side (Next.js RSC/SSR):
-  return explicitApiUrl || "https://workforcepro-demo-app-production.up.railway.app";
+  return normalizeServerApiUrl(explicitApiUrl || "") || "https://workforcepro-demo-app-production.up.railway.app";
 }
 
 if (typeof window !== "undefined") {
