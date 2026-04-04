@@ -75,7 +75,7 @@ async function wakeBackendIfNeeded(): Promise<void> {
 
   hasTriedWakeupRetry = true;
   try {
-    await fetch(`${getApiBaseUrl()}/health`, {
+    await fetch("/api/health", {
       method: "GET",
       mode: "no-cors",
       cache: "no-store",
@@ -629,7 +629,8 @@ async function apiFetch<T>(
       console.log(`[API] ${options.method || 'GET'} ${endpoint} - No token, skipping Authorization header`);
     }
 
-    const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
+    const baseUrl = typeof window !== "undefined" ? "/api" : getApiBaseUrl();
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       credentials: "include", // Send cookies
       headers,
@@ -686,7 +687,7 @@ async function apiFetch<T>(
       }
       console.error("[API] CORS or Network Error:", {
         endpoint,
-        apiBaseUrl: getApiBaseUrl(),
+        apiBaseUrl: typeof window !== "undefined" ? "/api" : getApiBaseUrl(),
         error: error.message
       });
       return { 

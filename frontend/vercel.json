@@ -3,5 +3,11 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://work-force-pro-demo-app-production.up.railway.app/$1"
+    }
+  ]
 }
