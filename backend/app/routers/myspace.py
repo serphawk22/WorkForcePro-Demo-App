@@ -114,6 +114,7 @@ async def create_happy_sheet(
         existing.what_made_others_happy = sheet_data.what_made_others_happy
         existing.goals_without_greed = sheet_data.goals_without_greed
         existing.dreams_supported = sheet_data.dreams_supported
+        existing.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
         session.add(existing)
         session.commit()
         session.refresh(existing)
@@ -125,6 +126,7 @@ async def create_happy_sheet(
         what_made_others_happy=sheet_data.what_made_others_happy,
         goals_without_greed=sheet_data.goals_without_greed,
         dreams_supported=sheet_data.dreams_supported,
+        goals_without_greed_impossible=sheet_data.goals_without_greed_impossible,
     )
     session.add(happy_sheet)
     session.commit()
@@ -240,6 +242,7 @@ async def get_daily_happy_sheet_report(
             what_made_others_happy=sheet.what_made_others_happy if sheet else None,
             goals_without_greed=sheet.goals_without_greed if sheet else None,
             dreams_supported=sheet.dreams_supported if sheet else None,
+            goals_without_greed_impossible=sheet.goals_without_greed_impossible if sheet else None,
         )
         for user, sheet in results
     ]
