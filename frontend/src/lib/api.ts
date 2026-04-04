@@ -19,7 +19,7 @@ export function getApiBaseUrl(): string {
   }
 
   // If we are executing server-side (Next.js RSC/SSR):
-  return explicitApiUrl || "https://work-force-pro-demo-app-production.up.railway.app";
+  return explicitApiUrl || "https://workforcepro-demo-app-production.up.railway.app";
 }
 
 if (typeof window !== "undefined") {

@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://work-force-pro-demo-app-production.up.railway.app/$1"
+      "destination": "https://workforcepro-demo-app-production.up.railway.app/$1"
     }
   ]
 }

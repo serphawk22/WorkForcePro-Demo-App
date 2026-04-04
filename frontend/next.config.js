@@ -35,7 +35,7 @@ const nextConfig = {
     // Do not trust NEXT_PUBLIC_API_URL in production rewrites; it is often set for client use and can be stale/wrong.
     const productionBackend = normalizeBackendUrl(
       process.env.BACKEND_API_URL,
-      "https://work-force-pro-demo-app-production.up.railway.app"
+      "https://workforcepro-demo-app-production.up.railway.app"
     );
     const backend = isDevServer ? localBackend : productionBackend;
     return [
