@@ -86,7 +86,8 @@ def _task_to_with_assignee(session: Session, task: Task, workspace: Optional[Wor
     )
 
 
-@router.get("/", response_model=List[WorkspaceRead])
+@router.get("", response_model=List[WorkspaceRead])
+@router.get("/", response_model=List[WorkspaceRead], include_in_schema=False)
 async def get_workspaces(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -110,7 +111,8 @@ async def get_workspaces(
     return response
 
 
-@router.post("/", response_model=WorkspaceRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=WorkspaceRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=WorkspaceRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_workspace(
     workspace_data: WorkspaceCreate,
     session: Session = Depends(get_session),
