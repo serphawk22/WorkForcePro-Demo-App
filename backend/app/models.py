@@ -632,7 +632,7 @@ class NotificationRead(SQLModel):
     """Schema for reading notification data."""
     id: int
     user_id: int
-    type: NotificationType
+    type: str
     message: str
     task_id: Optional[int]
     weekly_progress_id: Optional[int] = None

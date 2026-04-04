@@ -44,7 +44,19 @@ async def get_notifications(
     ).order_by(Notification.created_at.desc())
     
     notifications = session.exec(statement).all()
-    return notifications
+    return [
+        NotificationRead(
+            id=n.id,
+            user_id=n.user_id,
+            type=str(n.type.value if hasattr(n.type, "value") else n.type),
+            message=n.message,
+            task_id=n.task_id,
+            weekly_progress_id=n.weekly_progress_id,
+            is_read=n.is_read,
+            created_at=n.created_at,
+        )
+        for n in notifications
+    ]
 
 
 @router.get("/unread/count")

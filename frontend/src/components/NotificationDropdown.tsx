@@ -53,6 +53,7 @@ export function NotificationDropdown() {
     const response = await getNotifications();
     if (response.data) {
       setNotifications(response.data);
+      setUnreadCount(response.data.filter((n) => !n.is_read).length);
     }
     setLoading(false);
   }
