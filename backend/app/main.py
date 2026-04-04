@@ -177,6 +177,8 @@ async def lifespan(app: FastAPI):
         # Task workspace hierarchy
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id INTEGER',
         'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',
+        # Happy Sheet new question column
+        "ALTER TABLE happy_sheets ADD COLUMN IF NOT EXISTS goals_without_greed_impossible VARCHAR NOT NULL DEFAULT ''",
         ]
 
         for migration in additional_migrations:
