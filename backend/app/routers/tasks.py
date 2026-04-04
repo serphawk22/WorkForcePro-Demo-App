@@ -123,6 +123,78 @@ def _task_to_with_assignee(session: Session, task: Task) -> TaskWithAssignee:
     )
 
 
+def _legacy_subtask_status_to_task_status(status: SubtaskStatus) -> TaskStatus:
+    """Map legacy subtask statuses onto task statuses used by Project Management grid."""
+    if status == SubtaskStatus.completed:
+        return TaskStatus.submitted
+    if status == SubtaskStatus.reviewing:
+        return TaskStatus.reviewing
+    if status == SubtaskStatus.approved:
+        return TaskStatus.approved
+    if status == SubtaskStatus.rejected:
+        return TaskStatus.rejected
+    if status == SubtaskStatus.in_progress:
+        return TaskStatus.in_progress
+    return TaskStatus.todo
+
+
+def _legacy_subtask_to_task_with_assignee(
+    session: Session,
+    subtask: Subtask,
+    root_task_id: int,
+    workspace: Optional[Workspace],
+) -> TaskWithAssignee:
+    """Convert legacy `subtasks` rows into task-shaped rows for backward-compatible UI rendering."""
+    assignee = None
+    if subtask.assigned_to:
+        assignee = session.exec(select(User).where(User.id == subtask.assigned_to)).first()
+
+    assigner = None
+    if subtask.assigned_by:
+        assigner = session.exec(select(User).where(User.id == subtask.assigned_by)).first()
+
+    # Use negative ids to avoid collisions with real task ids in the same payload.
+    synthetic_id = -subtask.id
+    synthetic_parent_id = -subtask.parent_subtask_id if subtask.parent_subtask_id else root_task_id
+
+    return TaskWithAssignee(
+        id=synthetic_id,
+        public_id=subtask.public_id,
+        title=subtask.title,
+        description=subtask.description,
+        priority=subtask.priority,
+        due_date=subtask.due_date,
+        estimated_hours=None,
+        actual_hours=None,
+        parent_task_id=synthetic_parent_id,
+        assigned_to=subtask.assigned_to,
+        assigned_by=subtask.assigned_by,
+        status=_legacy_subtask_status_to_task_status(subtask.status),
+        done_by_employee=subtask.status == SubtaskStatus.completed,
+        github_link=None,
+        deployed_link=None,
+        workspace_id=workspace.id if workspace else None,
+        workspace_name=workspace.name if workspace else None,
+        workspace_icon=workspace.icon if workspace else None,
+        workspace_color=workspace.color if workspace else None,
+        start_date=subtask.created_at,
+        completed_at=None,
+        created_at=subtask.created_at,
+        updated_at=subtask.updated_at,
+        assignee_name=assignee.name if assignee else None,
+        assignee_email=assignee.email if assignee else None,
+        assigned_by_name=assigner.name if assigner else None,
+        progress=None,
+        is_recurring=False,
+        recurrence_type=None,
+        recurrence_interval=1,
+        repeat_days=None,
+        recurrence_start_date=None,
+        recurrence_end_date=None,
+        monthly_day=None,
+    )
+
+
 # Helper function to calculate task progress
 def calculate_task_progress(task: Task, session: Session) -> int:
     """
@@ -856,7 +928,26 @@ async def get_task_children(
         .order_by(Task.created_at.asc())
     ).all()
 
-    return [_task_to_with_assignee(session, child) for child in children]
+    workspace = None
+    if parent_task.workspace_id:
+        workspace = session.exec(select(Workspace).where(Workspace.id == parent_task.workspace_id)).first()
+
+    legacy_subtasks = session.exec(
+        select(Subtask)
+        .where(
+            Subtask.parent_task_id == task_id,
+            Subtask.organization_id == current_user.organization_id,
+        )
+        .order_by(Subtask.created_at.asc())
+    ).all()
+
+    task_children_payload = [_task_to_with_assignee(session, child) for child in children]
+    legacy_children_payload = [
+        _legacy_subtask_to_task_with_assignee(session, subtask, task_id, workspace)
+        for subtask in legacy_subtasks
+    ]
+
+    return task_children_payload + legacy_children_payload
 
 
 @router.get("/{task_id}", response_model=TaskWithAssignee)
