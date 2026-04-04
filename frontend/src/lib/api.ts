@@ -17,11 +17,11 @@ export function getApiBaseUrl(): string {
       return "/api"; // Leverage Next.js rewrites to bypass browser CORS
     }
     // If they are accessing the Vercel production domain:
-    return "https://workforcepro-demo-app-production.up.railway.app";
+    return "https://work-force-pro-demo-app-production.up.railway.app";
   }
   
   // If we are executing server-side (Next.js RSC/SSR):
-  return "https://workforcepro-demo-app-production.up.railway.app";
+  return "https://work-force-pro-demo-app-production.up.railway.app";
 }
 
 if (typeof window !== "undefined") {
