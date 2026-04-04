@@ -16,6 +16,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const pathname = usePathname() || "";
   const hasRedirected = useRef(false);
 
+  const RedirectState = ({ message }: { message: string }) => (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/20 bg-white/20 dark:bg-white/5 px-8 py-6 backdrop-blur-xl shadow-lg">
+        <Loader2 size={40} className="animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
+    </div>
+  );
+
   useEffect(() => {
     const userRole = user?.role;
     
@@ -88,12 +97,12 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   // Don't render anything if not logged in (redirecting)
   if (!isLoggedIn) {
-    return null;
+    return <RedirectState message="Redirecting to login..." />;
   }
 
   // Don't render if role mismatch (redirecting)
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return null;
+    return <RedirectState message="Redirecting to your dashboard..." />;
   }
 
   return <>{children}</>;

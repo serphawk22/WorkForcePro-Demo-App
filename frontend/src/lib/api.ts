@@ -1784,6 +1784,7 @@ export interface HappySheetEntry {
   what_made_others_happy: string;
   goals_without_greed: string;
   dreams_supported: string;
+  goals_without_greed_impossible: string;
   created_at: string;
   user_name?: string | null;
   user_email?: string | null;
@@ -1799,6 +1800,7 @@ export interface DailyHappySheetReportRow {
   what_made_others_happy?: string | null;
   goals_without_greed?: string | null;
   dreams_supported?: string | null;
+  goals_without_greed_impossible?: string | null;
 }
 
 export interface DreamProjectEntry {

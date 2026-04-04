@@ -37,8 +37,9 @@ export default function HappySheetPage() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [whatMadeYouHappy, setWhatMadeYouHappy] = useState("");
   const [whatMadeOthersHappy, setWhatMadeOthersHappy] = useState("");
-  const [goalsWithoutGreed, setGoalsWithoutGreed] = useState("");
-  const [dreamsSupported, setDreamsSupported] = useState("");
+  const [dreamsForSerphawk, setDreamsForSerphawk] = useState("");
+  const [dreamsWithSerphawk, setDreamsWithSerphawk] = useState("");
+  const [goalsWithoutGreedImpossible, setGoalsWithoutGreedImpossible] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
@@ -83,14 +84,16 @@ export default function HappySheetPage() {
         if (entry) {
           setWhatMadeYouHappy(entry.what_made_you_happy);
           setWhatMadeOthersHappy(entry.what_made_others_happy);
-          setGoalsWithoutGreed(entry.goals_without_greed);
-          setDreamsSupported(entry.dreams_supported);
+          setDreamsForSerphawk(entry.goals_without_greed);
+          setDreamsWithSerphawk(entry.dreams_supported);
+          setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
           setIsUpdate(true);
         } else {
           setWhatMadeYouHappy("");
           setWhatMadeOthersHappy("");
-          setGoalsWithoutGreed("");
-          setDreamsSupported("");
+          setDreamsForSerphawk("");
+          setDreamsWithSerphawk("");
+          setGoalsWithoutGreedImpossible("");
           setIsUpdate(false);
         }
       }
@@ -113,7 +116,7 @@ export default function HappySheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!whatMadeYouHappy.trim() || !whatMadeOthersHappy.trim() || !goalsWithoutGreed.trim() || !dreamsSupported.trim()) {
+    if (!whatMadeYouHappy.trim() || !whatMadeOthersHappy.trim() || !dreamsForSerphawk.trim() || !dreamsWithSerphawk.trim() || !goalsWithoutGreedImpossible.trim()) {
       showFloatingToast({ type: "error", message: "Please fill all required fields" });
       return;
     }
@@ -123,8 +126,9 @@ export default function HappySheetPage() {
       const res = await submitHappySheet({
         what_made_you_happy: whatMadeYouHappy,
         what_made_others_happy: whatMadeOthersHappy,
-        goals_without_greed: goalsWithoutGreed,
-        dreams_supported: dreamsSupported,
+        goals_without_greed: dreamsForSerphawk,
+        dreams_supported: dreamsWithSerphawk,
+        goals_without_greed_impossible: goalsWithoutGreedImpossible,
         date: selectedDate,
       });
       if (res.error) {
@@ -134,8 +138,9 @@ export default function HappySheetPage() {
         setIsUpdate(true);
         setWhatMadeYouHappy("");
         setWhatMadeOthersHappy("");
-        setGoalsWithoutGreed("");
-        setDreamsSupported("");
+        setDreamsForSerphawk("");
+        setDreamsWithSerphawk("");
+        setGoalsWithoutGreedImpossible("");
         // Refresh filtered view if active
         if (logFilterDate === selectedDate) {
           const r2 = await getTeamHappySheetsByDate(logFilterDate);
@@ -189,8 +194,8 @@ export default function HappySheetPage() {
     const rowPaddingY = 12;
     const lineHeight = 20;
     const headerHeight = 48;
-    const colWidths = [240, 340, 340, 340, 340];
-    const headers = ["Employee Name", "Happy Today", "Made Others Happy", "Goals", "Dreams"];
+    const colWidths = [240, 280, 280, 280, 280, 280];
+    const headers = ["Employee Name", "Happy Today", "Made Others Happy", "My Dreams for serphawk", "My Dreams with serphawk", "Goals (No Greed)"];
     const width = padding * 2 + colWidths.reduce((a, b) => a + b, 0);
 
     const scratch = document.createElement("canvas");
@@ -205,6 +210,7 @@ export default function HappySheetPage() {
         row.what_made_others_happy || "-",
         row.goals_without_greed || "-",
         row.dreams_supported || "-",
+        row.goals_without_greed_impossible || "-",
       ];
       const wrapped = cells.map((cell, idx) =>
         getWrappedLines(sctx, String(cell), colWidths[idx] - 20)
@@ -365,8 +371,9 @@ export default function HappySheetPage() {
             {([
               { label: "What Made You Happy? *", value: whatMadeYouHappy, set: setWhatMadeYouHappy, placeholder: "Share your moments of joy..." },
               { label: "What Made Others Happy? *", value: whatMadeOthersHappy, set: setWhatMadeOthersHappy, placeholder: "How did you brighten someone's day?" },
-              { label: "Goals & Self-Satisfaction Without Greed *", value: goalsWithoutGreed, set: setGoalsWithoutGreed, placeholder: "What personal goals bring you fulfillment?" },
-              { label: "Dreams That WorkForce Pro Can Make True *", value: dreamsSupported, set: setDreamsSupported, placeholder: "Share your aspirations where we can support you..." },
+              { label: "My Dreams for serphawk *", value: dreamsForSerphawk, set: setDreamsForSerphawk, placeholder: "Share your dreams for serphawk..." },
+              { label: "My Dreams with serphawk that serphawk can help reach *", value: dreamsWithSerphawk, set: setDreamsWithSerphawk, placeholder: "Share your dreams that we can support you with..." },
+              { label: "Goals without any greed even if it is impossible *", value: goalsWithoutGreedImpossible, set: setGoalsWithoutGreedImpossible, placeholder: "What goals matter to you regardless of greed?" },
             ] as const).map(({ label, value, set, placeholder }) => (
               <div key={label}>
                 <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">{label}</label>
@@ -467,7 +474,7 @@ export default function HappySheetPage() {
                       </div>
                     </div>
                   </div>
-                  {/* All 4 fields */}
+                  {/* All 5 fields */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Happy Moment</p>
@@ -478,12 +485,16 @@ export default function HappySheetPage() {
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_others_happy}</p>
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams for serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed}</p>
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Dreams</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams with serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.dreams_supported}</p>
+                    </div>
+                    <div className="rounded-lg p-3 lighthouse-sub-card lg:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals (No Greed)</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed_impossible || "—"}</p>
                     </div>
                   </div>
                 </div>

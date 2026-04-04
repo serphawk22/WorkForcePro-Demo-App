@@ -840,6 +840,7 @@ class HappySheet(SQLModel, table=True):
     what_made_others_happy: str
     goals_without_greed: str
     dreams_supported: str
+    goals_without_greed_impossible: str = Field(default="")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class HappySheetCreate(SQLModel):
@@ -847,6 +848,7 @@ class HappySheetCreate(SQLModel):
     what_made_others_happy: str
     goals_without_greed: str
     dreams_supported: str
+    goals_without_greed_impossible: str
     date: Optional[DateType] = None  # if None, defaults to today on the backend
 
 class HappySheetRead(SQLModel):
@@ -857,6 +859,7 @@ class HappySheetRead(SQLModel):
     what_made_others_happy: str
     goals_without_greed: str
     dreams_supported: str
+    goals_without_greed_impossible: str
     created_at: datetime
 
 class HappySheetWithUser(HappySheetRead):
@@ -874,6 +877,7 @@ class DailyHappySheetReportRow(SQLModel):
     what_made_others_happy: Optional[str] = None
     goals_without_greed: Optional[str] = None
     dreams_supported: Optional[str] = None
+    goals_without_greed_impossible: Optional[str] = None
 
 
 class DreamProject(SQLModel, table=True):
