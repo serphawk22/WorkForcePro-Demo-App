@@ -468,11 +468,14 @@ PRODUCTION_FRONTEND = os.getenv("PRODUCTION_FRONTEND_URL", "")
 FRONTEND_URLS = os.getenv("FRONTEND_URLS", "")
 
 # Allow Vercel preview deployments for this project and (optionally) all Vercel domains.
-# Can be overridden from env with FRONTEND_ORIGIN_REGEX.
-FRONTEND_ORIGIN_REGEX = os.getenv(
-    "FRONTEND_ORIGIN_REGEX",
-    r"https://([a-z0-9-]+\.)?vercel\.app",
-)
+# FRONTEND_ORIGIN_REGEX from env is supported, but we always include a safe
+# Vercel fallback so stale env values do not break deployed previews.
+DEFAULT_VERCEL_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)?vercel\.app"
+ENV_FRONTEND_ORIGIN_REGEX = os.getenv("FRONTEND_ORIGIN_REGEX", "").strip()
+if ENV_FRONTEND_ORIGIN_REGEX:
+    FRONTEND_ORIGIN_REGEX = f"(?:{ENV_FRONTEND_ORIGIN_REGEX})|(?:{DEFAULT_VERCEL_ORIGIN_REGEX})"
+else:
+    FRONTEND_ORIGIN_REGEX = DEFAULT_VERCEL_ORIGIN_REGEX
 
 origins = [
     "http://localhost:3000",
