@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
-export type FloatingToastType = "error" | "success" | "info";
+export type FloatingToastType = "error" | "success" | "info" | "delete";
 
 type FloatingToastArgs = {
   message: string;
@@ -17,8 +17,20 @@ type FloatingToastArgs = {
  * Relies on the global `<Toaster />` mounted in `frontend/src/app/layout.tsx`.
  */
 export function showFloatingToast({ message, type, durationMs = 3500 }: FloatingToastArgs) {
-  const Icon = type === "success" ? CheckCircle2 : type === "info" ? Info : AlertTriangle;
-  const variant = type === "error" ? "destructive" : type === "success" ? "success" : "info";
+  const Icon =
+    type === "success"
+      ? CheckCircle2
+      : type === "info"
+      ? Info
+      : type === "delete"
+      ? Trash2
+      : AlertTriangle;
+  const variant =
+    type === "error" || type === "delete"
+      ? "destructive"
+      : type === "success"
+      ? "success"
+      : "info";
 
   toast({
     variant: variant as any,

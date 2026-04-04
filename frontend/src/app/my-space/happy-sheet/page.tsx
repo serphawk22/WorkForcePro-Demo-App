@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
+import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
@@ -61,7 +61,6 @@ export default function HappySheetPage() {
   const [dreamsWithSerphawk, setDreamsWithSerphawk] = useState("");
   const [goalsWithoutGreedImpossible, setGoalsWithoutGreedImpossible] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
 
@@ -208,7 +207,6 @@ export default function HappySheetPage() {
       return;
     }
     setIsSubmitting(true);
-    setSuccess(false);
     try {
       const payload = {
         what_made_you_happy: whatMadeYouHappy,
@@ -224,7 +222,6 @@ export default function HappySheetPage() {
       if (res.error) {
         showFloatingToast({ type: "error", message: res.error });
       } else {
-        setSuccess(true);
         setIsUpdate(true);
         setEditingEntryId(res.data?.id ?? null);
         if (!editingEntryId) {
@@ -240,7 +237,10 @@ export default function HappySheetPage() {
           if (r2.data) setFilteredTeam(r2.data);
         }
         await loadPersonalForDate(selectedDate);
-        setTimeout(() => setSuccess(false), 5000);
+        showFloatingToast({
+          type: "success",
+          message: editingEntryId ? "Personal pulse updated successfully." : "Personal pulse synced successfully.",
+        });
       }
     } catch (err: any) {
       showFloatingToast({ type: "error", message: err?.message || "Failed to submit." });
@@ -285,7 +285,7 @@ export default function HappySheetPage() {
       setFilteredTeam(r2.data || []);
     }
     await loadTeamHistory();
-    showFloatingToast({ type: "success", message: "Entry deleted." });
+    showFloatingToast({ type: "delete", message: "Entry deleted." });
   };
 
   const refreshEntryInteractions = async (entryId: number) => {
@@ -605,7 +605,6 @@ export default function HappySheetPage() {
                 value={selectedDate}
                 max={todayStr()}
                 onChange={(e) => {
-                  setSuccess(false);
                   setSelectedDate(e.target.value);
                 }}
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
@@ -618,13 +617,6 @@ export default function HappySheetPage() {
               <Calendar size={13} />
               Logging reflection for{" "}
               <span className="font-bold">{fmtLongDate(selectedDate)}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2">
-              <CheckCircle2 size={18} />
-              {isUpdate ? "Reflection saved successfully!" : "Your Joy has been shared! Keep shining."}
             </div>
           )}
 
