@@ -1803,6 +1803,25 @@ export interface DailyHappySheetReportRow {
   goals_without_greed_impossible?: string | null;
 }
 
+export interface HappySheetReactionSummary {
+  emoji: string;
+  count: number;
+  users: string[];
+  reacted_by_me: boolean;
+}
+
+export interface HappySheetCommentEntry {
+  id: number;
+  entry_id: number;
+  user_id: number;
+  comment_text: string;
+  parent_comment_id?: number | null;
+  created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
+}
+
 export interface DreamProjectEntry {
   id: number;
   user_id: number;
@@ -1876,6 +1895,31 @@ export async function getTeamHappySheetsByDate(date: string): Promise<ApiRespons
 
 export async function getAdminDailyHappySheetReport(date: string): Promise<ApiResponse<DailyHappySheetReportRow[]>> {
   return apiFetch<DailyHappySheetReportRow[]>(`/my-space/happy-sheet/admin/daily-report?date=${encodeURIComponent(date)}`);
+}
+
+export async function getHappySheetReactions(entryId: number): Promise<ApiResponse<HappySheetReactionSummary[]>> {
+  return apiFetch<HappySheetReactionSummary[]>(`/my-space/happy-sheet/${entryId}/reactions`);
+}
+
+export async function toggleHappySheetReaction(entryId: number, emoji: string): Promise<ApiResponse<{ active: boolean }>> {
+  return apiFetch<{ active: boolean }>(`/my-space/happy-sheet/${entryId}/reactions`, {
+    method: "POST",
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export async function getHappySheetComments(entryId: number): Promise<ApiResponse<HappySheetCommentEntry[]>> {
+  return apiFetch<HappySheetCommentEntry[]>(`/my-space/happy-sheet/${entryId}/comments`);
+}
+
+export async function addHappySheetComment(
+  entryId: number,
+  data: { comment_text: string; parent_comment_id?: number | null }
+): Promise<ApiResponse<HappySheetCommentEntry>> {
+  return apiFetch<HappySheetCommentEntry>(`/my-space/happy-sheet/${entryId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // Dream Project (Visionary Canvas)

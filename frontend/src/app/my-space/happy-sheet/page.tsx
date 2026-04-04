@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Sparkles, Filter, Download } from "lucide-react";
+import { Calendar, CheckCircle2, Sparkles, Filter, Download, Send, MessageSquare, Plus } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
@@ -12,6 +12,12 @@ import {
   getTeamHappySheetsByDate,
   getAdminDailyHappySheetReport,
   HappySheetEntry,
+  HappySheetReactionSummary,
+  HappySheetCommentEntry,
+  getHappySheetReactions,
+  toggleHappySheetReaction,
+  getHappySheetComments,
+  addHappySheetComment,
 } from "@/lib/api";
 
 const AVATAR_COLORS = [
@@ -21,6 +27,7 @@ const AVATAR_COLORS = [
 const getInitials = (name?: string | null) =>
   name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "?";
 const colorFor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtLongDate = (date: string) =>
   new Date(date + "T00:00:00").toLocaleDateString(undefined, {
@@ -50,6 +57,12 @@ export default function HappySheetPage() {
   const [logFilterDate, setLogFilterDate] = useState(todayStr());
   const [filteredTeam, setFilteredTeam] = useState<HappySheetEntry[]>([]);
   const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
+  const [reactionsByEntry, setReactionsByEntry] = useState<Record<number, HappySheetReactionSummary[]>>({});
+  const [commentsByEntry, setCommentsByEntry] = useState<Record<number, HappySheetCommentEntry[]>>({});
+  const [commentInputByEntry, setCommentInputByEntry] = useState<Record<number, string>>({});
+  const [replyTargetByEntry, setReplyTargetByEntry] = useState<Record<number, HappySheetCommentEntry | null>>({});
+  const [customReactionByEntry, setCustomReactionByEntry] = useState<Record<number, string>>({});
+  const [customReactionOpenEntryId, setCustomReactionOpenEntryId] = useState<number | null>(null);
 
   const [isExportingPng, setIsExportingPng] = useState(false);
 
@@ -75,6 +88,36 @@ export default function HappySheetPage() {
       }
     })();
   }, [logFilterDate]);
+
+  useEffect(() => {
+    if (filteredTeam.length === 0) {
+      setReactionsByEntry({});
+      setCommentsByEntry({});
+      return;
+    }
+
+    const load = async () => {
+      const reactionPairs = await Promise.all(
+        filteredTeam.map(async (entry) => {
+          const res = await getHappySheetReactions(entry.id);
+          return [entry.id, res.data || []] as const;
+        })
+      );
+      const commentPairs = await Promise.all(
+        filteredTeam.map(async (entry) => {
+          const res = await getHappySheetComments(entry.id);
+          return [entry.id, res.data || []] as const;
+        })
+      );
+
+      setReactionsByEntry(Object.fromEntries(reactionPairs));
+      setCommentsByEntry(Object.fromEntries(commentPairs));
+    };
+
+    load();
+    const timer = setInterval(load, 20000);
+    return () => clearInterval(timer);
+  }, [filteredTeam]);
 
   const loadPersonalForDate = async (date: string) => {
     try {
@@ -153,6 +196,53 @@ export default function HappySheetPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const refreshEntryInteractions = async (entryId: number) => {
+    const [reactionRes, commentRes] = await Promise.all([
+      getHappySheetReactions(entryId),
+      getHappySheetComments(entryId),
+    ]);
+
+    setReactionsByEntry((prev) => ({
+      ...prev,
+      [entryId]: reactionRes.data || [],
+    }));
+    setCommentsByEntry((prev) => ({
+      ...prev,
+      [entryId]: commentRes.data || [],
+    }));
+  };
+
+  const handleToggleReaction = async (entryId: number, emoji: string) => {
+    const targetEmoji = (emoji || "").trim();
+    if (!targetEmoji) return;
+    const res = await toggleHappySheetReaction(entryId, targetEmoji);
+    if (res.error) {
+      showFloatingToast({ type: "error", message: res.error });
+      return;
+    }
+    await refreshEntryInteractions(entryId);
+  };
+
+  const handleAddComment = async (entryId: number) => {
+    const text = (commentInputByEntry[entryId] || "").trim();
+    if (!text) return;
+
+    const target = replyTargetByEntry[entryId];
+    const res = await addHappySheetComment(entryId, {
+      comment_text: text,
+      parent_comment_id: target?.id || null,
+    });
+
+    if (res.error) {
+      showFloatingToast({ type: "error", message: res.error });
+      return;
+    }
+
+    setCommentInputByEntry((prev) => ({ ...prev, [entryId]: "" }));
+    setReplyTargetByEntry((prev) => ({ ...prev, [entryId]: null }));
+    await refreshEntryInteractions(entryId);
   };
 
   const displayEntries = filteredTeam;
@@ -495,6 +585,147 @@ export default function HappySheetPage() {
                     <div className="rounded-lg p-3 lighthouse-sub-card lg:col-span-2">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals (No Greed)</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed_impossible || "—"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-lg p-3 bg-slate-100/70 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(reactionsByEntry[entry.id] || []).slice(0, 3).map((reaction) => (
+                        <button
+                          key={`${entry.id}-${reaction.emoji}`}
+                          type="button"
+                          title={reaction.users.join("\n")}
+                          onClick={() => handleToggleReaction(entry.id, reaction.emoji)}
+                          className={`px-2 py-1 rounded-full text-xs border transition-colors ${reaction.reacted_by_me ? "bg-[#522B5B] text-white border-[#522B5B]" : "bg-white/80 dark:bg-white/10 text-[#2B124C] dark:text-purple-100 border-slate-300/70 dark:border-white/20"}`}
+                        >
+                          {reaction.emoji} {reaction.count}
+                        </button>
+                      ))}
+                      {(reactionsByEntry[entry.id] || []).length > 3 && (
+                        <span className="text-xs text-[#854F6C] dark:text-purple-300">
+                          +{(reactionsByEntry[entry.id] || []).length - 3}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {DEFAULT_REACTIONS.map((emoji) => (
+                        <button
+                          key={`${entry.id}-default-${emoji}`}
+                          type="button"
+                          onClick={() => handleToggleReaction(entry.id, emoji)}
+                          className="h-7 min-w-7 px-2 rounded-full border border-slate-300/70 dark:border-white/20 text-sm hover:bg-slate-200/70 dark:hover:bg-white/15"
+                          title={`React ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="h-7 px-2 rounded-full border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 flex items-center gap-1 hover:bg-slate-200/70 dark:hover:bg-white/15"
+                        onClick={() => setCustomReactionOpenEntryId((prev) => (prev === entry.id ? null : entry.id))}
+                        title="Add custom emoji (use your system emoji keyboard)"
+                      >
+                        <Plus size={12} /> Reaction
+                      </button>
+                      {customReactionOpenEntryId === entry.id && (
+                        <input
+                          value={customReactionByEntry[entry.id] || ""}
+                          onChange={(e) =>
+                            setCustomReactionByEntry((prev) => ({ ...prev, [entry.id]: e.target.value }))
+                          }
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              await handleToggleReaction(entry.id, customReactionByEntry[entry.id] || "");
+                              setCustomReactionByEntry((prev) => ({ ...prev, [entry.id]: "" }));
+                              setCustomReactionOpenEntryId(null);
+                            }
+                          }}
+                          placeholder="😀"
+                          className="h-7 w-16 px-2 rounded-md text-sm lighthouse-input-white"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs text-[#854F6C] dark:text-purple-300">
+                        <MessageSquare size={13} /> Comments
+                      </div>
+
+                      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        {(commentsByEntry[entry.id] || []).map((comment) => (
+                          <div key={comment.id} className="rounded-md px-2 py-1.5 bg-white/80 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
+                            <div className="flex items-start gap-2">
+                              <div
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                                style={{ background: colorFor(comment.user_id) }}
+                              >
+                                {getInitials(comment.user_name)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="font-semibold text-[#2B124C] dark:text-purple-100">
+                                    {comment.user_name || comment.user_email || `User #${comment.user_id}`}
+                                  </span>
+                                  <span className="text-[#854F6C] dark:text-purple-400">
+                                    {new Date(comment.created_at).toLocaleString()}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-[#2B124C] dark:text-purple-100 break-words">{comment.comment_text}</p>
+                                <button
+                                  type="button"
+                                  className="text-[11px] text-[#854F6C] dark:text-purple-300 hover:underline"
+                                  onClick={() => {
+                                    setReplyTargetByEntry((prev) => ({ ...prev, [entry.id]: comment }));
+                                    setCommentInputByEntry((prev) => ({ ...prev, [entry.id]: `@${comment.user_name || "team"} ` }));
+                                  }}
+                                >
+                                  Reply
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {replyTargetByEntry[entry.id] && (
+                        <div className="text-[11px] text-[#854F6C] dark:text-purple-300">
+                          Replying to {replyTargetByEntry[entry.id]?.user_name || "comment"}
+                          <button
+                            type="button"
+                            className="ml-2 underline"
+                            onClick={() => setReplyTargetByEntry((prev) => ({ ...prev, [entry.id]: null }))}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={commentInputByEntry[entry.id] || ""}
+                          onChange={(e) =>
+                            setCommentInputByEntry((prev) => ({ ...prev, [entry.id]: e.target.value }))
+                          }
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              await handleAddComment(entry.id);
+                            }
+                          }}
+                          placeholder="Write a comment..."
+                          className="flex-1 h-8 px-2 rounded-md text-xs lighthouse-input-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddComment(entry.id)}
+                          className="h-8 w-8 rounded-md bg-[#522B5B] text-white flex items-center justify-center hover:opacity-90"
+                          title="Send comment"
+                        >
+                          <Send size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -15,6 +15,12 @@ from app.models import (
     HappySheetCreate,
     HappySheetRead,
     HappySheetWithUser,
+    HappySheetReaction,
+    HappySheetReactionToggle,
+    HappySheetReactionSummary,
+    HappySheetComment,
+    HappySheetCommentCreate,
+    HappySheetCommentRead,
     DailyHappySheetReportRow,
     DreamProject,
     DreamProjectCreate,
@@ -250,6 +256,139 @@ async def get_daily_happy_sheet_report(
         )
         for user, sheet in results
     ]
+
+
+@router.get("/happy-sheet/{entry_id}/reactions", response_model=List[HappySheetReactionSummary])
+async def get_happy_sheet_reactions(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    rows = session.exec(
+        select(HappySheetReaction, User)
+        .join(User, User.id == HappySheetReaction.user_id)
+        .where(HappySheetReaction.entry_id == entry_id)
+        .order_by(HappySheetReaction.created_at.asc())
+    ).all()
+
+    grouped: dict[str, dict] = {}
+    for reaction, user in rows:
+        bucket = grouped.setdefault(
+            reaction.emoji,
+            {"emoji": reaction.emoji, "count": 0, "users": [], "reacted_by_me": False},
+        )
+        bucket["count"] += 1
+        bucket["users"].append(user.name or user.email)
+        if reaction.user_id == current_user.id:
+            bucket["reacted_by_me"] = True
+
+    result = [HappySheetReactionSummary(**data) for data in grouped.values()]
+    result.sort(key=lambda r: (-r.count, r.emoji))
+    return result
+
+
+@router.post("/happy-sheet/{entry_id}/reactions")
+async def toggle_happy_sheet_reaction(
+    entry_id: int,
+    payload: HappySheetReactionToggle,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    emoji = (payload.emoji or "").strip()
+    if not emoji:
+        raise HTTPException(status_code=400, detail="Emoji is required")
+
+    existing = session.exec(
+        select(HappySheetReaction).where(
+            HappySheetReaction.entry_id == entry_id,
+            HappySheetReaction.user_id == current_user.id,
+            HappySheetReaction.emoji == emoji,
+        )
+    ).first()
+
+    if existing:
+        session.delete(existing)
+        session.commit()
+        return {"active": False}
+
+    reaction = HappySheetReaction(entry_id=entry_id, user_id=current_user.id, emoji=emoji)
+    session.add(reaction)
+    session.commit()
+    return {"active": True}
+
+
+@router.get("/happy-sheet/{entry_id}/comments", response_model=List[HappySheetCommentRead])
+async def get_happy_sheet_comments(
+    entry_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    rows = session.exec(
+        select(HappySheetComment, User)
+        .join(User, User.id == HappySheetComment.user_id)
+        .where(HappySheetComment.entry_id == entry_id)
+        .order_by(HappySheetComment.created_at.asc())
+    ).all()
+
+    return [
+        HappySheetCommentRead(
+            **comment.model_dump(),
+            user_name=user.name,
+            user_email=user.email,
+            profile_picture=user.profile_picture,
+        )
+        for comment, user in rows
+    ]
+
+
+@router.post("/happy-sheet/{entry_id}/comments", response_model=HappySheetCommentRead, status_code=status.HTTP_201_CREATED)
+async def add_happy_sheet_comment(
+    entry_id: int,
+    payload: HappySheetCommentCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    entry = session.get(HappySheet, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Happy Sheet entry not found")
+
+    text = (payload.comment_text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment text is required")
+
+    if payload.parent_comment_id:
+        parent = session.get(HappySheetComment, payload.parent_comment_id)
+        if not parent or parent.entry_id != entry_id:
+            raise HTTPException(status_code=400, detail="Invalid parent comment")
+
+    comment = HappySheetComment(
+        entry_id=entry_id,
+        user_id=current_user.id,
+        comment_text=text,
+        parent_comment_id=payload.parent_comment_id,
+    )
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+
+    return HappySheetCommentRead(
+        **comment.model_dump(),
+        user_name=current_user.name,
+        user_email=current_user.email,
+        profile_picture=current_user.profile_picture,
+    )
 
 
 # ==================== VISIONARY CANVAS ROUTES ====================

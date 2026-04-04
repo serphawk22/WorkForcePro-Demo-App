@@ -4,7 +4,7 @@ Database models using SQLModel.
 from datetime import datetime, timezone
 from datetime import date as DateType
 from typing import Optional, List
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, UniqueConstraint
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 from pydantic import BaseModel
@@ -865,6 +865,68 @@ class HappySheetRead(SQLModel):
 class HappySheetWithUser(HappySheetRead):
     user_name: Optional[str] = None
     user_email: Optional[str] = None
+
+
+class HappySheetReaction(SQLModel, table=True):
+    __tablename__ = "happy_sheet_reactions"
+    __table_args__ = (
+        UniqueConstraint("entry_id", "user_id", "emoji", name="uq_happy_sheet_reaction_entry_user_emoji"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entry_id: int = Field(foreign_key="happy_sheets.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    emoji: str = Field(max_length=16)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class HappySheetReactionToggle(SQLModel):
+    emoji: str = Field(max_length=16)
+
+
+class HappySheetReactionRead(SQLModel):
+    id: int
+    entry_id: int
+    user_id: int
+    emoji: str
+    created_at: datetime
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class HappySheetReactionSummary(SQLModel):
+    emoji: str
+    count: int
+    users: List[str] = []
+    reacted_by_me: bool = False
+
+
+class HappySheetComment(SQLModel, table=True):
+    __tablename__ = "happy_sheet_comments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entry_id: int = Field(foreign_key="happy_sheets.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    comment_text: str = Field(max_length=1000)
+    parent_comment_id: Optional[int] = Field(default=None, foreign_key="happy_sheet_comments.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class HappySheetCommentCreate(SQLModel):
+    comment_text: str = Field(max_length=1000)
+    parent_comment_id: Optional[int] = None
+
+
+class HappySheetCommentRead(SQLModel):
+    id: int
+    entry_id: int
+    user_id: int
+    comment_text: str
+    parent_comment_id: Optional[int] = None
+    created_at: datetime
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    profile_picture: Optional[str] = None
 
 
 class DailyHappySheetReportRow(SQLModel):

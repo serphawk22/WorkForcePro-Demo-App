@@ -179,6 +179,29 @@ async def lifespan(app: FastAPI):
         'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',
         # Happy Sheet new question column
         "ALTER TABLE happy_sheets ADD COLUMN IF NOT EXISTS goals_without_greed_impossible VARCHAR NOT NULL DEFAULT ''",
+        # Happy Sheet interactions
+        '''
+        CREATE TABLE IF NOT EXISTS happy_sheet_reactions (
+            id SERIAL PRIMARY KEY,
+            entry_id INTEGER NOT NULL REFERENCES happy_sheets(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            emoji VARCHAR(16) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS happy_sheet_comments (
+            id SERIAL PRIMARY KEY,
+            entry_id INTEGER NOT NULL REFERENCES happy_sheets(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            comment_text VARCHAR(1000) NOT NULL,
+            parent_comment_id INTEGER REFERENCES happy_sheet_comments(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        ''',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_happy_sheet_reaction_entry_user_emoji ON happy_sheet_reactions(entry_id, user_id, emoji)',
+        'CREATE INDEX IF NOT EXISTS ix_happy_sheet_reactions_entry_id ON happy_sheet_reactions(entry_id)',
+        'CREATE INDEX IF NOT EXISTS ix_happy_sheet_comments_entry_id ON happy_sheet_comments(entry_id)',
         ]
 
         for migration in additional_migrations:
