@@ -33,7 +33,8 @@ def create_notification(
     return notification
 
 
-@router.get("/", response_model=List[NotificationRead])
+@router.get("", response_model=List[NotificationRead])
+@router.get("/", response_model=List[NotificationRead], include_in_schema=False)
 async def get_notifications(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)

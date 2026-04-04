@@ -1576,7 +1576,7 @@ export async function rejectUser(userId: number): Promise<ApiResponse<{ message:
  * Get all notifications for current user.
  */
 export async function getNotifications(): Promise<ApiResponse<Notification[]>> {
-  return apiFetch<Notification[]>("/notifications/");
+  return apiFetch<Notification[]>("/notifications");
 }
 
 /**
