@@ -28,9 +28,13 @@ const nextConfig = {
    * Avoids CORS/IPv6 "localhost" quirks and matches production (Vercel → Railway via NEXT_PUBLIC_API_URL).
    */
   async rewrites() {
-    const localBackend = normalizeBackendUrl(process.env.NEXT_PUBLIC_API_URL, "http://127.0.0.1:8000");
+    const localBackend = normalizeBackendUrl(
+      process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_API_URL,
+      "http://127.0.0.1:8000"
+    );
+    // Do not trust NEXT_PUBLIC_API_URL in production rewrites; it is often set for client use and can be stale/wrong.
     const productionBackend = normalizeBackendUrl(
-      process.env.NEXT_PUBLIC_API_URL,
+      process.env.BACKEND_API_URL,
       "https://work-force-pro-demo-app-production.up.railway.app"
     );
     const backend = isDevServer ? localBackend : productionBackend;
