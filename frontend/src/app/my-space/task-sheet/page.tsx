@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, CheckCircle2, Link2, Swords, Pencil, Trash2, Filter } from "lucide-react";
@@ -68,7 +69,7 @@ export default function TaskSheetPage() {
 
   const isAdmin = user?.role === "admin";
 
-  const loadTaskSheets = async () => {
+  const loadTaskSheets = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -87,11 +88,11 @@ export default function TaskSheetPage() {
     } finally {
       setIsLoadingHistory(false);
     }
-  };
+  }, [isAdmin, user]);
 
   useEffect(() => {
     void loadTaskSheets();
-  }, [user?.id, user?.role]);
+  }, [loadTaskSheets]);
 
   useEffect(() => {
     if (!myEntries.length) {
@@ -269,10 +270,13 @@ export default function TaskSheetPage() {
                 <div key={entry.id} className="rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow lighthouse-inner-card">
                   <div className="flex items-center gap-3 mb-4">
                     {entry.profile_picture ? (
-                      <img
+                      <Image
                         src={entry.profile_picture}
                         alt={entry.user_name || "User"}
+                        width={36}
+                        height={36}
                         className="h-9 w-9 rounded-full object-cover flex-shrink-0"
+                        unoptimized
                       />
                     ) : (
                       <div
