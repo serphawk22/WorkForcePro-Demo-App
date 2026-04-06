@@ -150,7 +150,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [isSummarizingVoice, setIsSummarizingVoice] = useState(false);
   const [voiceSummaryText, setVoiceSummaryText] = useState("");
   const [voiceSummaryError, setVoiceSummaryError] = useState<string | null>(null);
-  const [uploadedVoicePayload, setUploadedVoicePayload] = useState<{ voice_note_url: string; voice_note_transcript?: string | null } | null>(null);
+  const [uploadedVoicePayload, setUploadedVoicePayload] = useState<{ voice_note_url: string; voice_note_transcript?: string } | null>(null);
 
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
