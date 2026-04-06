@@ -1,12 +1,15 @@
 """
 Task management routes with flat structure and deliverable tracking.
 """
+import base64
+import io
 import json
+import os
 import random
 import string
 from datetime import datetime, timezone, date, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import and_, or_
 from sqlmodel import Session, select
@@ -35,6 +38,88 @@ from app.routers.notifications import create_notification
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+ALLOWED_VOICE_MIME_TYPES = {
+    "audio/webm",
+    "audio/mp3",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/ogg",
+    "audio/mp4",
+    "audio/x-m4a",
+}
+
+MAX_VOICE_NOTE_BYTES = 8 * 1024 * 1024
+
+
+def _resolve_voice_content_type(raw_content_type: str, filename: Optional[str]) -> str:
+    content_type = (raw_content_type or "").lower().strip().split(";", 1)[0].strip()
+    if content_type:
+        return content_type
+
+    if not filename:
+        return ""
+
+    lowered_name = filename.lower()
+    if lowered_name.endswith(".webm"):
+        return "audio/webm"
+    if lowered_name.endswith(".mp3"):
+        return "audio/mpeg"
+    if lowered_name.endswith(".wav"):
+        return "audio/wav"
+    if lowered_name.endswith(".ogg"):
+        return "audio/ogg"
+    if lowered_name.endswith(".m4a"):
+        return "audio/mp4"
+    return ""
+
+
+def _get_openai_client() -> Optional["OpenAI"]:
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return None
+    try:
+        from openai import OpenAI
+    except Exception as exc:
+        raise RuntimeError(f"OpenAI SDK import failed: {exc}")
+
+    try:
+        return OpenAI(api_key=api_key)
+    except Exception as exc:
+        raise RuntimeError(f"OpenAI client init failed: {exc}")
+
+
+def _transcribe_voice_with_openai(client: "OpenAI", raw: bytes, filename: Optional[str]) -> Optional[str]:
+    file_for_openai = io.BytesIO(raw)
+    file_for_openai.name = filename or "voice-note.webm"
+    tx = client.audio.transcriptions.create(
+        model="gpt-4o-mini-transcribe",
+        file=file_for_openai,
+    )
+    maybe_text = getattr(tx, "text", None)
+    if isinstance(maybe_text, str):
+        return maybe_text.strip() or None
+    return None
+
+
+def _summarize_transcript_with_openai(client: "OpenAI", transcript: str) -> str:
+    prompt = (
+        "Transform this task voice note transcript into a clear, detailed project task description. "
+        "Output plain text with short sections: Objective, Scope, Deliverables, Constraints, "
+        "Acceptance Criteria, and Notes. Keep it concise and actionable."
+    )
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.2,
+        max_tokens=450,
+        messages=[
+            {"role": "system", "content": "You write crisp, practical task briefs for engineering teams."},
+            {"role": "user", "content": f"{prompt}\n\nTranscript:\n{transcript}"},
+        ],
+    )
+    content = (response.choices[0].message.content or "").strip()
+    return content
 
 
 def _task_visibility_clause(user: User):
@@ -99,6 +184,8 @@ def _task_to_with_assignee(session: Session, task: Task) -> TaskWithAssignee:
         public_id=task.public_id,
         title=task.title,
         description=task.description,
+        voice_note_url=task.voice_note_url,
+        voice_note_transcript=task.voice_note_transcript,
         priority=task.priority,
         due_date=task.due_date,
         estimated_hours=task.estimated_hours,
@@ -162,6 +249,8 @@ def _legacy_subtask_to_task_with_assignee(
         public_id=subtask.public_id,
         title=subtask.title,
         description=subtask.description,
+        voice_note_url=None,
+        voice_note_transcript=None,
         priority=subtask.priority,
         due_date=subtask.due_date,
         estimated_hours=None,
@@ -299,6 +388,8 @@ async def get_my_tasks(
             public_id=task.public_id,
             title=task.title,
             description=task.description,
+            voice_note_url=task.voice_note_url,
+            voice_note_transcript=task.voice_note_transcript,
             priority=task.priority,
             due_date=task.due_date,
             estimated_hours=task.estimated_hours,
@@ -693,6 +784,146 @@ async def update_task_links(
 
 
 # Admin routes
+@router.post("/voice-note")
+async def upload_task_voice_note(
+    file: UploadFile = File(...),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Upload a task voice note and return a data URL + optional AI transcript."""
+    del admin  # Authorization is enforced by dependency.
+
+    content_type = _resolve_voice_content_type(file.content_type or "", file.filename)
+
+    if content_type not in ALLOWED_VOICE_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported voice note format. Use webm, mp3, wav, ogg, or m4a.",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voice note file is empty.",
+        )
+    if len(raw) > MAX_VOICE_NOTE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voice note is too large. Keep it under 8MB.",
+        )
+
+    encoded_audio = base64.b64encode(raw).decode("utf-8")
+    voice_note_url = f"data:{content_type};base64,{encoded_audio}"
+
+    transcript: Optional[str] = None
+    client = None
+    try:
+        client = _get_openai_client()
+    except Exception as exc:
+        # Upload should still succeed even if AI client is unavailable.
+        print(f"Voice transcription disabled: {exc}")
+    if client:
+        try:
+            transcript = _transcribe_voice_with_openai(client, raw, file.filename)
+        except Exception as exc:
+            print(f"Voice transcription skipped: {exc}")
+
+    return {
+        "voice_note_url": voice_note_url,
+        "voice_note_transcript": transcript,
+    }
+
+
+@router.post("/voice-note/summarize")
+async def summarize_task_voice_note(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Transcribe a task voice note and generate an AI summary for task description drafting."""
+    del current_user
+
+    try:
+        client = _get_openai_client()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"OpenAI client unavailable: {str(exc)}",
+        )
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OPENAI_API_KEY is not configured on the backend.",
+        )
+
+    content_type = _resolve_voice_content_type(file.content_type or "", file.filename)
+    if content_type not in ALLOWED_VOICE_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported voice note format. Use webm, mp3, wav, ogg, or m4a.",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voice note file is empty.",
+        )
+    if len(raw) > MAX_VOICE_NOTE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Voice note is too large. Keep it under 8MB.",
+        )
+
+    try:
+        transcript = _transcribe_voice_with_openai(client, raw, file.filename)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Transcription failed: {str(exc)}",
+        )
+
+    if not transcript:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not transcribe this voice note clearly. Please retry with clearer audio.",
+        )
+
+    try:
+        summary = _summarize_transcript_with_openai(client, transcript)
+    except Exception as exc:
+        # Graceful fallback: still return a useful draft from transcript.
+        summary = (
+            "Objective:\n"
+            "Create a task based on the attached voice note.\n\n"
+            "Scope:\n"
+            f"{transcript}\n\n"
+            "Deliverables:\n"
+            "- Implement the requested changes\n"
+            "- Validate behavior after update\n\n"
+            "Constraints:\n"
+            "- Keep changes minimal and safe\n\n"
+            "Acceptance Criteria:\n"
+            "- Requested outcome is visible in UI and behavior is verified\n\n"
+            "Notes:\n"
+            f"AI summarization fallback used due to model error: {str(exc)}"
+        )
+
+    if not summary:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI could not generate a summary right now. Please try again.",
+        )
+
+    encoded_audio = base64.b64encode(raw).decode("utf-8")
+    voice_note_url = f"data:{content_type};base64,{encoded_audio}"
+
+    return {
+        "voice_note_url": voice_note_url,
+        "voice_note_transcript": transcript,
+        "summary": summary,
+    }
+
+
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=TaskRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_task(
@@ -784,6 +1015,8 @@ async def create_task(
         title=task_data.title,
         organization_id=admin.organization_id,
         description=task_data.description,
+        voice_note_url=task_data.voice_note_url,
+        voice_note_transcript=task_data.voice_note_transcript,
         priority=task_data.priority,
         due_date=task_data.due_date,
         estimated_hours=task_data.estimated_hours,
@@ -877,6 +1110,8 @@ async def get_all_tasks(
             public_id=task.public_id,
             title=task.title,
             description=task.description,
+            voice_note_url=task.voice_note_url,
+            voice_note_transcript=task.voice_note_transcript,
             priority=task.priority,
             due_date=task.due_date,
             estimated_hours=task.estimated_hours,
@@ -990,6 +1225,8 @@ async def get_task(
         public_id=task.public_id,
         title=task.title,
         description=task.description,
+        voice_note_url=task.voice_note_url,
+        voice_note_transcript=task.voice_note_transcript,
         priority=task.priority,
         due_date=task.due_date,
         estimated_hours=task.estimated_hours,
@@ -1065,6 +1302,8 @@ async def get_task_details(
         "id": task.id,
         "title": task.title,
         "description": task.description,
+        "voice_note_url": task.voice_note_url,
+        "voice_note_transcript": task.voice_note_transcript,
         "priority": task.priority,
         "due_date": task.due_date,
         "workspace_id": task.workspace_id,

@@ -178,6 +178,8 @@ export interface Task {
   workspace_color?: string | null;
   title: string;
   description: string | null;
+  voice_note_url?: string | null;
+  voice_note_transcript?: string | null;
   priority: "low" | "medium" | "high";
   start_date: string;
   due_date: string | null;
@@ -213,6 +215,8 @@ export interface TaskCreate {
   workspace_id: number;
   parent_task_id?: number;
   description?: string;
+  voice_note_url?: string;
+  voice_note_transcript?: string;
   priority?: "low" | "medium" | "high";
   start_date?: string;
   due_date?: string;
@@ -1187,6 +1191,158 @@ export async function createTask(
   });
 }
 
+export interface TaskVoiceNoteUploadResponse {
+  voice_note_url: string;
+  voice_note_transcript?: string | null;
+}
+
+export interface TaskVoiceNoteSummaryResponse {
+  voice_note_url: string;
+  voice_note_transcript?: string | null;
+  summary: string;
+}
+
+export async function uploadTaskVoiceNote(
+  voiceFile: File
+): Promise<ApiResponse<TaskVoiceNoteUploadResponse>> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", voiceFile);
+
+  const primaryBaseUrl = getApiBaseUrl();
+  const localFallbackBaseUrl =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? (process.env.NEXT_PUBLIC_API_URL?.trim() || "http://127.0.0.1:8000")
+      : null;
+  const uploadUrls = [
+    `${primaryBaseUrl}/tasks/voice-note`,
+    ...(localFallbackBaseUrl ? [`${localFallbackBaseUrl}/tasks/voice-note`] : []),
+  ];
+
+  let lastError = "Network error. Please try again.";
+  for (let i = 0; i < uploadUrls.length; i += 1) {
+    const url = uploadUrls[i];
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: url.startsWith("/api") ? "include" : "omit",
+        body: formData,
+      });
+
+      const text = await response.text();
+      const result = text
+        ? (() => {
+            try {
+              return JSON.parse(text);
+            } catch {
+              return { detail: text };
+            }
+          })()
+        : {};
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearAuth();
+          if (typeof window !== "undefined") window.location.href = "/login";
+          return { error: "Session expired. Please login again." };
+        }
+        if (response.status >= 500 && i < uploadUrls.length - 1) {
+          lastError = result.detail || `Upload failed (${response.status})`;
+          continue;
+        }
+        return { error: result.detail || "Failed to upload voice note" };
+      }
+
+      return { data: result };
+    } catch (error: any) {
+      lastError = error?.message || "Network error. Please try again.";
+      if (i === uploadUrls.length - 1) {
+        return { error: lastError };
+      }
+    }
+  }
+
+  return { error: lastError };
+}
+
+export async function summarizeTaskVoiceNote(
+  voiceFile: File
+): Promise<ApiResponse<TaskVoiceNoteSummaryResponse>> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", voiceFile);
+
+  const primaryBaseUrl = getApiBaseUrl();
+  const localFallbackBaseUrl =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? (process.env.NEXT_PUBLIC_API_URL?.trim() || "http://127.0.0.1:8000")
+      : null;
+  const summarizeUrls = [
+    `${primaryBaseUrl}/tasks/voice-note/summarize`,
+    ...(localFallbackBaseUrl ? [`${localFallbackBaseUrl}/tasks/voice-note/summarize`] : []),
+  ];
+
+  let lastError = "Network error. Please try again.";
+  for (let i = 0; i < summarizeUrls.length; i += 1) {
+    const url = summarizeUrls[i];
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: url.startsWith("/api") ? "include" : "omit",
+        body: formData,
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      const result = text
+        ? (() => {
+            try {
+              return JSON.parse(text);
+            } catch {
+              return { detail: text };
+            }
+          })()
+        : {};
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearAuth();
+          if (typeof window !== "undefined") window.location.href = "/login";
+          return { error: "Session expired. Please login again." };
+        }
+        if (response.status >= 500 && i < summarizeUrls.length - 1) {
+          lastError = result.detail || `Summarize failed (${response.status})`;
+          continue;
+        }
+        return { error: result.detail || "Failed to summarize voice note" };
+      }
+
+      return { data: result };
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        lastError = "Summary is taking too long. Please try a shorter recording or retry.";
+      } else {
+        lastError = error?.message || "Network error. Please try again.";
+      }
+      if (i === summarizeUrls.length - 1) {
+        return { error: lastError };
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return { error: lastError };
+}
+
 /** Today's / upcoming / recent completed recurring occurrences for the current user */
 export async function getMyRecurringInstancesSummary(): Promise<ApiResponse<RecurringInstancesSummary>> {
   return apiFetch<RecurringInstancesSummary>("/tasks/recurring/my-summary");
@@ -1794,6 +1950,9 @@ export interface TaskSheetEntry {
   achievements: string;
   repo_link?: string | null;
   created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
 }
 
 export interface HappySheetEntry {
@@ -1923,6 +2082,10 @@ export async function submitTaskSheet(data: {
 
 export async function getMyTaskSheets(limit = 30): Promise<ApiResponse<TaskSheetEntry[]>> {
   return apiFetch<TaskSheetEntry[]>(`/my-space/task-sheet/me?limit=${limit}`);
+}
+
+export async function getAllTaskSheets(limit = 50): Promise<ApiResponse<TaskSheetEntry[]>> {
+  return apiFetch<TaskSheetEntry[]>(`/my-space/task-sheet/all?limit=${limit}`);
 }
 
 export async function updateTaskSheetEntry(

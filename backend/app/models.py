@@ -301,6 +301,8 @@ class TaskBase(SQLModel):
     """Base task model."""
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
+    voice_note_url: Optional[str] = None
+    voice_note_transcript: Optional[str] = None
     priority: TaskPriority = Field(default=TaskPriority.medium)
     due_date: Optional[DateType] = None
     estimated_hours: Optional[float] = Field(default=None, ge=0)
@@ -360,6 +362,8 @@ class TaskUpdate(SQLModel):
     """Schema for updating task."""
     title: Optional[str] = None
     description: Optional[str] = None
+    voice_note_url: Optional[str] = None
+    voice_note_transcript: Optional[str] = None
     priority: Optional[TaskPriority] = None
     status: Optional[TaskStatus] = None
     due_date: Optional[DateType] = None
@@ -828,6 +832,7 @@ class TaskSheetRead(SQLModel):
 class TaskSheetWithUser(TaskSheetRead):
     user_name: Optional[str] = None
     user_email: Optional[str] = None
+    profile_picture: Optional[str] = None
 
 
 class HappySheet(SQLModel, table=True):

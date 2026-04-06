@@ -163,6 +163,8 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_hours DOUBLE PRECISION',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_hours DOUBLE PRECISION',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS voice_note_url TEXT',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS voice_note_transcript TEXT',
         'CREATE INDEX IF NOT EXISTS ix_tasks_parent_task_id ON tasks(parent_task_id)',
         # Subtask parent_subtask_id column
         'ALTER TABLE subtasks ADD COLUMN IF NOT EXISTS parent_subtask_id INTEGER',

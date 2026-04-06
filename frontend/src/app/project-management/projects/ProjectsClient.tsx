@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
@@ -8,12 +8,14 @@ import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdo
 import {
   Plus, Search, Circle, Loader2, X, CheckCircle2, Clock, AlertCircle,
   Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy, Repeat,
+  Mic, Square, Play, Pause, Trash2, RotateCcw,
 } from "lucide-react";
 import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
   deleteTask, getAssignableUsers, getApiBaseUrl, getTaskChildren,
   searchByPublicId, Task, TaskCreate, User, Workspace, getWorkspaces,
-  TaskComment, getTaskComments, createTaskComment, deleteTaskComment,
+  uploadTaskVoiceNote, summarizeTaskVoiceNote,
+  TaskComment, getTaskComments, createTaskComment, deleteTaskComment, createSubtask,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -32,6 +34,8 @@ const statusColors: Record<string, string> = {
   submitted: "text-yellow-400", reviewing: "text-amber-400",
   approved: "text-green-400", rejected: "text-red-400",
 };
+
+const MAX_VOICE_NOTE_SECONDS = 90;
 
 type TaskEditForm = TaskCreate & {
   status?: Task["status"];
@@ -134,6 +138,26 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     recurrence_end_date: undefined,
     monthly_day: undefined,
   });
+  const [voiceNoteBlob, setVoiceNoteBlob] = useState<Blob | null>(null);
+  const [voiceNotePreviewUrl, setVoiceNotePreviewUrl] = useState<string | null>(null);
+  const [voiceNoteDurationSec, setVoiceNoteDurationSec] = useState(0);
+  const [voiceRecordingSec, setVoiceRecordingSec] = useState(0);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [voiceNoteTranscriptPreview, setVoiceNoteTranscriptPreview] = useState<string | null>(null);
+  const [showVoiceSummaryModal, setShowVoiceSummaryModal] = useState(false);
+  const [isSummarizingVoice, setIsSummarizingVoice] = useState(false);
+  const [voiceSummaryText, setVoiceSummaryText] = useState("");
+  const [voiceSummaryError, setVoiceSummaryError] = useState<string | null>(null);
+  const [uploadedVoicePayload, setUploadedVoicePayload] = useState<{ voice_note_url: string; voice_note_transcript?: string | null } | null>(null);
+
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const WEEKDAY_OPTS = [
     { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
@@ -210,6 +234,218 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     else cur.add(d);
     setNewTask({ ...newTask, repeat_days: Array.from(cur).sort((a, b) => a - b) });
   };
+
+  const formatVoiceTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const secs = Math.floor(seconds % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${mins}:${secs}`;
+  };
+
+  const releaseVoiceRecorderResources = () => {
+    if (voiceTimerRef.current) {
+      clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+    if (voiceAutoStopRef.current) {
+      clearTimeout(voiceAutoStopRef.current);
+      voiceAutoStopRef.current = null;
+    }
+    if (voiceStreamRef.current) {
+      voiceStreamRef.current.getTracks().forEach((track) => track.stop());
+      voiceStreamRef.current = null;
+    }
+    voiceRecorderRef.current = null;
+    voiceChunksRef.current = [];
+    setIsRecordingVoice(false);
+    setVoiceRecordingSec(0);
+  };
+
+  const resetVoiceNote = () => {
+    if (voiceNotePreviewUrl) {
+      URL.revokeObjectURL(voiceNotePreviewUrl);
+    }
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current.currentTime = 0;
+    }
+    setIsPlayingVoice(false);
+    setVoiceNoteBlob(null);
+    setVoiceNotePreviewUrl(null);
+    setVoiceNoteDurationSec(0);
+    setVoiceNoteTranscriptPreview(null);
+    setUploadedVoicePayload(null);
+    setVoiceSummaryText("");
+    setVoiceSummaryError(null);
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    recorder.stop();
+  };
+
+  const startVoiceRecording = async () => {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Voice recording is not supported in this browser.");
+      return;
+    }
+
+    try {
+      resetVoiceNote();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : undefined;
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
+      voiceStreamRef.current = stream;
+      voiceRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(voiceChunksRef.current, { type: mimeType });
+        if (!blob.size) {
+          toast.error("No audio captured. Please try again.");
+          releaseVoiceRecorderResources();
+          return;
+        }
+
+        const previewUrl = URL.createObjectURL(blob);
+        setVoiceNoteBlob(blob);
+        setVoiceNotePreviewUrl(previewUrl);
+
+        const probe = document.createElement("audio");
+        probe.src = previewUrl;
+        probe.onloadedmetadata = () => {
+          const duration = Number.isFinite(probe.duration) ? Math.round(probe.duration) : 0;
+          setVoiceNoteDurationSec(duration);
+        };
+
+        releaseVoiceRecorderResources();
+      };
+
+      recorder.start(250);
+      setIsRecordingVoice(true);
+      setVoiceRecordingSec(0);
+      toast.success("Recording started");
+
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceRecordingSec((current) => {
+          if (current + 1 >= MAX_VOICE_NOTE_SECONDS) {
+            stopVoiceRecording();
+          }
+          return Math.min(current + 1, MAX_VOICE_NOTE_SECONDS);
+        });
+      }, 1000);
+
+      voiceAutoStopRef.current = setTimeout(() => {
+        stopVoiceRecording();
+      }, MAX_VOICE_NOTE_SECONDS * 1000);
+    } catch {
+      toast.error("Microphone access denied or unavailable.");
+      releaseVoiceRecorderResources();
+    }
+  };
+
+  const handleVoicePlayPause = () => {
+    if (!voiceNotePreviewUrl) return;
+    if (!voiceAudioRef.current) {
+      voiceAudioRef.current = new Audio(voiceNotePreviewUrl);
+      voiceAudioRef.current.onended = () => setIsPlayingVoice(false);
+      voiceAudioRef.current.onpause = () => setIsPlayingVoice(false);
+      voiceAudioRef.current.onplay = () => setIsPlayingVoice(true);
+    }
+    if (isPlayingVoice) {
+      voiceAudioRef.current.pause();
+      return;
+    }
+    // UX: always replay from the beginning when Play is pressed.
+    voiceAudioRef.current.currentTime = 0;
+    void voiceAudioRef.current.play();
+  };
+
+  const closeCreateModal = () => {
+    if (isRecordingVoice) stopVoiceRecording();
+    releaseVoiceRecorderResources();
+    resetVoiceNote();
+    setShowCreateModal(false);
+    setShowVoiceSummaryModal(false);
+  };
+
+  const getVoiceFileForUpload = () => {
+    if (!voiceNoteBlob) return null;
+    const extension = voiceNoteBlob.type.includes("mpeg") || voiceNoteBlob.type.includes("mp3") ? "mp3" : "webm";
+    return new File([voiceNoteBlob], `task-voice-note-${Date.now()}.${extension}`, {
+      type: voiceNoteBlob.type || "audio/webm",
+    });
+  };
+
+  const handleSummarizeVoiceNote = async () => {
+    const voiceFile = getVoiceFileForUpload();
+    if (!voiceFile) {
+      toast.error("Record a voice note first");
+      return;
+    }
+
+    setShowVoiceSummaryModal(true);
+    setIsSummarizingVoice(true);
+    setVoiceSummaryError(null);
+    setVoiceSummaryText("");
+
+    const result = await summarizeTaskVoiceNote(voiceFile);
+    if (result.error || !result.data) {
+      setVoiceSummaryError(result.error || "Failed to summarize voice note");
+      setIsSummarizingVoice(false);
+      return;
+    }
+
+    setVoiceSummaryText(result.data.summary);
+    setVoiceNoteTranscriptPreview(result.data.voice_note_transcript || null);
+    setUploadedVoicePayload({
+      voice_note_url: result.data.voice_note_url,
+      voice_note_transcript: result.data.voice_note_transcript || undefined,
+    });
+    setIsSummarizingVoice(false);
+  };
+
+  const applyVoiceSummaryToDescription = () => {
+    const summary = voiceSummaryText.trim();
+    if (!summary) return;
+    setNewTask((prev) => {
+      const existing = (prev.description || "").trim();
+      return {
+        ...prev,
+        description: existing ? `${existing}\n\n${summary}` : summary,
+      };
+    });
+    setShowVoiceSummaryModal(false);
+    toast.success("AI summary added to description");
+  };
+
+  useEffect(() => {
+    return () => {
+      releaseVoiceRecorderResources();
+      if (voiceNotePreviewUrl) URL.revokeObjectURL(voiceNotePreviewUrl);
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.pause();
+      }
+    };
+  }, [voiceNotePreviewUrl]);
+
   const [newSubtask, setNewSubtask] = useState<Partial<TaskCreate>>({
     title: "", description: "", assigned_to: undefined, priority: "medium",
   });
@@ -366,11 +602,39 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     if (!newTask.workspace_id) { toast.error("Workspace is required"); return; }
     if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to a team member"); return; }
     setIsCreating(true);
-    const result = await createTask(newTask);
+
+    let voicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = uploadedVoicePayload || {};
+    if (voiceNoteBlob && !uploadedVoicePayload) {
+      setIsUploadingVoice(true);
+      const voiceFile = getVoiceFileForUpload();
+      if (!voiceFile) {
+        setIsUploadingVoice(false);
+        setIsCreating(false);
+        toast.error("Voice note is unavailable. Please re-record.");
+        return;
+      }
+      const uploadResult = await uploadTaskVoiceNote(voiceFile);
+      setIsUploadingVoice(false);
+
+      if (uploadResult.error || !uploadResult.data?.voice_note_url) {
+        toast.error(uploadResult.error || "Failed to upload voice note");
+        setIsCreating(false);
+        return;
+      }
+
+      voicePayload = {
+        voice_note_url: uploadResult.data.voice_note_url,
+        voice_note_transcript: uploadResult.data.voice_note_transcript || undefined,
+      };
+      setUploadedVoicePayload(voicePayload);
+      setVoiceNoteTranscriptPreview(uploadResult.data.voice_note_transcript || null);
+    }
+
+    const result = await createTask({ ...newTask, ...voicePayload });
     if (result.error) toast.error(result.error);
     else {
       toast.success("Project created!");
-      setShowCreateModal(false);
+      closeCreateModal();
       setNewTask({
         title: "", description: "", priority: "medium", workspace_id: workspaceFilter || 0,
         assigned_to: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
@@ -534,29 +798,26 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     if (!newSubtask.title?.trim()) { toast.error("Subtask title is required"); return; }
     const taskId = selectedTaskForSubtask;
     if (!taskId) { toast.error("No task selected"); return; }
-    const parentTask = tasks.find((task) => task.id === taskId) || taskChildren[taskId]?.find((task) => task.id === taskId) || null;
-    if (!parentTask) {
-      toast.error("Parent task not found");
-      return;
-    }
 
     setIsCreatingSubtask(true);
-    const payload: TaskCreate = {
+    const assigneeValue = newSubtask.assigned_to;
+    const parsedAssignee =
+      typeof assigneeValue === "number"
+        ? assigneeValue
+        : typeof assigneeValue === "string" && assigneeValue.trim() !== ""
+        ? Number(assigneeValue)
+        : undefined;
+
+    const result = await createSubtask(taskId, {
       title: newSubtask.title,
       description: newSubtask.description || "",
-      priority: newSubtask.priority as TaskCreate["priority"],
-      workspace_id: parentTask.workspace_id || workspaceFilter || 0,
-      parent_task_id: selectedParentSubtaskId ?? taskId,
-      assigned_to: newSubtask.assigned_to,
-      assigned_by: user?.id,
-      due_date: newSubtask.due_date,
-      estimated_hours: typeof newSubtask.estimated_hours === "number" ? newSubtask.estimated_hours : undefined,
-    };
-    const result = await createTask(payload);
+      assigned_to: Number.isFinite(parsedAssignee as number) ? parsedAssignee : undefined,
+      parent_subtask_id: selectedParentSubtaskId ?? undefined,
+    });
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success("Child task created");
+      toast.success(selectedParentSubtaskId ? "Sub-subtask created" : "Subtask created");
       setExpandedTasks((prev) => {
         const next = new Set(prev);
         next.add(taskId);
@@ -652,7 +913,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <span className="pointer-events-none absolute left-3 top-0 h-full w-px bg-primary/20 dark:bg-primary/35" />
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-card-foreground">{subtask.title}</span>
-                {(isAdmin || rootTask.assigned_to === user?.id) && (
+                {
                   <button
                     onClick={(e) => { e.stopPropagation(); openSubtaskModal(rootTask.id, subtask.id); }}
                     className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-500 hover:bg-blue-500/20 transition-colors"
@@ -660,7 +921,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   >
                     <Plus size={10} />
                   </button>
-                )}
+                }
               </div>
               {subtask.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{subtask.description}</p>}
             </div>
@@ -1345,7 +1606,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 Create New Project
               </h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+              <button onClick={closeCreateModal} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <form onSubmit={handleCreateTask} className="space-y-4">
               {[
@@ -1359,6 +1620,91 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <div>
                 <label className="block text-sm font-medium mb-1 text-foreground">Description</label>
                 <textarea value={newTask.description || ""} onChange={e => setNewTask({ ...newTask, description: e.target.value })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" rows={3} />
+              </div>
+              <div className="rounded-xl border border-border/80 bg-primary/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-semibold text-foreground">Voice Note (optional)</label>
+                  <div className="flex items-center gap-2">
+                    {isRecordingVoice && (
+                      <span className="text-xs font-medium text-red-500">
+                        Recording... {formatVoiceTime(voiceRecordingSec)} / {formatVoiceTime(MAX_VOICE_NOTE_SECONDS)}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSummarizeVoiceNote}
+                      disabled={!voiceNoteBlob || isRecordingVoice || isSummarizingVoice}
+                      className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSummarizingVoice ? "Summarizing..." : "Summarize Using AI"}
+                    </button>
+                  </div>
+                </div>
+
+                {!isRecordingVoice && !voiceNoteBlob && (
+                  <button
+                    type="button"
+                    onClick={startVoiceRecording}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                  >
+                    <Mic size={16} className="text-primary" />
+                    Record Voice Note
+                  </button>
+                )}
+
+                {isRecordingVoice && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={stopVoiceRecording}
+                      className="inline-flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/20 transition-colors"
+                    >
+                      <Square size={14} /> Stop
+                    </button>
+                  </div>
+                )}
+
+                {!isRecordingVoice && voiceNoteBlob && (
+                  <div className="space-y-3">
+                    <div className="text-xs text-muted-foreground">
+                      {formatVoiceTime(voiceNoteDurationSec || voiceRecordingSec)} captured
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleVoicePlayPause}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
+                      >
+                        {isPlayingVoice ? <Pause size={14} /> : <Play size={14} />}
+                        {isPlayingVoice ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetVoiceNote}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={startVoiceRecording}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
+                      >
+                        <RotateCcw size={14} /> Re-record
+                      </button>
+                    </div>
+                    {!voiceSummaryText && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Click <span className="font-semibold">Summarize Using AI</span> to generate a detailed description from this recording.
+                      </p>
+                    )}
+                    {voiceNoteTranscriptPreview && (
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Transcript: {voiceNoteTranscriptPreview}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1 text-foreground">Workspace *</label>
@@ -1495,12 +1841,75 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={isCreating} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                  {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Project"}
+                <button type="button" onClick={closeCreateModal} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isCreating || isUploadingVoice || isRecordingVoice} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  {isCreating || isUploadingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Project"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showVoiceSummaryModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 backdrop-blur-sm">
+          <div className="w-full max-w-2xl mx-4 rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-foreground">AI Voice Summary</h3>
+              <button
+                type="button"
+                onClick={() => setShowVoiceSummaryModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+                disabled={isSummarizingVoice}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {isSummarizingVoice ? (
+              <div className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                OpenAI is generating a detailed task description...
+              </div>
+            ) : voiceSummaryError ? (
+              <div className="space-y-4">
+                <p className="text-sm text-red-500">{voiceSummaryError}</p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSummarizeVoiceNote}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <textarea
+                  value={voiceSummaryText}
+                  onChange={(e) => setVoiceSummaryText(e.target.value)}
+                  rows={12}
+                  className="w-full rounded-xl py-3 px-4 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowVoiceSummaryModal(false)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyVoiceSummaryToDescription}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    Use This Summary
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

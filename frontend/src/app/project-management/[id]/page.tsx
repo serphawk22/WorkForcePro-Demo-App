@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -8,7 +8,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { 
   ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle,
   Github, ExternalLink, ListTree, MessageSquare, Send, Edit, Save, X,
-  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent, Plus
+  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent, Plus, Mic, Play, Square, RotateCcw, Trash2
 } from "lucide-react";
 import { 
   getProjectDetails, 
@@ -24,8 +24,13 @@ import {
   ProjectDetails,
   TaskComment,
   User as ApiUser,
+  updateTask,
+  summarizeTaskVoiceNote,
+  uploadTaskVoiceNote,
 } from "@/lib/api";
 import { toast } from "sonner";
+
+const MAX_VOICE_NOTE_SECONDS = 90;
 
 const priorityColors: Record<string, string> = {
   high: "bg-red-500/10 text-red-500 border-red-500/20",
@@ -88,6 +93,184 @@ export default function ProjectDetailPage() {
   const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
   const [isLoadingRecurringInstances, setIsLoadingRecurringInstances] = useState(false);
   const [instanceActionLoadingId, setInstanceActionLoadingId] = useState<number | null>(null);
+  const [showVoiceSummaryModal, setShowVoiceSummaryModal] = useState(false);
+  const [isSummarizingVoice, setIsSummarizingVoice] = useState(false);
+  const [voiceSummaryText, setVoiceSummaryText] = useState("");
+  const [voiceSummaryError, setVoiceSummaryError] = useState<string | null>(null);
+  const [isApplyingSummary, setIsApplyingSummary] = useState(false);
+  const [showReRecordPanel, setShowReRecordPanel] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
+  const [voiceNoteBlob, setVoiceNoteBlob] = useState<Blob | null>(null);
+  const [voiceNotePreviewUrl, setVoiceNotePreviewUrl] = useState<string | null>(null);
+  const [isSavingVoiceNote, setIsSavingVoiceNote] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const handleCopyVoiceSummary = async () => {
+    if (!voiceSummaryText.trim()) return;
+    await navigator.clipboard.writeText(voiceSummaryText.trim());
+    toast.success("Summary copied");
+  };
+
+  const clearVoiceTimer = () => {
+    if (voiceTimerRef.current) {
+      clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+  };
+
+  const stopVoiceTracks = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const resetReRecordDraft = () => {
+    clearVoiceTimer();
+    if (voiceNotePreviewUrl) {
+      URL.revokeObjectURL(voiceNotePreviewUrl);
+    }
+    setVoiceNotePreviewUrl(null);
+    setVoiceNoteBlob(null);
+    setVoiceRecordingSeconds(0);
+  };
+
+  const stopReRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  };
+
+  const startReRecording = async () => {
+    try {
+      if (typeof window === "undefined" || !("MediaRecorder" in window)) {
+        toast.error("Voice recording is not supported in this browser");
+        return;
+      }
+
+      resetReRecordDraft();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+      setVoiceRecordingSeconds(0);
+      setIsRecordingVoice(true);
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        clearVoiceTimer();
+        setIsRecordingVoice(false);
+        stopVoiceTracks();
+
+        const blob = new Blob(voiceChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
+        if (blob.size === 0) {
+          toast.error("Recording is empty. Please try again.");
+          return;
+        }
+
+        setVoiceNoteBlob(blob);
+        const previewUrl = URL.createObjectURL(blob);
+        setVoiceNotePreviewUrl(previewUrl);
+      };
+
+      recorder.start();
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceRecordingSeconds((prev) => {
+          if (prev + 1 >= MAX_VOICE_NOTE_SECONDS) {
+            stopReRecording();
+            return MAX_VOICE_NOTE_SECONDS;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error("Failed to start voice recording", error);
+      stopVoiceTracks();
+      clearVoiceTimer();
+      setIsRecordingVoice(false);
+      toast.error("Could not access microphone. Check browser permissions.");
+    }
+  };
+
+  const saveReRecordedVoiceNote = async () => {
+    if (!taskId || !voiceNoteBlob) {
+      toast.error("Record a voice note first");
+      return;
+    }
+
+    const extension =
+      voiceNoteBlob.type.includes("mpeg") || voiceNoteBlob.type.includes("mp3")
+        ? "mp3"
+        : voiceNoteBlob.type.includes("ogg")
+        ? "ogg"
+        : voiceNoteBlob.type.includes("wav")
+        ? "wav"
+        : "webm";
+    const file = new File([voiceNoteBlob], `task-${taskId}-voice-${Date.now()}.${extension}`, {
+      type: voiceNoteBlob.type || "audio/webm",
+    });
+
+    setIsSavingVoiceNote(true);
+    try {
+      const uploadResult = await uploadTaskVoiceNote(file);
+      if (uploadResult.error || !uploadResult.data) {
+        toast.error(uploadResult.error || "Failed to upload voice note");
+        return;
+      }
+
+      const updateResult = await updateTask(taskId, {
+        voice_note_url: uploadResult.data.voice_note_url,
+        voice_note_transcript: uploadResult.data.voice_note_transcript || undefined,
+      });
+
+      if (updateResult.error) {
+        toast.error(updateResult.error);
+        return;
+      }
+
+      toast.success("Voice note updated");
+      setShowReRecordPanel(false);
+      resetReRecordDraft();
+      await loadProjectDetails();
+    } finally {
+      setIsSavingVoiceNote(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearVoiceTimer();
+      stopVoiceTracks();
+      if (voiceNotePreviewUrl) {
+        URL.revokeObjectURL(voiceNotePreviewUrl);
+      }
+    };
+  }, [voiceNotePreviewUrl]);
 
   useEffect(() => {
     const loadAssignableUsers = async () => {
@@ -124,6 +307,23 @@ export default function ProjectDetailPage() {
     };
   }, [taskId, project?.task?.is_recurring]);
 
+  const dataUrlToAudioFile = (dataUrl: string, baseName: string = "voice-note"): File => {
+    const parts = dataUrl.split(",");
+    if (parts.length !== 2) {
+      throw new Error("Invalid voice note data");
+    }
+    const meta = parts[0];
+    const mimeMatch = meta.match(/data:([^;]+);base64/i);
+    const mime = mimeMatch?.[1] || "audio/webm";
+    const binary = atob(parts[1]);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+
+    const ext = mime.includes("mpeg") || mime.includes("mp3") ? "mp3" : mime.includes("ogg") ? "ogg" : mime.includes("wav") ? "wav" : "webm";
+    return new File([bytes], `${baseName}.${ext}`, { type: mime });
+  };
+
   const loadProjectDetails = useCallback(async () => {
     if (!taskId) return;
     
@@ -155,6 +355,50 @@ export default function ProjectDetailPage() {
       setIsLoading(false);
     }
   }, [taskId, router]);
+
+  const handleSummarizeVoiceNote = async () => {
+    if (!project?.task?.voice_note_url) {
+      toast.error("No voice note available to summarize");
+      return;
+    }
+
+    try {
+      const voiceFile = dataUrlToAudioFile(project.task.voice_note_url, `task-${project.task.id}-voice`);
+      setShowVoiceSummaryModal(true);
+      setIsSummarizingVoice(true);
+      setVoiceSummaryError(null);
+      setVoiceSummaryText("");
+
+      const result = await summarizeTaskVoiceNote(voiceFile);
+      if (result.error || !result.data) {
+        setVoiceSummaryError(result.error || "Failed to summarize voice note");
+        return;
+      }
+
+      setVoiceSummaryText(result.data.summary);
+    } catch (err: any) {
+      setVoiceSummaryError(err?.message || "Failed to summarize voice note");
+    } finally {
+      setIsSummarizingVoice(false);
+    }
+  };
+
+  const applyVoiceSummaryToDescription = async () => {
+    if (!taskId || !voiceSummaryText.trim()) return;
+    setIsApplyingSummary(true);
+    try {
+      const result = await updateTask(taskId, { description: voiceSummaryText.trim() });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      await loadProjectDetails();
+      setShowVoiceSummaryModal(false);
+      toast.success("Task description updated from AI summary");
+    } finally {
+      setIsApplyingSummary(false);
+    }
+  };
 
   useEffect(() => {
     if (taskId) {
@@ -602,7 +846,115 @@ export default function ProjectDetailPage() {
                 {task.description && (
                   <p className="text-muted-foreground">{task.description}</p>
                 )}
+                {task.voice_note_url && (
+                  <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-3 max-w-xl">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1.5">
+                        <Mic size={12} /> Voice Note
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isRecordingVoice) stopReRecording();
+                              if (showReRecordPanel) {
+                                resetReRecordDraft();
+                                setShowReRecordPanel(false);
+                              } else {
+                                setShowReRecordPanel(true);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                          >
+                            <RotateCcw size={12} />
+                            {showReRecordPanel ? "Cancel Re-record" : "Re-record"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleSummarizeVoiceNote}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                        >
+                          Summarize Using AI
+                        </button>
+                      </div>
+                    </div>
+                    <audio controls preload="metadata" className="w-full h-10">
+                      <source src={task.voice_note_url} type="audio/webm" />
+                      <source src={task.voice_note_url} type="audio/mpeg" />
+                      Your browser does not support the audio player.
+                    </audio>
+
+                    {isAdmin && showReRecordPanel && (
+                      <div className="mt-3 rounded-lg border border-border/70 bg-background/50 p-3 space-y-3">
+                        {!voiceNoteBlob ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-muted-foreground">
+                              {isRecordingVoice
+                                ? `Recording... ${voiceRecordingSeconds}s / ${MAX_VOICE_NOTE_SECONDS}s`
+                                : "Record a new voice note to replace the current one"}
+                            </p>
+                            {isRecordingVoice ? (
+                              <button
+                                type="button"
+                                onClick={stopReRecording}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600 transition-colors"
+                              >
+                                <Square size={11} /> Stop
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={startReRecording}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                              >
+                                <Play size={11} /> Start Recording
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <audio controls preload="metadata" className="w-full h-10" src={voiceNotePreviewUrl || undefined} />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={resetReRecordDraft}
+                                className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted transition-colors"
+                              >
+                                <Trash2 size={11} /> Discard
+                              </button>
+                              <button
+                                type="button"
+                                onClick={startReRecording}
+                                className="inline-flex items-center gap-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                              >
+                                <RotateCcw size={11} /> Record Again
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveReRecordedVoiceNote}
+                                disabled={isSavingVoiceNote}
+                                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                              >
+                                {isSavingVoiceNote ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save Replacement
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {task.voice_note_transcript && (
+                      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                        Transcript: {task.voice_note_transcript}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
+
+                    
               
               <div className="flex items-center gap-3">
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border ${priorityColors[task.priority]}`}>
@@ -1217,6 +1569,81 @@ export default function ProjectDetailPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {showVoiceSummaryModal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-foreground">AI Voice Summary</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowVoiceSummaryModal(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                  disabled={isSummarizingVoice || isApplyingSummary}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {isSummarizingVoice ? (
+                <div className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  OpenAI is generating a detailed summary...
+                </div>
+              ) : voiceSummaryError ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-red-500">{voiceSummaryError}</p>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSummarizeVoiceNote}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <textarea
+                    value={voiceSummaryText}
+                    onChange={(e) => setVoiceSummaryText(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-xl py-3 px-4 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowVoiceSummaryModal(false)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                      disabled={isApplyingSummary}
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyVoiceSummary}
+                      className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                      disabled={!voiceSummaryText.trim()}
+                    >
+                      Copy Summary
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={applyVoiceSummaryToDescription}
+                        className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        disabled={isApplyingSummary || !voiceSummaryText.trim()}
+                      >
+                        {isApplyingSummary ? "Applying..." : "Use As Description"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -86,6 +86,8 @@ export default function HappySheetPage() {
   const [aiInsights, setAiInsights] = useState<HappySheetAiInsights | null>(null);
 
   const [isExportingPng, setIsExportingPng] = useState(false);
+  const [pendingDeleteEntry, setPendingDeleteEntry] = useState<HappySheetEntry | null>(null);
+  const [isDeletingEntry, setIsDeletingEntry] = useState(false);
 
   // When form date changes, reload personal entry
   useEffect(() => {
@@ -262,11 +264,17 @@ export default function HappySheetPage() {
   };
 
   const handleDeleteEntry = async (entry: HappySheetEntry) => {
-    const ok = window.confirm(`Delete your happy sheet entry for ${fmtLongDate(entry.date)}?`);
-    if (!ok) return;
+    setPendingDeleteEntry(entry);
+  };
+
+  const confirmDeleteEntry = async () => {
+    if (!pendingDeleteEntry) return;
+    setIsDeletingEntry(true);
+    const entry = pendingDeleteEntry;
     const res = await deleteHappySheetEntry(entry.id);
     if (res.error) {
       showFloatingToast({ type: "error", message: res.error });
+      setIsDeletingEntry(false);
       return;
     }
 
@@ -285,6 +293,8 @@ export default function HappySheetPage() {
       setFilteredTeam(r2.data || []);
     }
     await loadTeamHistory();
+    setPendingDeleteEntry(null);
+    setIsDeletingEntry(false);
     showFloatingToast({ type: "delete", message: "Entry deleted." });
   };
 
@@ -970,6 +980,40 @@ export default function HappySheetPage() {
           )}
         </div>
       </div>
+
+      {pendingDeleteEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200/70 dark:border-white/15 bg-white dark:bg-[#221038] p-5 shadow-xl">
+            <h4 className="text-base font-bold text-[#2B124C] dark:text-purple-100">Delete Entry?</h4>
+            <p className="mt-2 text-sm text-[#854F6C] dark:text-purple-300">
+              Delete your happy sheet entry for <span className="font-semibold">{fmtLongDate(pendingDeleteEntry.date)}</span>?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteEntry(null)}
+                disabled={isDeletingEntry}
+                className="h-9 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs font-medium text-[#522B5B] dark:text-purple-200 hover:bg-slate-100/80 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteEntry}
+                disabled={isDeletingEntry}
+                className="h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-70 inline-flex items-center gap-1.5"
+              >
+                {isDeletingEntry ? (
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                ) : (
+                  <Trash2 size={12} />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MySpaceShell>
   );
 }

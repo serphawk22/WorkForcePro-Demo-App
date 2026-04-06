@@ -92,7 +92,7 @@ def _recompute_user_streak(session: Session, user_id: int) -> HappySheetStreak:
 
 # ==================== TASK SHEET ROUTES ====================
 
-@router.post("/task-sheet", response_model=TaskSheetRead, status_code=status.HTTP_200_OK)
+@router.post("/task-sheet", response_model=TaskSheetWithUser, status_code=status.HTTP_200_OK)
 async def create_task_sheet(
     sheet_data: TaskSheetCreate,
     request: Request,
@@ -110,7 +110,14 @@ async def create_task_sheet(
         session.add(existing)
         session.commit()
         session.refresh(existing)
-        return existing
+        # Fetch user information
+        user = session.get(User, current_user.id)
+        return TaskSheetWithUser(
+            **existing.model_dump(),
+            user_name=user.name,
+            user_email=user.email,
+            profile_picture=user.profile_picture
+        )
     task_sheet = TaskSheet(
         user_id=current_user.id,
         date=target_date,
@@ -120,26 +127,43 @@ async def create_task_sheet(
     session.add(task_sheet)
     session.commit()
     session.refresh(task_sheet)
-    return task_sheet
+    # Fetch user information
+    user = session.get(User, current_user.id)
+    return TaskSheetWithUser(
+        **task_sheet.model_dump(),
+        user_name=user.name,
+        user_email=user.email,
+        profile_picture=user.profile_picture
+    )
 
 
-@router.get("/task-sheet/me", response_model=List[TaskSheetRead])
+@router.get("/task-sheet/me", response_model=List[TaskSheetWithUser])
 async def get_my_task_sheets(
     limit: int = 30,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get the current user's task sheets."""
+    """Get the current user's task sheets with user information."""
     stmt = (
-        select(TaskSheet)
+        select(TaskSheet, User)
+        .join(User)
         .where(TaskSheet.user_id == current_user.id)
         .order_by(TaskSheet.date.desc())
         .limit(limit)
     )
-    return session.exec(stmt).all()
+    results = session.exec(stmt).all()
+    return [
+        TaskSheetWithUser(
+            **sheet.model_dump(),
+            user_name=user.name,
+            user_email=user.email,
+            profile_picture=user.profile_picture
+        )
+        for sheet, user in results
+    ]
 
 
-@router.put("/task-sheet/{entry_id}", response_model=TaskSheetRead)
+@router.put("/task-sheet/{entry_id}", response_model=TaskSheetWithUser)
 async def update_task_sheet_entry(
     entry_id: int,
     sheet_data: TaskSheetCreate,
@@ -169,7 +193,14 @@ async def update_task_sheet_entry(
     session.add(entry)
     session.commit()
     session.refresh(entry)
-    return entry
+    # Fetch user information
+    user = session.get(User, current_user.id)
+    return TaskSheetWithUser(
+        **entry.model_dump(),
+        user_name=user.name,
+        user_email=user.email,
+        profile_picture=user.profile_picture
+    )
 
 
 @router.delete("/task-sheet/{entry_id}")
