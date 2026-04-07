@@ -15,7 +15,7 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import (
-    User, Task, TaskStatus, TaskPriority, UserRole,
+    User, Task, TaskStatus, TaskPriority, UserRole, Workspace,
     NotificationType,
 )
 from app.auth import get_current_admin_user
@@ -58,6 +58,7 @@ class GenerateTaskResponse(BaseModel):
 
 class ConfirmTaskRequest(BaseModel):
     title: str
+    workspace_id: int
     description: Optional[str] = None
     assigned_to: Optional[int] = None
     priority: str = "medium"
@@ -226,6 +227,13 @@ async def create_task_from_ai(
 
     # Validate assignee exists
     assignee = None
+
+    workspace = session.exec(select(Workspace).where(Workspace.id == request.workspace_id)).first()
+    if not workspace:
+        raise HTTPException(status_code=400, detail="Workspace not found.")
+    if workspace.organization_id != admin.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to use this workspace.")
+
     if request.assigned_to:
         assignee = session.exec(select(User).where(User.id == request.assigned_to)).first()
         if not assignee:
@@ -282,6 +290,8 @@ async def create_task_from_ai(
         description=request.description,
         priority=priority,
         due_date=due_date,
+        workspace_id=request.workspace_id,
+        organization_id=admin.organization_id,
         assigned_to=request.assigned_to,
         assigned_by=admin.id,
         public_id=generate_public_id(session, Task),

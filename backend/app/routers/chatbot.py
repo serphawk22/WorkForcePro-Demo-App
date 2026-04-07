@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.auth import get_current_user
-from app.models import User, UserRole, Task
+from app.models import User, UserRole, Task, Workspace
 from app.database import get_session
 
 router = APIRouter(prefix="/api/chatbot", tags=["Chatbot"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/chatbot", tags=["Chatbot"])
 # --- OpenAI Integration ---
 
 AI_SYSTEM_PROMPT = """You are a helpful AI Assistant for WorkForce Pro — an HR & Project Management platform.
-You can help with navigation, task creation, AND subtask creation.
+You can help with navigation, task creation, subtask creation, leave requests, and product Q&A.
 
 CONVERSATION CONTEXT:
 Always maintain context from previous messages. If the user refers to "it", "this", or "that", use the context to determine what they mean.
@@ -80,6 +80,25 @@ When a user wants to apply for leave / request time off / take sick leave / go o
 - Default priority to 'medium' if not specified.
 - If a user says "create a subtask for [Task Name]", set is_subtask_intent=true and parent_task_name=[Task Name].
 - If they follow up with "assign it to [Name] by [Date]", update task_data while KEEPING parent_task_name.
+- If task_draft is provided in context, merge it with the new user message and only update fields that changed.
+
+─── REQUIRED FIELDS FOR MAIN TASK CREATION ───────────────────
+For main tasks (is_task_intent=true), ensure task_data tracks these fields:
+- title
+- workspace_name
+- recurrence_preference_set (true only when user explicitly says normal/non-recurring OR recurring)
+- is_recurring (true/false based on user choice)
+- assignee_name
+- deadline
+- priority
+
+If any required field is missing, set needs_clarification=true and ask only for missing items.
+Always ask whether it is a normal task or recurring task until that preference is explicit.
+
+─── WEBSITE Q&A KNOWLEDGE ─────────────────────────────────────
+Answer feature questions using the provided page map and route catalog.
+Do not hallucinate pages or capabilities. If unknown, say so clearly and suggest the closest valid section.
+When a user asks "where can I do X", include the relevant page name and route in a concise answer.
 
 ─── RESPONSE FORMAT ──────────────────────────────────────────
 Return a JSON object:
@@ -92,10 +111,14 @@ Return a JSON object:
   "task_data": {
     "title": "...",
     "description": "...",
+        "workspace_name": "..." or null,
+        "workspace_id": 123 or null,
     "assignee_name": "...",
+        "assignee_id": 456 or null,
     "priority": "low|medium|high",
     "deadline": "YYYY-MM-DD or null",
     "parent_task_name": "..." or null,
+        "recurrence_preference_set": true/false,
     "is_recurring": false,
     "recurrence_type": "daily|weekly|monthly or null",
     "recurrence_interval": 1,
@@ -125,18 +148,30 @@ async def call_openai_for_chatbot(
     role: str, 
     current_page: str, 
     employees: List[dict] = None,
+    workspaces: List[dict] = None,
+    task_draft: Optional[dict] = None,
     history: List[ChatMessage] = []
 ) -> dict:
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         return None
 
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+    except Exception as e:
+        print(f"OpenAI client init error: {e}")
+        return None
 
     employee_list_str = ""
     if employees:
         employee_list_str = "Available employees: " + ", ".join([f"{e['name']} (id={e['id']})" for e in employees])
+
+    workspace_list_str = ""
+    if workspaces:
+        workspace_list_str = "Available workspaces: " + ", ".join([f"{w['name']} (id={w['id']})" for w in workspaces])
+
+    serialized_task_draft = json.dumps(task_draft or {}, ensure_ascii=True)
 
     # Format history for OpenAI
     openai_messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
@@ -147,7 +182,9 @@ async def call_openai_for_chatbot(
     User Role: {role}
     Current Page: {current_page}
     {employee_list_str}
+    {workspace_list_str}
     Current Date: {datetime.now().strftime("%Y-%m-%d")}
+    Current Task Draft: {serialized_task_draft}
     User Message: {message}
     """
     openai_messages.append({"role": "user", "content": user_prompt})
@@ -461,6 +498,7 @@ class ChatbotQueryRequest(BaseModel):
     message: str
     current_page: str  # raw pathname, e.g. "/payroll" or "payroll"
     history: Optional[List[ChatMessage]] = []
+    task_draft: Optional[dict] = None
 
 
 class ChatAction(BaseModel):
@@ -499,17 +537,66 @@ async def chatbot_query(
     page_key = _normalise_page(request.current_page)
     message = request.message.strip()
 
+    actions = _get_actions(page_key, role)
+
     # Fetch all employees — needed for both admin task assignment AND employee subtask assignment
-    employee_stmt = select(User).where(User.role == UserRole.employee)
-    employees = [{"id": e.id, "name": e.name} for e in session.exec(employee_stmt).all()]
+    try:
+        employee_stmt = select(User).where(User.role == UserRole.employee)
+        employees = [{"id": e.id, "name": e.name} for e in session.exec(employee_stmt).all()]
+    except Exception as e:
+        print(f"Chatbot employee lookup error: {e}")
+        employees = []
+
+    try:
+        workspace_stmt = select(Workspace).where(Workspace.organization_id == current_user.organization_id)
+        workspaces = [{"id": w.id, "name": w.name} for w in session.exec(workspace_stmt).all()]
+    except Exception as e:
+        print(f"Chatbot workspace lookup error: {e}")
+        workspaces = []
 
     # Try OpenAI first
-    ai_response = await call_openai_for_chatbot(message, role, page_key, employees, request.history or [])
+    try:
+        ai_response = await call_openai_for_chatbot(
+            message,
+            role,
+            page_key,
+            employees,
+            workspaces,
+            request.task_draft,
+            request.history or [],
+        )
+    except Exception as e:
+        print(f"Chatbot OpenAI flow error: {e}")
+        ai_response = None
     
     if ai_response:
         # Resolve assignee_id and parent_task_id if needed
         if (ai_response.get("is_task_intent") or ai_response.get("is_subtask_intent")) and ai_response.get("task_data"):
             task_data = ai_response["task_data"]
+
+            # Non-admin users are restricted to subtask creation only.
+            if role != "admin" and ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
+                ai_response["is_task_intent"] = False
+                ai_response["task_data"] = None
+                ai_response["needs_clarification"] = False
+                ai_response["clarification_question"] = None
+                ai_response["reply"] = "You can create subtasks, but only admins can create main tasks. Tell me which parent task to add your subtask under."
+
+            if ai_response.get("task_data") is None:
+                return ChatbotQueryResponse(
+                    reply=ai_response.get("reply", "How can I help you?"),
+                    actions=[ChatAction(**a) for a in actions],
+                    navigate_to=ai_response.get("navigate_to"),
+                    is_task_intent=False,
+                    is_subtask_intent=False,
+                    is_leave_intent=ai_response.get("is_leave_intent", False),
+                    task_data=None,
+                    leave_data=ai_response.get("leave_data"),
+                    needs_clarification=ai_response.get("needs_clarification", False),
+                    clarification_question=ai_response.get("clarification_question"),
+                    suggestions=ai_response.get("suggestions"),
+                )
+
             assignee_name = task_data.get("assignee_name")
             found_emp = False
             if assignee_name:
@@ -551,6 +638,23 @@ async def chatbot_query(
                         ai_response["reply"] = f"I couldn't find a task named '{parent_name}'."
                         ai_response["clarification_question"] = "I couldn't find that task. Here are some active tasks you might be looking for:"
 
+            # Resolve workspace ID from workspace name for main task creation.
+            workspace_name = task_data.get("workspace_name")
+            found_workspace = False
+            if workspace_name:
+                for ws in workspaces:
+                    if ws["name"].lower() == workspace_name.lower() or workspace_name.lower() in ws["name"].lower() or ws["name"].lower() in workspace_name.lower():
+                        task_data["workspace_id"] = ws["id"]
+                        task_data["workspace_name"] = ws["name"]
+                        found_workspace = True
+                        break
+
+            if workspace_name and not found_workspace and ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
+                ai_response["needs_clarification"] = True
+                ai_response["clarification_question"] = f"I couldn't find a workspace named '{workspace_name}'. Which workspace should I use?"
+                ai_response["suggestions"] = [w["name"] for w in workspaces[:5]]
+                ai_response["reply"] = ai_response["clarification_question"]
+
             # Clarify if the named assignee wasn't found — applies to both admin and employee
             if assignee_name and not found_emp:
                 ai_response["needs_clarification"] = True
@@ -559,6 +663,52 @@ async def chatbot_query(
                 ai_response["clarification_question"] = f"I couldn't find an employee named '{assignee_name}'. Who should I assign this to?"
                 ai_response["suggestions"] = [e["name"] for e in employees[:5]]
                 ai_response["reply"] = ai_response["clarification_question"]
+
+            # Enforce required fields for main tasks.
+            if ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
+                missing_fields: List[str] = []
+                if not task_data.get("title"):
+                    missing_fields.append("title")
+                if not task_data.get("workspace_id") and not task_data.get("workspace_name"):
+                    missing_fields.append("workspace")
+                if task_data.get("recurrence_preference_set") is not True:
+                    missing_fields.append("task_type")
+                if task_data.get("is_recurring") and not task_data.get("recurrence_type"):
+                    missing_fields.append("recurrence_type")
+                if not task_data.get("assignee_id") and not task_data.get("assignee_name"):
+                    missing_fields.append("assignee")
+                if not task_data.get("deadline"):
+                    missing_fields.append("due_date")
+                if not task_data.get("priority"):
+                    missing_fields.append("priority")
+
+                if missing_fields:
+                    ai_response["needs_clarification"] = True
+
+                    if "task_type" in missing_fields:
+                        ai_response["clarification_question"] = "Should this be a normal one-time task or a recurring task?"
+                        ai_response["suggestions"] = ["Normal task", "Recurring task"]
+                    else:
+                        label_map = {
+                            "workspace": "workspace",
+                            "assignee": "assignee",
+                            "due_date": "due date",
+                            "title": "title",
+                            "priority": "priority",
+                            "recurrence_type": "recurrence pattern",
+                        }
+                        friendly = [label_map.get(f, f.replace("_", " ")) for f in missing_fields]
+                        ai_response["clarification_question"] = "I still need: " + ", ".join(friendly) + "."
+                        if "workspace" in missing_fields:
+                            ai_response["suggestions"] = [w["name"] for w in workspaces[:5]]
+                        elif "assignee" in missing_fields:
+                            ai_response["suggestions"] = [e["name"] for e in employees[:5]]
+                        elif "priority" in missing_fields:
+                            ai_response["suggestions"] = ["low", "medium", "high"]
+                        elif "recurrence_type" in missing_fields:
+                            ai_response["suggestions"] = ["daily", "weekly", "monthly"]
+
+                    ai_response["reply"] = ai_response.get("clarification_question") or ai_response.get("reply", "Please provide the missing fields.")
 
         # ── Navigation post-processing ──────────────────────────────
         # 1. If OpenAI didn't set navigate_to, check deterministic nav commands as fallback
@@ -582,7 +732,6 @@ async def chatbot_query(
         if ai_response.get("navigate_to") in ("/dashboard",) and role != "admin":
             ai_response["navigate_to"] = "/employee-dashboard"
 
-        actions = _get_actions(page_key, role)
         return ChatbotQueryResponse(
             reply=ai_response.get("reply", "How can I help you?"),
             actions=[ChatAction(**a) for a in actions],
@@ -673,7 +822,8 @@ async def chatbot_context(
     reply = (
         f"Hi! I can help you navigate this page.\n\n"
         f"You are currently on: **{page_display}**\n\n"
-        f"{explanation}"
+        f"{explanation}\n\n"
+        "I can also help you draft tasks. For task creation, tell me the workspace, whether it is a normal or recurring task, the assignee, due date, title, and priority."
     )
 
     return ChatbotQueryResponse(

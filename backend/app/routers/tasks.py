@@ -1273,13 +1273,6 @@ async def get_task_details(
         )
     _ensure_task_access(current_user, task, "project")
     
-    # Check permission
-    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this project"
-        )
-    
     # Get assignee info
     assignee = None
     if task.assigned_to:

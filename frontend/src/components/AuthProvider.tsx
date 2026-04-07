@@ -38,6 +38,14 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
+function normalizeUserRole(rawRole: unknown): "admin" | "employee" {
+  if (typeof rawRole !== "string") return "employee";
+  const normalized = rawRole.trim().toLowerCase();
+  if (normalized === "admin" || normalized.endsWith(".admin")) return "admin";
+  if (normalized === "employee" || normalized.endsWith(".employee")) return "employee";
+  return "employee";
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -66,8 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Role:', role || 'none');
       
       if (token && role && userId && userEmail) {
-        // Validate role is one of the expected values
-        const validRole = (role === 'admin' || role === 'employee') ? role : 'employee';
+        const validRole = normalizeUserRole(role);
         
         // Restore user from localStorage
         const restoredUser: User = {
@@ -118,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const updatedUser: User = {
           id: result.data.id,
           email: result.data.email,
-          role: result.data.role,
+          role: normalizeUserRole(result.data.role),
           name: result.data.name,
           profile_picture: result.data.profile_picture,
           age: result.data.age,
@@ -176,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newUser: User = {
           id: result.data.user_id,
           email: result.data.email,
-          role: result.data.role,
+          role: normalizeUserRole(result.data.role),
           name: result.data.name,
         };
         
@@ -192,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
         
         console.log('[AUTH] User state updated:', newUser);
-        return { success: true, role: result.data.role };
+        return { success: true, role: normalizeUserRole(result.data.role) };
       }
     } catch (error) {
       console.error('[AUTH] Login error:', error);

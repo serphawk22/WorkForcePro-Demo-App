@@ -20,7 +20,7 @@ export default function DashboardLayout({ children, role = "admin", userName, us
       <Suspense fallback={<div className="w-[72px] shrink-0" />}>
         <AppSidebar role={role} userName={userName} userHandle={userHandle} />
       </Suspense>
-      <div className="flex flex-1 flex-col min-w-0 relative z-10 transition-[margin] duration-300 ease-in-out" style={{ marginLeft: 'var(--sidebar-width, 72px)' }}>
+      <div className="flex flex-1 flex-col min-w-0 relative z-10 ml-0 xl:ml-[var(--sidebar-width,72px)] transition-[margin] duration-300 ease-in-out">
         <TopBar />
         <main className={`flex-1 animate-fade-in${noPadding ? "" : " overflow-auto px-6 pt-3 pb-6"}`}>
           {children}

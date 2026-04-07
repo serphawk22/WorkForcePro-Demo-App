@@ -18,6 +18,8 @@ import {
   ClipboardList,
   ChevronDown,
   ChevronRight,
+  Menu,
+  PanelLeftClose,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
@@ -53,6 +55,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isHovered, setIsHovered] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [isCompactOpen, setIsCompactOpen] = useState(false);
   const PIN_KEY = "workforcepro_sidebarPinned";
   const LAST_PROJECT_WORKSPACE_KEY = "workforcepro_lastProjectWorkspaceId";
   const [isPinned, setIsPinned] = useState<boolean>(() => {
@@ -73,8 +77,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const [pendingCount, setPendingCount] = useState(0);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
-  const isOpen = isHovered || isPinned;
-  const effectiveWidth = isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72);
+  const isOpen = isCompactViewport ? isCompactOpen : (isHovered || isPinned);
+  const effectiveWidth = isCompactViewport ? (isOpen ? 240 : 0) : (isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72));
 
   // Persist pinned state across route navigation (prevents collapse on menu click).
   useEffect(() => {
@@ -113,8 +117,30 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', `${effectiveWidth}px`);
-  }, [effectiveWidth]);
+    const width = isCompactViewport ? 0 : effectiveWidth;
+    document.documentElement.style.setProperty('--sidebar-width', `${width}px`);
+  }, [effectiveWidth, isCompactViewport]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1279px)");
+    const updateViewport = () => {
+      const compact = media.matches;
+      setIsCompactViewport(compact);
+      if (!compact) {
+        setIsCompactOpen(false);
+      }
+    };
+
+    updateViewport();
+    media.addEventListener("change", updateViewport);
+    return () => media.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (isCompactViewport) {
+      setIsCompactOpen(false);
+    }
+  }, [pathname, searchParams, isCompactViewport]);
 
   useEffect(() => {
     const workspaceIdFromPath = pathname.match(/^\/project-management\/workspaces\/(\d+)/)?.[1];
@@ -147,13 +173,19 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     // Pinned behavior: sidebar remains expanded; resizing is disabled while pinned.
-    if (isPinned) return;
+    if (isPinned || isCompactViewport) return;
     dragStartX.current = e.clientX;
     dragStartWidth.current = isOpen ? 240 : 72;
     isDraggingRef.current = true;
     setIsDragging(true);
     e.preventDefault();
-  }, [isOpen, isPinned]);
+  }, [isOpen, isPinned, isCompactViewport]);
+
+  const handleCompactNavigate = () => {
+    if (isCompactViewport) {
+      setIsCompactOpen(false);
+    }
+  };
 
   const displayName = user?.name || userName;
   const displayHandle = user?.email || userHandle;
@@ -172,12 +204,35 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const profilePictureUrl = getProfilePictureUrl();
 
   return (
-    <aside
+    <>
+      {isCompactViewport && (
+        <button
+          type="button"
+          aria-label={isCompactOpen ? "Close navigation" : "Open navigation"}
+          onClick={() => setIsCompactOpen((prev) => !prev)}
+          className="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar/90 text-sidebar-foreground shadow-lg backdrop-blur-md xl:hidden"
+        >
+          {isCompactOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
+        </button>
+      )}
+
+      {isCompactViewport && isCompactOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setIsCompactOpen(false)}
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] xl:hidden"
+        />
+      )}
+
+      <aside
       onMouseEnter={() => { if (!isPinned) setIsHovered(true); }}
       onMouseLeave={() => { if (!isPinned) setIsHovered(false); }}
       className={`glass-sidebar fixed left-0 top-0 h-screen flex flex-col z-40 ${
+        isCompactViewport ? (isCompactOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
+      } ${
         isDragging ? "" : "transition-[width] duration-300 ease-in-out"
-      }`}
+      } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
       style={{ width: effectiveWidth }}
     >
       {/* Logo */}
@@ -240,10 +295,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
 
                     if (targetWorkspaceId) {
                       router.push(`/project-management/workspaces/${targetWorkspaceId}`, { scroll: false });
+                      handleCompactNavigate();
                       return;
                     }
 
                     router.push("/project-management", { scroll: false });
+                    handleCompactNavigate();
                   }}
                   className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
                     parentActive
@@ -291,8 +348,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                             try {
                               localStorage.setItem(LAST_PROJECT_WORKSPACE_KEY, String(ws.id));
                             } catch {}
+                            handleCompactNavigate();
                           }}
-                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
                             wsActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
                               : "text-sidebar-foreground/75 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
@@ -335,6 +393,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 href={link.path}
                 prefetch
                 scroll={false}
+                onClick={handleCompactNavigate}
                 className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -432,11 +491,14 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       </div>
 
       {/* Resize handle */}
-      <div
-        onMouseDown={handleResizeMouseDown}
-        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-50 hover:bg-sidebar-primary/20 transition-colors"
-      />
+      {!isCompactViewport && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-50 hover:bg-sidebar-primary/20 transition-colors"
+        />
+      )}
     </aside>
+    </>
   );
 }
 

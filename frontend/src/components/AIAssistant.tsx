@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, Send, Sparkles, ChevronRight, Check, Calendar, User as UserIcon, AlertCircle, Loader2, CalendarDays } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getAssignableUsers, getApiBaseUrl, User } from "@/lib/api";
+import { getAssignableUsers, getApiBaseUrl, getWorkspaces, User, Workspace } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,12 +16,15 @@ interface ChatAction {
 interface TaskData {
   title: string;
   description: string;
+  workspace_name?: string;
+  workspace_id?: number;
   assignee_name?: string;
   assignee_id?: number;
   priority: "low" | "medium" | "high";
   deadline?: string;
   parent_task_id?: number;
   parent_task_name?: string;
+  recurrence_preference_set?: boolean;
   is_recurring?: boolean;
   recurrence_type?: string | null;
   recurrence_interval?: number;
@@ -82,7 +85,8 @@ async function callChatbot(
   endpoint: "query" | "context",
   message: string,
   current_page: string,
-  history: Message[] = []
+  history: Message[] = [],
+  taskDraft: TaskData | null = null
 ): Promise<ChatbotResponse> {
   const token = getToken();
   
@@ -102,7 +106,8 @@ async function callChatbot(
     body: JSON.stringify({ 
       message, 
       current_page,
-      history: formattedHistory
+      history: formattedHistory,
+      task_draft: taskDraft,
     }),
   });
   if (!res.ok) throw new Error(`Chatbot API error: ${res.status}`);
@@ -110,6 +115,10 @@ async function callChatbot(
 }
 
 async function confirmTaskCreation(taskData: TaskData): Promise<any> {
+  if (!taskData.workspace_id) {
+    throw new Error("Workspace is required before creating a task.");
+  }
+
   const token = getToken();
   const res = await fetch(`${getApiBaseUrl()}/api/ai-assistant/create-task`, {
     method: "POST",
@@ -120,6 +129,7 @@ async function confirmTaskCreation(taskData: TaskData): Promise<any> {
     },
     body: JSON.stringify({
       title: taskData.title,
+      workspace_id: taskData.workspace_id,
       description: taskData.description,
       assigned_to: taskData.assignee_id,
       priority: taskData.priority,
@@ -194,6 +204,42 @@ function formatReply(text: string): React.ReactNode {
   });
 }
 
+const DEFAULT_ASSISTANT_GREETING =
+  "Hi! I can help you navigate the website, answer product questions, or draft a task. Tell me the workspace, whether it is normal or recurring, the assignee, due date, title, and priority.";
+
+function mergeTaskDraft(existing: TaskData | null, incoming: TaskData): TaskData {
+  const merged: TaskData = {
+    ...(existing || { title: "", description: "", priority: "medium" }),
+    ...incoming,
+  };
+
+  if (!merged.priority) {
+    merged.priority = existing?.priority || "medium";
+  }
+
+  if ((!merged.title || !merged.title.trim()) && existing?.title) {
+    merged.title = existing.title;
+  }
+
+  if ((!merged.description || !merged.description.trim()) && existing?.description) {
+    merged.description = existing.description;
+  }
+
+  return merged;
+}
+
+function getMissingMainTaskFields(task: TaskData): string[] {
+  const missing: string[] = [];
+  if (!task.title?.trim()) missing.push("title");
+  if (!task.workspace_id) missing.push("workspace");
+  if (task.recurrence_preference_set !== true) missing.push("task_type");
+  if (task.is_recurring && !task.recurrence_type) missing.push("recurrence_pattern");
+  if (!task.assignee_id) missing.push("assignee");
+  if (!task.deadline) missing.push("due_date");
+  if (!task.priority) missing.push("priority");
+  return missing;
+}
+
 // ─── Components ─────────────────────────────────────────────────────────────
 
 function TypingIndicator() {
@@ -214,7 +260,8 @@ function TaskPreviewCard({
   onCancel,
   isCreated,
   isSubtask,
-  employees = []
+  employees = [],
+  workspaces = []
 }: { 
   task: TaskData; 
   onConfirm: (updatedTask: TaskData) => void; 
@@ -222,16 +269,21 @@ function TaskPreviewCard({
   isCreated?: boolean;
   isSubtask?: boolean;
   employees?: User[];
+  workspaces?: Workspace[];
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<number | undefined>(task.assignee_id);
   const [selectedAssigneeName, setSelectedAssigneeName] = useState<string | undefined>(task.assignee_name);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | undefined>(task.workspace_id);
+  const [selectedWorkspaceName, setSelectedWorkspaceName] = useState<string | undefined>(task.workspace_name);
 
   const handleConfirm = async () => {
     setIsCreating(true);
     try {
       await onConfirm({
         ...task,
+        workspace_id: selectedWorkspaceId,
+        workspace_name: selectedWorkspaceName,
         assignee_id: selectedAssigneeId,
         assignee_name: selectedAssigneeName
       });
@@ -251,6 +303,20 @@ function TaskPreviewCard({
       setSelectedAssigneeName(undefined);
     }
   };
+
+  const handleWorkspaceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = Number(e.target.value);
+    const ws = workspaces.find(w => w.id === id);
+    if (ws) {
+      setSelectedWorkspaceId(id);
+      setSelectedWorkspaceName(ws.name);
+    } else {
+      setSelectedWorkspaceId(undefined);
+      setSelectedWorkspaceName(undefined);
+    }
+  };
+
+  const isConfirmDisabled = isCreating || (!isSubtask && !selectedWorkspaceId);
 
   return (
     <div className="mt-3 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-900 rounded-2xl p-4 shadow-sm">
@@ -276,6 +342,23 @@ function TaskPreviewCard({
           <div>
             <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500">Description</label>
             <div className="text-xs text-gray-600 dark:text-gray-400">{task.description}</div>
+          </div>
+        )}
+
+        {!isSubtask && (
+          <div>
+            <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 block mb-1">Workspace</label>
+            <select
+              value={selectedWorkspaceId || ""}
+              onChange={handleWorkspaceChange}
+              disabled={isCreated}
+              className="w-full text-xs bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-70"
+            >
+              <option value="">Select Workspace</option>
+              {workspaces.map(ws => (
+                <option key={ws.id} value={ws.id}>{ws.name}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -342,7 +425,7 @@ function TaskPreviewCard({
         <div className="flex gap-2">
           <button
             onClick={handleConfirm}
-            disabled={isCreating}
+            disabled={isConfirmDisabled}
             className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
           >
             {isCreating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -503,9 +586,9 @@ function LeavePreviewCard({
 
 function ExamplePrompts({ onSelect }: { onSelect: (prompt: string) => void }) {
   const prompts = [
-    "Assign UI testing task to Ravi by tomorrow",
-    "Create high priority bug fix for login page",
-    "Assign API docs task to Sai by Friday"
+    "Create a normal task in Marketing workspace for website copy review, assign to Ravi, due Friday, high priority",
+    "Create a recurring task in Product workspace for weekly QA review, assign to Sai, due next Monday, medium priority",
+    "What can you help me do in this website?"
   ];
 
   return (
@@ -542,21 +625,27 @@ export default function AIAssistant({
   const [currentActions, setCurrentActions] = useState<ChatAction[]>([]);
   const [contextLoaded, setContextLoaded] = useState(false);
   const [employees, setEmployees] = useState<User[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [taskDraft, setTaskDraft] = useState<TaskData | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const loadEmployees = async () => {
+    const loadAssistantDependencies = async () => {
       try {
-        const res = await getAssignableUsers();
-        if (res.data) setEmployees(res.data);
+        const [employeeRes, workspaceRes] = await Promise.all([
+          getAssignableUsers(),
+          getWorkspaces(),
+        ]);
+        if (employeeRes.data) setEmployees(employeeRes.data);
+        if (workspaceRes.data) setWorkspaces(workspaceRes.data);
       } catch (err) {
-        console.error("Failed to fetch employees for AI Assistant", err);
+        console.error("Failed to fetch AI Assistant dependencies", err);
       }
     };
     if (isOpen) {
-      loadEmployees();
+      loadAssistantDependencies();
     }
   }, [isOpen]);
 
@@ -576,24 +665,29 @@ export default function AIAssistant({
     if (!isOpen || contextLoaded) return;
     let cancelled = false;
 
+    if (messages.length === 0) {
+      setMessages([{ role: "assistant", content: DEFAULT_ASSISTANT_GREETING, actions: [] }]);
+    }
+
     (async () => {
-      setIsTyping(true);
       try {
         const data = await callChatbot("context", "", pathname);
         if (cancelled) return;
-        setMessages([{ role: "assistant", content: data.reply, actions: data.actions }]);
+        setMessages(prev => {
+          if (prev.length === 0) {
+            return [{ role: "assistant", content: data.reply, actions: data.actions }];
+          }
+
+          const next = [...prev];
+          next[0] = { ...next[0], content: data.reply, actions: data.actions };
+          return next;
+        });
         setCurrentActions(data.actions);
         setContextLoaded(true);
       } catch {
         if (cancelled) return;
-        setMessages([{
-          role: "assistant",
-          content: "Hi! I'm your AI Assistant. I can help you navigate or create tasks using natural language.",
-          actions: [],
-        }]);
+        setMessages(prev => prev.length > 0 ? prev : [{ role: "assistant", content: DEFAULT_ASSISTANT_GREETING, actions: [] }]);
         setContextLoaded(true);
-      } finally {
-        if (!cancelled) setIsTyping(false);
       }
     })();
 
@@ -604,6 +698,11 @@ export default function AIAssistant({
     (route: string) => { router.push(route); },
     [router]
   );
+
+  const handlePrefillMessage = useCallback((text: string) => {
+    setMessage(text);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
 
   const handleSendMessage = useCallback(async (customMsg?: string) => {
     const textToSend = customMsg || message.trim();
@@ -618,23 +717,66 @@ export default function AIAssistant({
 
     try {
       // Send history including the new user message
-      const data = await callChatbot("query", textToSend, pathname, [...messages, newUserMsg]);
+      const data = await callChatbot("query", textToSend, pathname, [...messages, newUserMsg], taskDraft);
+
+      let effectiveTask: TaskData | null = null;
+      let effectiveReply = data.reply;
+      let effectiveSuggestions = data.suggestions || undefined;
+      let needsClarification = data.needs_clarification;
+
+      if ((data.is_task_intent || data.is_subtask_intent) && data.task_data) {
+        const mergedTask = mergeTaskDraft(taskDraft, data.task_data);
+        setTaskDraft(mergedTask);
+        effectiveTask = mergedTask;
+
+        if (!data.is_subtask_intent) {
+          const missing = getMissingMainTaskFields(mergedTask);
+          if (missing.length > 0) {
+            needsClarification = true;
+            if (missing.includes("task_type")) {
+              effectiveReply = "Should this be a normal one-time task or a recurring task?";
+              effectiveSuggestions = ["Normal task", "Recurring task"];
+            } else {
+              const labels: Record<string, string> = {
+                workspace: "workspace",
+                recurrence_pattern: "recurrence pattern",
+                assignee: "assignee",
+                due_date: "due date",
+                title: "title",
+                priority: "priority",
+              };
+              const readable = missing.map((m) => labels[m] || m.replaceAll("_", " "));
+              effectiveReply = `I still need: ${readable.join(", ")}.`;
+
+              if (missing.includes("workspace")) {
+                effectiveSuggestions = workspaces.slice(0, 5).map((w) => w.name);
+              } else if (missing.includes("assignee")) {
+                effectiveSuggestions = employees.slice(0, 5).map((e) => e.name);
+              } else if (missing.includes("priority")) {
+                effectiveSuggestions = ["low", "medium", "high"];
+              } else if (missing.includes("recurrence_pattern")) {
+                effectiveSuggestions = ["daily", "weekly", "monthly"];
+              }
+            }
+          }
+        }
+      }
       
       const newAssistantMsg: Message = { 
         role: "assistant", 
-        content: data.reply, 
+        content: effectiveReply, 
         actions: data.actions,
-        suggestions: data.suggestions || undefined
+        suggestions: effectiveSuggestions
       };
 
       // Only show preview if no clarification is needed
-      if (!data.needs_clarification) {
-        if (data.task_data) {
+      if (!needsClarification) {
+        if (effectiveTask) {
           if (data.is_task_intent) {
-            newAssistantMsg.taskPreview = data.task_data;
+            newAssistantMsg.taskPreview = effectiveTask;
             newAssistantMsg.isSubtask = false;
           } else if (data.is_subtask_intent) {
-            newAssistantMsg.taskPreview = data.task_data;
+            newAssistantMsg.taskPreview = effectiveTask;
             newAssistantMsg.isSubtask = true;
           }
         }
@@ -661,7 +803,7 @@ export default function AIAssistant({
     } finally {
       setIsTyping(false);
     }
-  }, [message, isTyping, pathname, currentActions, handleNavigate, messages, onClose]);
+  }, [message, isTyping, pathname, currentActions, handleNavigate, messages, onClose, taskDraft, workspaces, employees]);
 
   const handleConfirmTask = async (task: TaskData, msgIndex: number) => {
     try {
@@ -672,6 +814,8 @@ export default function AIAssistant({
         await confirmTaskCreation(task);
         toast.success("Task created and assigned!");
       }
+
+      setTaskDraft(null);
       
       // Dispatch event to refresh tasks in Project Management page if currently open
       window.dispatchEvent(new CustomEvent("refresh-tasks"));
@@ -742,7 +886,7 @@ export default function AIAssistant({
                   {msg.suggestions.map((suggestion, sIndex) => (
                     <button
                       key={sIndex}
-                      onClick={() => handleSendMessage(suggestion)}
+                      onClick={() => handlePrefillMessage(suggestion)}
                       className="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 rounded-full text-xs font-medium hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all shadow-sm"
                     >
                       {suggestion}
@@ -758,8 +902,10 @@ export default function AIAssistant({
                     isCreated={msg.isTaskCreated}
                     isSubtask={msg.isSubtask}
                     employees={employees}
+                    workspaces={workspaces}
                     onConfirm={(updatedTask) => handleConfirmTask(updatedTask, index)}
                     onCancel={() => {
+                      setTaskDraft(null);
                       setMessages(prev => prev.filter((_, i) => i !== index));
                     }}
                   />
@@ -780,12 +926,12 @@ export default function AIAssistant({
               )}
             </div>
           ))}
-          {isTyping && <TypingIndicator />}
+          {isTyping && messages.length > 0 && <TypingIndicator />}
         </div>
 
         {/* Example Prompts */}
         {userRole === "admin" && messages.length <= 1 && (
-          <ExamplePrompts onSelect={(p) => handleSendMessage(p)} />
+          <ExamplePrompts onSelect={handlePrefillMessage} />
         )}
 
         {/* Input */}

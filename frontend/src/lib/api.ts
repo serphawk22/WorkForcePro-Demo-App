@@ -657,6 +657,7 @@ async function apiFetch<T>(
     const baseUrl = typeof window !== "undefined" ? "/api" : getApiBaseUrl();
     const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
+      cache: options.method && options.method.toUpperCase() !== "GET" ? options.cache : "no-store",
       credentials: "include", // Send cookies
       headers,
       signal: controller.signal,
@@ -1212,7 +1213,7 @@ export async function uploadTaskVoiceNote(
   const primaryBaseUrl = getApiBaseUrl();
   const localFallbackBaseUrl =
     typeof window !== "undefined" && window.location.hostname === "localhost"
-      ? (process.env.NEXT_PUBLIC_API_URL?.trim() || "http://127.0.0.1:8000")
+      ? "http://127.0.0.1:8000"
       : null;
   const uploadUrls = [
     `${primaryBaseUrl}/tasks/voice-note`,
@@ -1278,7 +1279,7 @@ export async function summarizeTaskVoiceNote(
   const primaryBaseUrl = getApiBaseUrl();
   const localFallbackBaseUrl =
     typeof window !== "undefined" && window.location.hostname === "localhost"
-      ? (process.env.NEXT_PUBLIC_API_URL?.trim() || "http://127.0.0.1:8000")
+      ? "http://127.0.0.1:8000"
       : null;
   const summarizeUrls = [
     `${primaryBaseUrl}/tasks/voice-note/summarize`,

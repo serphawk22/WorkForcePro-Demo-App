@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import NextImage from "next/image";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
@@ -20,6 +20,17 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 function formatTime(seconds: number): string {
   return formatTimerDisplay(seconds);
@@ -93,12 +104,13 @@ export default function AttendancePage() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   
   // Filter state
-  const [filterDate, setFilterDate] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [isFilterLoading, setIsFilterLoading] = useState(false);
+  const [graphScope, setGraphScope] = useState<"all" | "individual">("all");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
 
   // Load initial data (status, history) — timer handled by global context
   const loadData = useCallback(async () => {
@@ -127,10 +139,10 @@ export default function AttendancePage() {
     // Apply filters for admin
     const filters: any = { sort: sortOrder };
     
-    if (filterDate) {
-      filters.dateFilter = filterDate;
-    } else if (startDate && endDate) {
+    if (startDate) {
       filters.startDate = startDate;
+    }
+    if (endDate) {
       filters.endDate = endDate;
     }
     
@@ -140,7 +152,7 @@ export default function AttendancePage() {
     }
     
     setIsFilterLoading(false);
-  }, [isAdmin, filterDate, startDate, endDate, sortOrder]);
+  }, [isAdmin, startDate, endDate, sortOrder]);
 
   // Initial load on mount
   useEffect(() => {
@@ -188,18 +200,17 @@ export default function AttendancePage() {
   // Quick filter helpers
   const setTodayFilter = () => {
     const today = new Date().toISOString().split('T')[0];
-    setFilterDate(today);
-    setStartDate("");
-    setEndDate("");
+    setStartDate(today);
+    setEndDate(today);
     setIsFilterActive(true);
   };
 
   const setYesterdayFilter = () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    setFilterDate(yesterday.toISOString().split('T')[0]);
-    setStartDate("");
-    setEndDate("");
+    const day = yesterday.toISOString().split('T')[0];
+    setStartDate(day);
+    setEndDate(day);
     setIsFilterActive(true);
   };
 
@@ -208,7 +219,6 @@ export default function AttendancePage() {
     const firstDay = new Date(today);
     firstDay.setDate(today.getDate() - today.getDay());
     
-    setFilterDate("");
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(today.toISOString().split('T')[0]);
     setIsFilterActive(true);
@@ -218,14 +228,12 @@ export default function AttendancePage() {
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
     
-    setFilterDate("");
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(today.toISOString().split('T')[0]);
     setIsFilterActive(true);
   };
 
   const clearFilters = () => {
-    setFilterDate("");
     setStartDate("");
     setEndDate("");
     setSortOrder("desc");
@@ -233,14 +241,74 @@ export default function AttendancePage() {
   };
 
   const getFilterLabel = () => {
-    if (filterDate) {
-      return `Date: ${new Date(filterDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    }
     if (startDate && endDate) {
       return `${new Date(startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - ${new Date(endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
     }
+    if (startDate) {
+      return `From ${new Date(startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (endDate) {
+      return `Until ${new Date(endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
     return "";
   };
+
+  const employeeOptions = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    allAttendance.forEach((record) => {
+      if (!record.user_id) return;
+      if (!map.has(record.user_id)) {
+        map.set(record.user_id, {
+          id: record.user_id,
+          name: record.user_name || `Employee ${record.user_id}`,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allAttendance]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (graphScope !== "individual") return;
+    if (selectedEmployeeId) return;
+    if (employeeOptions.length > 0) {
+      setSelectedEmployeeId(String(employeeOptions[0].id));
+    }
+  }, [isAdmin, graphScope, selectedEmployeeId, employeeOptions]);
+
+  const chartData = useMemo(() => {
+    const sourceRecords = isAdmin ? allAttendance : history;
+    const scopedRecords = isAdmin && graphScope === "individual" && selectedEmployeeId
+      ? sourceRecords.filter((r) => String(r.user_id) === selectedEmployeeId)
+      : sourceRecords;
+
+    const byDate = new Map<string, { present: number; absent: number; hours: number }>();
+
+    scopedRecords.forEach((record) => {
+      const dateKey = record.date;
+      const current = byDate.get(dateKey) || { present: 0, absent: 0, hours: 0 };
+      if (record.punch_in) {
+        current.present += 1;
+      } else {
+        current.absent += 1;
+      }
+      current.hours += Math.abs(record.total_hours || 0) / 60;
+      byDate.set(dateKey, current);
+    });
+
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, values]) => ({
+        date,
+        label: new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+        }),
+        present: values.present,
+        absent: values.absent,
+        hours: Number(values.hours.toFixed(2)),
+      }));
+  }, [isAdmin, graphScope, selectedEmployeeId, allAttendance, history]);
 
   return (
     <ProtectedRoute>
@@ -346,6 +414,93 @@ export default function AttendancePage() {
                 />
               </div>
 
+              {/* Attendance Analytics */}
+              <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
+                <div className="p-4 border-b border-border">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-card-foreground">Attendance Analytics</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Present, absent, and total hours by day
+                      </p>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setGraphScope("all")}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                            graphScope === "all"
+                              ? "bg-primary text-white"
+                              : "glass-light text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          All Employees
+                        </button>
+                        <button
+                          onClick={() => setGraphScope("individual")}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                            graphScope === "individual"
+                              ? "bg-primary text-white"
+                              : "glass-light text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Individual
+                        </button>
+                        {graphScope === "individual" && (
+                          <select
+                            value={selectedEmployeeId}
+                            onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-background text-foreground"
+                          >
+                            {employeeOptions.map((employee) => (
+                              <option key={employee.id} value={employee.id}>
+                                {employee.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  {chartData.length > 0 ? (
+                    <div className="h-72 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis yAxisId="attendance" tick={{ fontSize: 12 }} allowDecimals={false} />
+                          <YAxis yAxisId="hours" orientation="right" tick={{ fontSize: 12 }} />
+                          <Tooltip
+                            formatter={(value: number, name: string) => {
+                              if (name === "hours") return [`${value}h`, "Hours"];
+                              if (name === "present") return [value, "Present"];
+                              if (name === "absent") return [value, "Absent"];
+                              return [value, name];
+                            }}
+                            labelFormatter={(label: string, payload: any[]) => {
+                              const row = payload?.[0]?.payload;
+                              return row?.date ? formatDate(row.date) : label;
+                            }}
+                          />
+                          <Legend />
+                          <Bar yAxisId="attendance" dataKey="present" fill="#16a34a" radius={[4, 4, 0, 0]} name="present" />
+                          <Bar yAxisId="attendance" dataKey="absent" fill="#f59e0b" radius={[4, 4, 0, 0]} name="absent" />
+                          <Line yAxisId="hours" type="monotone" dataKey="hours" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} name="hours" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
+                      No attendance data available for graph
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* History Table */}
               <div ref={tableRef} className="rounded-xl border border-border bg-card card-shadow overflow-hidden relative">
                 {/* Filter Loading Overlay */}
@@ -404,21 +559,33 @@ export default function AttendancePage() {
 
                         <div className="h-6 w-px bg-border" />
 
-                        {/* Date Picker */}
+                        {/* Date Range */}
                         <div className="flex items-center gap-2">
                           <div className="relative">
                             <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                             <input
                               type="date"
-                              value={filterDate}
+                              value={startDate}
                               onChange={(e) => {
-                                setFilterDate(e.target.value);
-                                setStartDate("");
-                                setEndDate("");
-                                setIsFilterActive(!!e.target.value);
+                                setStartDate(e.target.value);
+                                setIsFilterActive(!!e.target.value || !!endDate);
                               }}
                               className="pl-9 pr-3 py-1.5 text-xs rounded-lg glass-light border border-border/50 focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
-                              placeholder="Select date"
+                              placeholder="Start date"
+                            />
+                          </div>
+
+                          <div className="relative">
+                            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => {
+                                setEndDate(e.target.value);
+                                setIsFilterActive(!!startDate || !!e.target.value);
+                              }}
+                              className="pl-9 pr-3 py-1.5 text-xs rounded-lg glass-light border border-border/50 focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
+                              placeholder="End date"
                             />
                           </div>
 
@@ -438,7 +605,7 @@ export default function AttendancePage() {
                           </button>
 
                           {/* Clear Filters */}
-                          {(filterDate || startDate || endDate) && (
+                          {(startDate || endDate) && (
                             <button
                               onClick={clearFilters}
                               className="p-1.5 rounded-lg glass-light hover:bg-red-500/10 hover:text-red-600 transition-colors"
@@ -520,11 +687,11 @@ export default function AttendancePage() {
                           <div className="flex flex-col items-center gap-2">
                             <CalendarCheck className="h-10 w-10 text-muted-foreground/30" />
                             <p className="text-sm font-medium text-muted-foreground">
-                              {isAdmin && (filterDate || startDate || endDate) 
+                              {isAdmin && (startDate || endDate) 
                                 ? "No attendance records found for selected date"
                                 : "No attendance records yet"}
                             </p>
-                            {isAdmin && (filterDate || startDate || endDate) && (
+                            {isAdmin && (startDate || endDate) && (
                               <button
                                 onClick={clearFilters}
                                 className="mt-2 text-xs text-primary hover:underline"

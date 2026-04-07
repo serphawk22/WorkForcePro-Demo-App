@@ -14,7 +14,7 @@ import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
   deleteTask, getAssignableUsers, getApiBaseUrl, getTaskChildren,
   searchByPublicId, Task, TaskCreate, User, Workspace, getWorkspaces,
-  uploadTaskVoiceNote, summarizeTaskVoiceNote,
+  uploadTaskVoiceNote,
   TaskComment, getTaskComments, createTaskComment, deleteTaskComment, createSubtask,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -146,11 +146,15 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [voiceNoteTranscriptPreview, setVoiceNoteTranscriptPreview] = useState<string | null>(null);
-  const [showVoiceSummaryModal, setShowVoiceSummaryModal] = useState(false);
-  const [isSummarizingVoice, setIsSummarizingVoice] = useState(false);
-  const [voiceSummaryText, setVoiceSummaryText] = useState("");
-  const [voiceSummaryError, setVoiceSummaryError] = useState<string | null>(null);
   const [uploadedVoicePayload, setUploadedVoicePayload] = useState<{ voice_note_url: string; voice_note_transcript?: string } | null>(null);
+
+  const [editVoiceNoteBlob, setEditVoiceNoteBlob] = useState<Blob | null>(null);
+  const [editVoiceNotePreviewUrl, setEditVoiceNotePreviewUrl] = useState<string | null>(null);
+  const [editVoiceNoteDurationSec, setEditVoiceNoteDurationSec] = useState(0);
+  const [editVoiceRecordingSec, setEditVoiceRecordingSec] = useState(0);
+  const [isRecordingEditVoice, setIsRecordingEditVoice] = useState(false);
+  const [isPlayingEditVoice, setIsPlayingEditVoice] = useState(false);
+  const [isUploadingEditVoice, setIsUploadingEditVoice] = useState(false);
 
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
@@ -158,6 +162,13 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const editVoiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const editVoiceChunksRef = useRef<BlobPart[]>([]);
+  const editVoiceStreamRef = useRef<MediaStream | null>(null);
+  const editVoiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const editVoiceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const WEEKDAY_OPTS = [
     { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
@@ -278,8 +289,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     setVoiceNoteDurationSec(0);
     setVoiceNoteTranscriptPreview(null);
     setUploadedVoicePayload(null);
-    setVoiceSummaryText("");
-    setVoiceSummaryError(null);
   };
 
   const stopVoiceRecording = () => {
@@ -383,7 +392,143 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     releaseVoiceRecorderResources();
     resetVoiceNote();
     setShowCreateModal(false);
-    setShowVoiceSummaryModal(false);
+  };
+
+  const releaseEditVoiceRecorderResources = () => {
+    if (editVoiceTimerRef.current) {
+      clearInterval(editVoiceTimerRef.current);
+      editVoiceTimerRef.current = null;
+    }
+    if (editVoiceAutoStopRef.current) {
+      clearTimeout(editVoiceAutoStopRef.current);
+      editVoiceAutoStopRef.current = null;
+    }
+    if (editVoiceStreamRef.current) {
+      editVoiceStreamRef.current.getTracks().forEach((track) => track.stop());
+      editVoiceStreamRef.current = null;
+    }
+    editVoiceRecorderRef.current = null;
+    editVoiceChunksRef.current = [];
+    setIsRecordingEditVoice(false);
+    setEditVoiceRecordingSec(0);
+  };
+
+  const resetEditVoiceNote = () => {
+    if (editVoiceNotePreviewUrl) {
+      URL.revokeObjectURL(editVoiceNotePreviewUrl);
+    }
+    if (editVoiceAudioRef.current) {
+      editVoiceAudioRef.current.pause();
+      editVoiceAudioRef.current.currentTime = 0;
+      editVoiceAudioRef.current = null;
+    }
+    setIsPlayingEditVoice(false);
+    setEditVoiceNoteBlob(null);
+    setEditVoiceNotePreviewUrl(null);
+    setEditVoiceNoteDurationSec(0);
+  };
+
+  const stopEditVoiceRecording = () => {
+    const recorder = editVoiceRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    recorder.stop();
+  };
+
+  const startEditVoiceRecording = async () => {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Voice recording is not supported in this browser.");
+      return;
+    }
+
+    try {
+      resetEditVoiceNote();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : undefined;
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
+      editVoiceStreamRef.current = stream;
+      editVoiceRecorderRef.current = recorder;
+      editVoiceChunksRef.current = [];
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          editVoiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(editVoiceChunksRef.current, { type: mimeType });
+        if (!blob.size) {
+          toast.error("No audio captured. Please try again.");
+          releaseEditVoiceRecorderResources();
+          return;
+        }
+
+        const previewUrl = URL.createObjectURL(blob);
+        setEditVoiceNoteBlob(blob);
+        setEditVoiceNotePreviewUrl(previewUrl);
+
+        const probe = document.createElement("audio");
+        probe.src = previewUrl;
+        probe.onloadedmetadata = () => {
+          const duration = Number.isFinite(probe.duration) ? Math.round(probe.duration) : 0;
+          setEditVoiceNoteDurationSec(duration);
+        };
+
+        releaseEditVoiceRecorderResources();
+      };
+
+      recorder.start(250);
+      setIsRecordingEditVoice(true);
+      setEditVoiceRecordingSec(0);
+      toast.success("Recording started");
+
+      editVoiceTimerRef.current = setInterval(() => {
+        setEditVoiceRecordingSec((current) => {
+          if (current + 1 >= MAX_VOICE_NOTE_SECONDS) {
+            stopEditVoiceRecording();
+          }
+          return Math.min(current + 1, MAX_VOICE_NOTE_SECONDS);
+        });
+      }, 1000);
+
+      editVoiceAutoStopRef.current = setTimeout(() => {
+        stopEditVoiceRecording();
+      }, MAX_VOICE_NOTE_SECONDS * 1000);
+    } catch {
+      toast.error("Microphone access denied or unavailable.");
+      releaseEditVoiceRecorderResources();
+    }
+  };
+
+  const handleEditVoicePlayPause = () => {
+    if (!editVoiceNotePreviewUrl) return;
+    if (!editVoiceAudioRef.current) {
+      editVoiceAudioRef.current = new Audio(editVoiceNotePreviewUrl);
+      editVoiceAudioRef.current.onended = () => setIsPlayingEditVoice(false);
+      editVoiceAudioRef.current.onpause = () => setIsPlayingEditVoice(false);
+      editVoiceAudioRef.current.onplay = () => setIsPlayingEditVoice(true);
+    }
+    if (isPlayingEditVoice) {
+      editVoiceAudioRef.current.pause();
+      return;
+    }
+    editVoiceAudioRef.current.currentTime = 0;
+    void editVoiceAudioRef.current.play();
+  };
+
+  const getEditVoiceFileForUpload = () => {
+    if (!editVoiceNoteBlob) return null;
+    const extension = editVoiceNoteBlob.type.includes("mpeg") || editVoiceNoteBlob.type.includes("mp3") ? "mp3" : "webm";
+    return new File([editVoiceNoteBlob], `task-voice-note-${Date.now()}.${extension}`, {
+      type: editVoiceNoteBlob.type || "audio/webm",
+    });
   };
 
   const getVoiceFileForUpload = () => {
@@ -392,48 +537,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     return new File([voiceNoteBlob], `task-voice-note-${Date.now()}.${extension}`, {
       type: voiceNoteBlob.type || "audio/webm",
     });
-  };
-
-  const handleSummarizeVoiceNote = async () => {
-    const voiceFile = getVoiceFileForUpload();
-    if (!voiceFile) {
-      toast.error("Record a voice note first");
-      return;
-    }
-
-    setShowVoiceSummaryModal(true);
-    setIsSummarizingVoice(true);
-    setVoiceSummaryError(null);
-    setVoiceSummaryText("");
-
-    const result = await summarizeTaskVoiceNote(voiceFile);
-    if (result.error || !result.data) {
-      setVoiceSummaryError(result.error || "Failed to summarize voice note");
-      setIsSummarizingVoice(false);
-      return;
-    }
-
-    setVoiceSummaryText(result.data.summary);
-    setVoiceNoteTranscriptPreview(result.data.voice_note_transcript || null);
-    setUploadedVoicePayload({
-      voice_note_url: result.data.voice_note_url,
-      voice_note_transcript: result.data.voice_note_transcript || undefined,
-    });
-    setIsSummarizingVoice(false);
-  };
-
-  const applyVoiceSummaryToDescription = () => {
-    const summary = voiceSummaryText.trim();
-    if (!summary) return;
-    setNewTask((prev) => {
-      const existing = (prev.description || "").trim();
-      return {
-        ...prev,
-        description: existing ? `${existing}\n\n${summary}` : summary,
-      };
-    });
-    setShowVoiceSummaryModal(false);
-    toast.success("AI summary added to description");
   };
 
   useEffect(() => {
@@ -701,10 +804,14 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   };
 
   const handleOpenEditTask = (task: Task) => {
+    resetEditVoiceNote();
+    releaseEditVoiceRecorderResources();
     setSelectedTaskForEdit(task);
     setEditingTaskForm({
       title: task.title,
       description: task.description || "",
+      voice_note_url: task.voice_note_url || undefined,
+      voice_note_transcript: task.voice_note_transcript || undefined,
       priority: task.priority,
       workspace_id: task.workspace_id || workspaceFilter || 0,
       assigned_to: task.assigned_to ?? undefined,
@@ -754,8 +861,35 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     if (!selectedTaskForEdit) return;
     if (!editingTaskForm) return;
     setIsUpdatingTask(true);
+
+    let editVoicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = {};
+    if (!editingTaskForm.voice_note_url && editVoiceNoteBlob) {
+      const voiceFile = getEditVoiceFileForUpload();
+      if (!voiceFile) {
+        toast.error("Failed to prepare voice note upload");
+        setIsUpdatingTask(false);
+        return;
+      }
+
+      setIsUploadingEditVoice(true);
+      const uploadResult = await uploadTaskVoiceNote(voiceFile);
+      setIsUploadingEditVoice(false);
+
+      if (uploadResult.error || !uploadResult.data?.voice_note_url) {
+        toast.error(uploadResult.error || "Failed to upload voice note");
+        setIsUpdatingTask(false);
+        return;
+      }
+
+      editVoicePayload = {
+        voice_note_url: uploadResult.data.voice_note_url,
+        voice_note_transcript: uploadResult.data.voice_note_transcript || undefined,
+      };
+    }
+
     const result = await updateTask(selectedTaskForEdit.id, {
       ...editingTaskForm,
+      ...editVoicePayload,
       title: editingTaskForm.title.trim(),
       description: editingTaskForm.description || undefined,
       workspace_id: editingTaskForm.workspace_id,
@@ -774,6 +908,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     if (result.error) toast.error(result.error);
     else {
       toast.success("Task updated!");
+      resetEditVoiceNote();
+      releaseEditVoiceRecorderResources();
       setShowEditTaskModal(false);
       setSelectedTaskForEdit(null);
       setEditingTaskForm(null);
@@ -1311,7 +1447,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const newProjectBtn = isAdmin ? (
     <button
       onClick={() => setShowCreateModal(true)}
-      className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 transition-opacity"
+      className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 transition-opacity"
       style={{ background: "#522B5B" }}
     >
       <Plus size={16} /> New Project
@@ -1322,8 +1458,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     <ProjectShell headerAction={newProjectBtn} activeWorkspaceId={workspaceQuery || null}>
       <div className="space-y-4">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+          <div className="relative w-full lg:flex-1 lg:max-w-sm">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
@@ -1339,18 +1475,18 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
             onValueChange={(value) => setStatusFilter(value === "__all" ? "" : value)}
             options={statusFilterOptions}
             placeholder="All Status"
-            triggerClassName="w-52"
+            triggerClassName="w-full lg:w-52"
           />
           <DropdownMenu
             value={workspaceFilter ? String(workspaceFilter) : "__all"}
             onValueChange={(value) => setWorkspaceFilter(value === "__all" ? undefined : Number(value))}
             options={workspaceFilterOptions}
             placeholder="All Workspaces"
-            triggerClassName="w-56"
+            triggerClassName="w-full lg:w-56"
             disabled={workspaceScopedView}
           />
           {workspaceScopedView && selectedWorkspace && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
+            <div className="inline-flex w-full lg:w-auto items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
               <span
                 className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
                 style={{ backgroundColor: selectedWorkspace.color || "#6b7280" }}
@@ -1624,21 +1760,11 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <div className="rounded-xl border border-border/80 bg-primary/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <label className="text-sm font-semibold text-foreground">Voice Note (optional)</label>
-                  <div className="flex items-center gap-2">
-                    {isRecordingVoice && (
-                      <span className="text-xs font-medium text-red-500">
-                        Recording... {formatVoiceTime(voiceRecordingSec)} / {formatVoiceTime(MAX_VOICE_NOTE_SECONDS)}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleSummarizeVoiceNote}
-                      disabled={!voiceNoteBlob || isRecordingVoice || isSummarizingVoice}
-                      className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSummarizingVoice ? "Summarizing..." : "Summarize Using AI"}
-                    </button>
-                  </div>
+                  {isRecordingVoice && (
+                    <span className="text-xs font-medium text-red-500">
+                      Recording... {formatVoiceTime(voiceRecordingSec)} / {formatVoiceTime(MAX_VOICE_NOTE_SECONDS)}
+                    </span>
+                  )}
                 </div>
 
                 {!isRecordingVoice && !voiceNoteBlob && (
@@ -1693,11 +1819,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                         <RotateCcw size={14} /> Re-record
                       </button>
                     </div>
-                    {!voiceSummaryText && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Click <span className="font-semibold">Summarize Using AI</span> to generate a detailed description from this recording.
-                      </p>
-                    )}
                     {voiceNoteTranscriptPreview && (
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Transcript: {voiceNoteTranscriptPreview}
@@ -1851,69 +1972,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
         </div>
       )}
 
-      {showVoiceSummaryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 backdrop-blur-sm">
-          <div className="w-full max-w-2xl mx-4 rounded-2xl border border-border bg-card p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-foreground">AI Voice Summary</h3>
-              <button
-                type="button"
-                onClick={() => setShowVoiceSummaryModal(false)}
-                className="text-muted-foreground hover:text-foreground"
-                disabled={isSummarizingVoice}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {isSummarizingVoice ? (
-              <div className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                OpenAI is generating a detailed task description...
-              </div>
-            ) : voiceSummaryError ? (
-              <div className="space-y-4">
-                <p className="text-sm text-red-500">{voiceSummaryError}</p>
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSummarizeVoiceNote}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <textarea
-                  value={voiceSummaryText}
-                  onChange={(e) => setVoiceSummaryText(e.target.value)}
-                  rows={12}
-                  className="w-full rounded-xl py-3 px-4 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowVoiceSummaryModal(false)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={applyVoiceSummaryToDescription}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    Use This Summary
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Create Subtask Modal ── */}
       {showSubtaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -1960,7 +2018,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
           <div className="rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-2xl bg-card border border-border max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2 text-foreground"><Link size={20} className="text-primary" /> Edit Task</h2>
-              <button onClick={() => { setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+              <button onClick={() => { resetEditVoiceNote(); releaseEditVoiceRecorderResources(); setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
             </div>
             <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
               <p className="text-sm font-medium text-foreground">{selectedTaskForEdit.title}</p>
@@ -1998,6 +2056,73 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   rows={3}
                 />
               </div>
+              {!selectedTaskForEdit.voice_note_url && !editingTaskForm.voice_note_url && (
+                <div className="rounded-xl border border-border/80 bg-primary/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-semibold text-foreground">Voice Note (optional)</label>
+                    {isRecordingEditVoice && (
+                      <span className="text-xs font-medium text-red-500">
+                        Recording... {formatVoiceTime(editVoiceRecordingSec)} / {formatVoiceTime(MAX_VOICE_NOTE_SECONDS)}
+                      </span>
+                    )}
+                  </div>
+
+                  {!isRecordingEditVoice && !editVoiceNoteBlob && (
+                    <button
+                      type="button"
+                      onClick={startEditVoiceRecording}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      <Mic size={16} className="text-primary" />
+                      Record Voice Note
+                    </button>
+                  )}
+
+                  {isRecordingEditVoice && (
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={stopEditVoiceRecording}
+                        className="inline-flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/20 transition-colors"
+                      >
+                        <Square size={14} /> Stop
+                      </button>
+                    </div>
+                  )}
+
+                  {!isRecordingEditVoice && editVoiceNoteBlob && (
+                    <div className="space-y-3">
+                      <div className="text-xs text-muted-foreground">
+                        {formatVoiceTime(editVoiceNoteDurationSec || editVoiceRecordingSec)} captured. This will be attached when you save.
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleEditVoicePlayPause}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
+                        >
+                          {isPlayingEditVoice ? <Pause size={14} /> : <Play size={14} />}
+                          {isPlayingEditVoice ? "Pause" : "Play"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetEditVoiceNote}
+                          className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={startEditVoiceRecording}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
+                        >
+                          <RotateCcw size={14} /> Re-record
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Priority</label>
@@ -2162,10 +2287,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={isUpdatingTask} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
+                <button type="button" onClick={() => { resetEditVoiceNote(); releaseEditVoiceRecorderResources(); setShowEditTaskModal(false); setSelectedTaskForEdit(null); setEditingTaskForm(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="submit" disabled={isUpdatingTask || isRecordingEditVoice || isUploadingEditVoice} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 transition-colors">
                   {isUpdatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
-                  {isUpdatingTask ? "Saving..." : "Save Task"}
+                  {isUpdatingTask || isUploadingEditVoice ? "Saving..." : "Save Task"}
                 </button>
               </div>
             </form>

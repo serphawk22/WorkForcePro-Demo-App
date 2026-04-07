@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -25,7 +25,6 @@ import {
   TaskComment,
   User as ApiUser,
   updateTask,
-  summarizeTaskVoiceNote,
   uploadTaskVoiceNote,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -75,6 +74,8 @@ export default function ProjectDetailPage() {
   const [isEditingLinks, setIsEditingLinks] = useState(false);
   const [editedLinks, setEditedLinks] = useState({ github_link: "", deployed_link: "" });
   const [isSavingLinks, setIsSavingLinks] = useState(false);
+  const [editedDueDate, setEditedDueDate] = useState("");
+  const [isSavingDueDate, setIsSavingDueDate] = useState(false);
   
   // Comments
   const [newComment, setNewComment] = useState("");
@@ -88,16 +89,12 @@ export default function ProjectDetailPage() {
     description: "",
     assigned_to: "",
   });
+  const [selectedSubtaskAssigneeFilter, setSelectedSubtaskAssigneeFilter] = useState<string>("all");
 
   // Recurring task instances (only when task.is_recurring is true)
   const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
   const [isLoadingRecurringInstances, setIsLoadingRecurringInstances] = useState(false);
   const [instanceActionLoadingId, setInstanceActionLoadingId] = useState<number | null>(null);
-  const [showVoiceSummaryModal, setShowVoiceSummaryModal] = useState(false);
-  const [isSummarizingVoice, setIsSummarizingVoice] = useState(false);
-  const [voiceSummaryText, setVoiceSummaryText] = useState("");
-  const [voiceSummaryError, setVoiceSummaryError] = useState<string | null>(null);
-  const [isApplyingSummary, setIsApplyingSummary] = useState(false);
   const [showReRecordPanel, setShowReRecordPanel] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [voiceRecordingSeconds, setVoiceRecordingSeconds] = useState(0);
@@ -109,12 +106,6 @@ export default function ProjectDetailPage() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const handleCopyVoiceSummary = async () => {
-    if (!voiceSummaryText.trim()) return;
-    await navigator.clipboard.writeText(voiceSummaryText.trim());
-    toast.success("Summary copied");
-  };
 
   const clearVoiceTimer = () => {
     if (voiceTimerRef.current) {
@@ -307,23 +298,6 @@ export default function ProjectDetailPage() {
     };
   }, [taskId, project?.task?.is_recurring]);
 
-  const dataUrlToAudioFile = (dataUrl: string, baseName: string = "voice-note"): File => {
-    const parts = dataUrl.split(",");
-    if (parts.length !== 2) {
-      throw new Error("Invalid voice note data");
-    }
-    const meta = parts[0];
-    const mimeMatch = meta.match(/data:([^;]+);base64/i);
-    const mime = mimeMatch?.[1] || "audio/webm";
-    const binary = atob(parts[1]);
-    const len = binary.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-
-    const ext = mime.includes("mpeg") || mime.includes("mp3") ? "mp3" : mime.includes("ogg") ? "ogg" : mime.includes("wav") ? "wav" : "webm";
-    return new File([bytes], `${baseName}.${ext}`, { type: mime });
-  };
-
   const loadProjectDetails = useCallback(async () => {
     if (!taskId) return;
     
@@ -337,6 +311,7 @@ export default function ProjectDetailPage() {
           github_link: response.data.task.github_link || "",
           deployed_link: response.data.task.deployed_link || "",
         });
+        setEditedDueDate(response.data.task.due_date ? new Date(response.data.task.due_date).toISOString().slice(0, 10) : "");
       } else {
         const message = response.error || "Failed to load project details";
         setProject(null);
@@ -355,50 +330,6 @@ export default function ProjectDetailPage() {
       setIsLoading(false);
     }
   }, [taskId, router]);
-
-  const handleSummarizeVoiceNote = async () => {
-    if (!project?.task?.voice_note_url) {
-      toast.error("No voice note available to summarize");
-      return;
-    }
-
-    try {
-      const voiceFile = dataUrlToAudioFile(project.task.voice_note_url, `task-${project.task.id}-voice`);
-      setShowVoiceSummaryModal(true);
-      setIsSummarizingVoice(true);
-      setVoiceSummaryError(null);
-      setVoiceSummaryText("");
-
-      const result = await summarizeTaskVoiceNote(voiceFile);
-      if (result.error || !result.data) {
-        setVoiceSummaryError(result.error || "Failed to summarize voice note");
-        return;
-      }
-
-      setVoiceSummaryText(result.data.summary);
-    } catch (err: any) {
-      setVoiceSummaryError(err?.message || "Failed to summarize voice note");
-    } finally {
-      setIsSummarizingVoice(false);
-    }
-  };
-
-  const applyVoiceSummaryToDescription = async () => {
-    if (!taskId || !voiceSummaryText.trim()) return;
-    setIsApplyingSummary(true);
-    try {
-      const result = await updateTask(taskId, { description: voiceSummaryText.trim() });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      await loadProjectDetails();
-      setShowVoiceSummaryModal(false);
-      toast.success("Task description updated from AI summary");
-    } finally {
-      setIsApplyingSummary(false);
-    }
-  };
 
   useEffect(() => {
     if (taskId) {
@@ -447,6 +378,30 @@ export default function ProjectDetailPage() {
       toast.error("Failed to update links");
     } finally {
       setIsSavingLinks(false);
+    }
+  };
+
+  const handleSaveDueDate = async () => {
+    if (!taskId || !isAdmin) return;
+
+    setIsSavingDueDate(true);
+    try {
+      const response = await updateTask(taskId, {
+        due_date: editedDueDate || undefined,
+      });
+
+      if (response.error) {
+        toast.error(response.error);
+        return;
+      }
+
+      toast.success("Due date updated successfully!");
+      loadProjectDetails();
+    } catch (error) {
+      console.error("Error updating due date:", error);
+      toast.error("Failed to update due date");
+    } finally {
+      setIsSavingDueDate(false);
     }
   };
 
@@ -593,6 +548,66 @@ export default function ProjectDetailPage() {
       setIsCreatingSubtask(false);
     }
   };
+
+  const collectAssigneeOptions = (nodes: any[]): Array<{ value: string; label: string }> => {
+    const map = new Map<string, string>();
+
+    const walk = (items: any[]) => {
+      items.forEach((item) => {
+        if (item.assigned_to && item.assignee_name) {
+          map.set(`id:${item.assigned_to}`, item.assignee_name);
+        } else if (item.assignee_name) {
+          map.set(`name:${item.assignee_name.toLowerCase()}`, item.assignee_name);
+        }
+        if (item.children?.length) {
+          walk(item.children);
+        }
+      });
+    };
+
+    walk(nodes);
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  };
+
+  const filterSubtaskTreeByAssignee = (nodes: any[], filterValue: string): any[] => {
+    if (filterValue === "all") return nodes;
+
+    const isMatch = (node: any) => {
+      if (filterValue.startsWith("id:")) {
+        const selectedId = Number(filterValue.replace("id:", ""));
+        return Number(node.assigned_to) === selectedId;
+      }
+
+      const selectedName = filterValue.replace("name:", "").toLowerCase();
+      return (node.assignee_name || "").toLowerCase() === selectedName;
+    };
+
+    const walk = (items: any[]): any[] => {
+      const result: any[] = [];
+      for (const item of items) {
+        const filteredChildren = item.children?.length ? walk(item.children) : [];
+        if (isMatch(item) || filteredChildren.length > 0) {
+          result.push({ ...item, children: filteredChildren });
+        }
+      }
+      return result;
+    };
+
+    return walk(nodes);
+  };
+
+  const subtaskAssigneeOptions = useMemo(() => {
+    return project?.subtasks ? collectAssigneeOptions(project.subtasks) : [];
+  }, [project?.subtasks]);
+
+  const filteredSubtasks = useMemo(() => {
+    return project?.subtasks
+      ? filterSubtaskTreeByAssignee(project.subtasks, selectedSubtaskAssigneeFilter)
+      : [];
+  }, [project?.subtasks, selectedSubtaskAssigneeFilter]);
 
   const renderSubtaskTree = (subtasks: any[], level = 0) => {
     return subtasks.map((subtask) => (
@@ -846,112 +861,180 @@ export default function ProjectDetailPage() {
                 {task.description && (
                   <p className="text-muted-foreground">{task.description}</p>
                 )}
-                {task.voice_note_url && (
-                  <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-3 max-w-xl">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1.5">
-                        <Mic size={12} /> Voice Note
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isRecordingVoice) stopReRecording();
-                              if (showReRecordPanel) {
-                                resetReRecordDraft();
-                                setShowReRecordPanel(false);
-                              } else {
-                                setShowReRecordPanel(true);
-                              }
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
-                          >
-                            <RotateCcw size={12} />
-                            {showReRecordPanel ? "Cancel Re-record" : "Re-record"}
-                          </button>
-                        )}
+                <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-3 max-w-xl">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1.5">
+                      <Mic size={12} /> Voice Note
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {task.voice_note_url && isAdmin && (
                         <button
                           type="button"
-                          onClick={handleSummarizeVoiceNote}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                          onClick={() => {
+                            if (isRecordingVoice) stopReRecording();
+                            if (showReRecordPanel) {
+                              resetReRecordDraft();
+                              setShowReRecordPanel(false);
+                            } else {
+                              setShowReRecordPanel(true);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
                         >
-                          Summarize Using AI
+                          <RotateCcw size={12} />
+                          {showReRecordPanel ? "Cancel Re-record" : "Re-record"}
                         </button>
-                      </div>
+                      )}
                     </div>
-                    <audio controls preload="metadata" className="w-full h-10">
-                      <source src={task.voice_note_url} type="audio/webm" />
-                      <source src={task.voice_note_url} type="audio/mpeg" />
-                      Your browser does not support the audio player.
-                    </audio>
-
-                    {isAdmin && showReRecordPanel && (
-                      <div className="mt-3 rounded-lg border border-border/70 bg-background/50 p-3 space-y-3">
-                        {!voiceNoteBlob ? (
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs text-muted-foreground">
-                              {isRecordingVoice
-                                ? `Recording... ${voiceRecordingSeconds}s / ${MAX_VOICE_NOTE_SECONDS}s`
-                                : "Record a new voice note to replace the current one"}
-                            </p>
-                            {isRecordingVoice ? (
-                              <button
-                                type="button"
-                                onClick={stopReRecording}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600 transition-colors"
-                              >
-                                <Square size={11} /> Stop
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={startReRecording}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-                              >
-                                <Play size={11} /> Start Recording
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <>
-                            <audio controls preload="metadata" className="w-full h-10" src={voiceNotePreviewUrl || undefined} />
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={resetReRecordDraft}
-                                className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted transition-colors"
-                              >
-                                <Trash2 size={11} /> Discard
-                              </button>
-                              <button
-                                type="button"
-                                onClick={startReRecording}
-                                className="inline-flex items-center gap-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
-                              >
-                                <RotateCcw size={11} /> Record Again
-                              </button>
-                              <button
-                                type="button"
-                                onClick={saveReRecordedVoiceNote}
-                                disabled={isSavingVoiceNote}
-                                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-                              >
-                                {isSavingVoiceNote ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save Replacement
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {task.voice_note_transcript && (
-                      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                        Transcript: {task.voice_note_transcript}
-                      </p>
-                    )}
                   </div>
-                )}
+
+                  {task.voice_note_url ? (
+                    <>
+                      <audio controls preload="metadata" className="w-full h-10">
+                        <source src={task.voice_note_url} type="audio/webm" />
+                        <source src={task.voice_note_url} type="audio/mpeg" />
+                        Your browser does not support the audio player.
+                      </audio>
+
+                      {isAdmin && showReRecordPanel && (
+                        <div className="mt-3 rounded-lg border border-border/70 bg-background/50 p-3 space-y-3">
+                          {!voiceNoteBlob ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-muted-foreground">
+                                {isRecordingVoice
+                                  ? `Recording... ${voiceRecordingSeconds}s / ${MAX_VOICE_NOTE_SECONDS}s`
+                                  : "Record a new voice note to replace the current one"}
+                              </p>
+                              {isRecordingVoice ? (
+                                <button
+                                  type="button"
+                                  onClick={stopReRecording}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600 transition-colors"
+                                >
+                                  <Square size={11} /> Stop
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={startReRecording}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                                >
+                                  <Play size={11} /> Start Recording
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <audio controls preload="metadata" className="w-full h-10" src={voiceNotePreviewUrl || undefined} />
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={resetReRecordDraft}
+                                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted transition-colors"
+                                >
+                                  <Trash2 size={11} /> Discard
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={startReRecording}
+                                  className="inline-flex items-center gap-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                                >
+                                  <RotateCcw size={11} /> Record Again
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={saveReRecordedVoiceNote}
+                                  disabled={isSavingVoiceNote}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                                >
+                                  {isSavingVoiceNote ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save Replacement
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {task.voice_note_transcript && (
+                        <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                          Transcript: {task.voice_note_transcript}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">No voice note has been added yet.</p>
+                      {isAdmin ? (
+                        <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-3 space-y-3">
+                          {!showReRecordPanel ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowReRecordPanel(true)}
+                              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                            >
+                              <Mic size={11} /> Add Voice Note
+                            </button>
+                          ) : !voiceNoteBlob ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-muted-foreground">
+                                {isRecordingVoice
+                                  ? `Recording... ${voiceRecordingSeconds}s / ${MAX_VOICE_NOTE_SECONDS}s`
+                                  : "Record a voice note for this project"}
+                              </p>
+                              {isRecordingVoice ? (
+                                <button
+                                  type="button"
+                                  onClick={stopReRecording}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600 transition-colors"
+                                >
+                                  <Square size={11} /> Stop
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={startReRecording}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                                >
+                                  <Play size={11} /> Start Recording
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <audio controls preload="metadata" className="w-full h-10" src={voiceNotePreviewUrl || undefined} />
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={resetReRecordDraft}
+                                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted transition-colors"
+                                >
+                                  <Trash2 size={11} /> Discard
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={startReRecording}
+                                  className="inline-flex items-center gap-1 rounded-md border border-amber-400/50 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+                                >
+                                  <RotateCcw size={11} /> Record Again
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={saveReRecordedVoiceNote}
+                                  disabled={isSavingVoiceNote}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                                >
+                                  {isSavingVoiceNote ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save Voice Note
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Only admins can add a voice note to this project.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
                     
@@ -1011,9 +1094,28 @@ export default function ProjectDetailPage() {
                 <Clock size={20} className="text-orange-500" />
                 <div>
                   <p className="text-xs text-muted-foreground">Due Date</p>
-                  <p className="text-sm font-medium text-foreground">
-                    {task.due_date ? new Date(task.due_date).toLocaleDateString("en-IN") : "--"}
-                  </p>
+                  {isAdmin ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="date"
+                        value={editedDueDate}
+                        onChange={(e) => setEditedDueDate(e.target.value)}
+                        className="h-9 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveDueDate}
+                        disabled={isSavingDueDate}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                      >
+                        {isSavingDueDate ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium text-foreground">
+                      {task.due_date ? new Date(task.due_date).toLocaleDateString("en-IN") : "--"}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1424,21 +1526,38 @@ export default function ProjectDetailPage() {
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                   <ListTree size={20} className="text-purple-500" />
-                  Subtasks ({subtasks.length})
+                  Subtasks ({filteredSubtasks.length}{selectedSubtaskAssigneeFilter === "all" ? "" : ` of ${subtasks.length}`})
                 </h2>
-                <button
-                  onClick={() => openAddSubtaskModal(null)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white transition-colors"
-                >
-                  <Plus size={14} />
-                  Add Subtask
-                </button>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedSubtaskAssigneeFilter}
+                    onChange={(e) => setSelectedSubtaskAssigneeFilter(e.target.value)}
+                    className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
+                  >
+                    <option value="all">All Assignees</option>
+                    {subtaskAssigneeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={() => openAddSubtaskModal(null)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add Subtask
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3">
-                {subtasks.length > 0 ? renderSubtaskTree(subtasks) : (
+                {filteredSubtasks.length > 0 ? renderSubtaskTree(filteredSubtasks) : (
                   <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                    <p className="text-sm text-muted-foreground">No subtasks yet. Add one to start breaking down this task.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {subtasks.length > 0
+                        ? "No subtasks match this assignee filter."
+                        : "No subtasks yet. Add one to start breaking down this task."}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1573,80 +1692,6 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {showVoiceSummaryModal && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
-            <div className="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-foreground">AI Voice Summary</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowVoiceSummaryModal(false)}
-                  className="text-muted-foreground hover:text-foreground"
-                  disabled={isSummarizingVoice || isApplyingSummary}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {isSummarizingVoice ? (
-                <div className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  OpenAI is generating a detailed summary...
-                </div>
-              ) : voiceSummaryError ? (
-                <div className="space-y-4">
-                  <p className="text-sm text-red-500">{voiceSummaryError}</p>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleSummarizeVoiceNote}
-                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <textarea
-                    value={voiceSummaryText}
-                    onChange={(e) => setVoiceSummaryText(e.target.value)}
-                    rows={12}
-                    className="w-full rounded-xl py-3 px-4 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                  <div className="flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowVoiceSummaryModal(false)}
-                      className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
-                      disabled={isApplyingSummary}
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyVoiceSummary}
-                      className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
-                      disabled={!voiceSummaryText.trim()}
-                    >
-                      Copy Summary
-                    </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={applyVoiceSummaryToDescription}
-                        className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                        disabled={isApplyingSummary || !voiceSummaryText.trim()}
-                      >
-                        {isApplyingSummary ? "Applying..." : "Use As Description"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </DashboardLayout>
     </ProtectedRoute>
   );

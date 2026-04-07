@@ -67,8 +67,8 @@ function ProjectShellContent({ children, headerAction, activeWorkspaceId }: Proj
       >
         <div className="space-y-5">
           {/* ── Page header ── */}
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-foreground drop-shadow-sm">
                 Project Management
               </h1>
@@ -78,12 +78,12 @@ function ProjectShellContent({ children, headerAction, activeWorkspaceId }: Proj
                   : "Track your projects and collaborate with your team"}
               </p>
             </div>
-            {headerAction && <div>{headerAction}</div>}
+            {headerAction && <div className="w-full sm:w-auto">{headerAction}</div>}
           </div>
 
           {/* ── Tab bar ── */}
           <div
-            className="flex items-center gap-1.5 p-1.5 rounded-xl overflow-x-auto glass-card card-shadow"
+            className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto glass-card card-shadow"
           >
             {tabs.map((tab) => {
               if (tab.label === "Workspace" && !activeWorkspace) {
@@ -106,7 +106,7 @@ function ProjectShellContent({ children, headerAction, activeWorkspaceId }: Proj
                   href={tab.path}
                   prefetch
                   scroll={false}
-                  className={`whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  className={`whitespace-nowrap px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 ${
                     isActive
                       ? "text-white shadow-lg shadow-purple-500/40 scale-105 bg-gradient-to-r from-purple-600 to-pink-600"
                       : "text-primary hover:bg-gradient-to-r hover:from-purple-500/10 hover:to-pink-500/10 hover:scale-[1.02] dark:text-purple-300"
