@@ -14,7 +14,7 @@ import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
   deleteTask, getAssignableUsers, getApiBaseUrl, getTaskChildren,
   searchByPublicId, Task, TaskCreate, User, Workspace, getWorkspaces,
-  uploadTaskVoiceNote,
+  uploadTaskVoiceNote, TaskVoiceNoteUploadResponse,
   TaskComment, getTaskComments, createTaskComment, deleteTaskComment, createSubtask,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -146,7 +146,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [voiceNoteTranscriptPreview, setVoiceNoteTranscriptPreview] = useState<string | null>(null);
-  const [uploadedVoicePayload, setUploadedVoicePayload] = useState<{ voice_note_url: string; voice_note_transcript?: string } | null>(null);
+  const [uploadedVoicePayload, setUploadedVoicePayload] = useState<TaskVoiceNoteUploadResponse | null>(null);
 
   const [editVoiceNoteBlob, setEditVoiceNoteBlob] = useState<Blob | null>(null);
   const [editVoiceNotePreviewUrl, setEditVoiceNotePreviewUrl] = useState<string | null>(null);
@@ -706,7 +706,12 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to a team member"); return; }
     setIsCreating(true);
 
-    let voicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = uploadedVoicePayload || {};
+    let voicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = uploadedVoicePayload
+      ? {
+          voice_note_url: uploadedVoicePayload.voice_note_url,
+          voice_note_transcript: uploadedVoicePayload.voice_note_transcript ?? undefined,
+        }
+      : {};
     if (voiceNoteBlob && !uploadedVoicePayload) {
       setIsUploadingVoice(true);
       const voiceFile = getVoiceFileForUpload();
@@ -727,9 +732,9 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
       voicePayload = {
         voice_note_url: uploadResult.data.voice_note_url,
-        voice_note_transcript: uploadResult.data.voice_note_transcript || undefined,
+        voice_note_transcript: uploadResult.data.voice_note_transcript ?? undefined,
       };
-      setUploadedVoicePayload(voicePayload);
+      setUploadedVoicePayload(uploadResult.data);
       setVoiceNoteTranscriptPreview(uploadResult.data.voice_note_transcript || null);
     }
 
@@ -883,7 +888,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
       editVoicePayload = {
         voice_note_url: uploadResult.data.voice_note_url,
-        voice_note_transcript: uploadResult.data.voice_note_transcript || undefined,
+        voice_note_transcript: uploadResult.data.voice_note_transcript ?? undefined,
       };
     }
 
@@ -940,8 +945,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     const parsedAssignee =
       typeof assigneeValue === "number"
         ? assigneeValue
-        : typeof assigneeValue === "string" && assigneeValue.trim() !== ""
-        ? Number(assigneeValue)
         : undefined;
 
     const result = await createSubtask(taskId, {

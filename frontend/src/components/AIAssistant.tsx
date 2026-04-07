@@ -665,9 +665,11 @@ export default function AIAssistant({
     if (!isOpen || contextLoaded) return;
     let cancelled = false;
 
-    if (messages.length === 0) {
-      setMessages([{ role: "assistant", content: DEFAULT_ASSISTANT_GREETING, actions: [] }]);
-    }
+    setMessages((prev) => (
+      prev.length === 0
+        ? [{ role: "assistant", content: DEFAULT_ASSISTANT_GREETING, actions: [] }]
+        : prev
+    ));
 
     (async () => {
       try {
