@@ -58,7 +58,7 @@ export default function AdminDashboard() {
   }, [loadData]);
 
   // Calculate attendance metrics
-  const totalEmployees = activeUsersCount ?? stats?.total_employees || 0;
+  const totalEmployees = (activeUsersCount ?? stats?.total_employees) || 0;
   const activeSessions = stats?.active_sessions || 0;
   const presentToday = activeSessions;
   const onLeave = stats?.employees_on_leave_today ?? 0;
