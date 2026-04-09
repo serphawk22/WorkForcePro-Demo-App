@@ -5,16 +5,18 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy, Video, ExternalLink, ChevronRight, ChevronDown, ListTree, Repeat } from "lucide-react";
+import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Copy, Video, ExternalLink, ChevronRight, ChevronDown, ListTree, Repeat, ArrowRight, Github, FileText, CalendarDays } from "lucide-react";
 import {
   fetchEmployeeDashboard, getMyTasks, updateTaskStatus, getTaskSubtasks, updateSubtaskStatus,
   getMyRecurringInstancesSummary, updateTaskInstanceStatus,
   Task, Subtask, EmployeeDashboardStats, getActiveMeeting, TeamsMeeting,
   RecurringInstancesSummary, TaskInstanceSummary,
+  getMyHappySheets, HappySheetEntry, getMyPersonalProjects, PersonalProjectEntry,
 } from "@/lib/api";
 import WeeklyProgressEmployeeSection from "@/components/dashboard/WeeklyProgressEmployeeSection";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
 import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 
@@ -79,8 +81,24 @@ const employeeCardAccentStyles: Record<
   },
 };
 
+const overviewCardBase =
+  "admin-dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 backdrop-blur-xl shadow-[0_16px_45px_rgba(109,40,217,0.14)] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-violet-300/80 hover:shadow-[0_24px_70px_rgba(124,58,237,0.2)] dark:border-white/10 dark:bg-white/8 dark:from-transparent dark:via-transparent dark:to-transparent dark:shadow-[0_18px_60px_rgba(8,6,20,0.28)] dark:hover:shadow-[0_24px_80px_rgba(124,58,237,0.22)]";
+
+const overviewCardGlow =
+  "absolute inset-0 bg-gradient-to-br opacity-80 transition-opacity duration-300 group-hover:opacity-100";
+
+const overviewEdgeGlow = (
+  <>
+    <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/55 to-transparent dark:via-white/45" />
+    <div className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/45 to-transparent dark:via-white/35" />
+    <div className="pointer-events-none absolute inset-y-5 left-0 w-px bg-gradient-to-b from-transparent via-purple-400/45 to-transparent dark:via-white/35" />
+    <div className="pointer-events-none absolute inset-y-5 right-0 w-px bg-gradient-to-b from-transparent via-sky-400/45 to-transparent dark:via-white/35" />
+  </>
+);
+
 export default function EmployeeDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const firstName = user?.name?.split(" ")[0] || "Employee";
   
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -91,6 +109,8 @@ export default function EmployeeDashboard() {
   const [taskSubtasks, setTaskSubtasks] = useState<Record<number, Subtask[]>>({});
   const expandedTasksRef = useRef<Set<number>>(new Set());
   const [recurringSummary, setRecurringSummary] = useState<RecurringInstancesSummary | null>(null);
+  const [myHappySheets, setMyHappySheets] = useState<HappySheetEntry[]>([]);
+  const [myPersonalProjects, setMyPersonalProjects] = useState<PersonalProjectEntry[]>([]);
 
   const recurringInstanceOptions: DropdownOption[] = [
     { value: "todo", label: "To Do", icon: <span className="text-gray-400">●</span> },
@@ -129,11 +149,13 @@ export default function EmployeeDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsResponse, tasksResponse, meetingResponse, recurringRes] = await Promise.all([
+      const [statsResponse, tasksResponse, meetingResponse, recurringRes, happySheetsResponse, personalProjectsResponse] = await Promise.all([
         fetchEmployeeDashboard(),
         getMyTasks(),   // only tasks assigned to this employee
         getActiveMeeting(),
         getMyRecurringInstancesSummary(),
+        getMyHappySheets(60),
+        getMyPersonalProjects(60),
       ]);
       if (statsResponse.data) {
         setDashboardStats(statsResponse.data);
@@ -148,6 +170,12 @@ export default function EmployeeDashboard() {
       }
       if (recurringRes.data) {
         setRecurringSummary(recurringRes.data);
+      }
+      if (happySheetsResponse.data) {
+        setMyHappySheets(happySheetsResponse.data);
+      }
+      if (personalProjectsResponse.data) {
+        setMyPersonalProjects(personalProjectsResponse.data);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -247,12 +275,24 @@ export default function EmployeeDashboard() {
   const formatDuration = (secs: number) => formatTimerDisplay(secs);
 
   const handleTaskStatusChange = async (taskId: number, selectedStatus: string) => {
+    const previousTask = tasks.find((task) => task.id === taskId);
+    if (!previousTask) return;
+
+    // Map employee UI status to backend status
+    // "done" in UI -> "submitted" in backend (triggers admin review)
+    const backendStatus = (selectedStatus === "done" ? "submitted" : selectedStatus) as "todo" | "in_progress" | "submitted";
+
+    // Optimistically update in place to avoid full-page refresh/jump.
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? { ...task, status: backendStatus }
+          : task
+      )
+    );
+
     try {
-      // Map employee UI status to backend status
-      // "done" in UI → "submitted" in backend (triggers admin review)
-      const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
-      
-      await updateTaskStatus(taskId, backendStatus as "todo" | "in_progress" | "submitted");
+      await updateTaskStatus(taskId, backendStatus);
       
       // Show appropriate toast message
       if (selectedStatus === "done") {
@@ -260,9 +300,15 @@ export default function EmployeeDashboard() {
       } else {
         toast.success("Project status updated!");
       }
-      
-      fetchData();
     } catch (error: unknown) {
+      // Rollback if API update fails.
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? { ...task, status: previousTask.status }
+            : task
+        )
+      );
       const errorMessage = error instanceof Error ? error.message : "Failed to update project";
       toast.error(errorMessage);
     }
@@ -280,6 +326,46 @@ export default function EmployeeDashboard() {
 
   // Calculate from tasks list for display - filter out approved and rejected
   const activeTasks = tasks.filter((t) => t.status !== "approved" && t.status !== "rejected");
+  const todayKey = new Date().toDateString();
+  const isToday = (value?: string | null) => Boolean(value && new Date(value).toDateString() === todayKey);
+
+  const happySheetsTodayEntries = myHappySheets.filter((entry) => isToday(entry.created_at || entry.date));
+  const submissionsToday = happySheetsTodayEntries.length;
+  const sortedHappySheets = [...myHappySheets].sort(
+    (a, b) => +new Date(b.created_at || `${b.date}T00:00:00`) - +new Date(a.created_at || `${a.date}T00:00:00`)
+  );
+  const latestHappySheetEntry = sortedHappySheets[0] || null;
+  const recentHappySheetEntries = sortedHappySheets.slice(0, 3);
+
+  const themeSignals = [
+    { label: "Collaboration", keywords: ["team", "help", "support", "collabor", "mentor", "onboard"] },
+    { label: "Delivery", keywords: ["deploy", "release", "ship", "complete", "launch"] },
+    { label: "Learning", keywords: ["learn", "improve", "study", "practice", "skill"] },
+    { label: "Problem Solving", keywords: ["fix", "debug", "resolve", "issue", "bug"] },
+    { label: "Ownership", keywords: ["ownership", "initiative", "lead", "responsible", "drive"] },
+  ];
+
+  const moodSourceEntries = happySheetsTodayEntries.length > 0 ? happySheetsTodayEntries : recentHappySheetEntries;
+  const moodSourceText = moodSourceEntries
+    .map((entry) => [entry.what_made_you_happy, entry.what_made_others_happy, entry.goals_without_greed, entry.dreams_supported].join(" ").toLowerCase())
+    .join(" ");
+
+  const dominantTheme = themeSignals
+    .map((theme) => ({
+      label: theme.label,
+      score: theme.keywords.reduce((count, word) => count + (moodSourceText.includes(word) ? 1 : 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score)[0];
+
+  const lighthouseGroups: Record<"old" | "current" | "future", PersonalProjectEntry[]> = {
+    old: myPersonalProjects.filter((project) => project.stage === "old"),
+    current: myPersonalProjects.filter((project) => project.stage === "current"),
+    future: myPersonalProjects.filter((project) => project.stage === "future"),
+  };
+
+  const latestPersonalProject = [...myPersonalProjects].sort(
+    (a, b) => +new Date(b.created_at) - +new Date(a.created_at)
+  )[0] || null;
 
   if (loading) {
     return (
@@ -509,6 +595,131 @@ export default function EmployeeDashboard() {
               )}
             </div>
           </div>
+
+          <section className="grid gap-4 xl:grid-cols-2">
+            <article className={`${overviewCardBase} p-5`}>
+              <div className={`${overviewCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
+              {overviewEdgeGlow}
+              <div className="relative space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Happy Sheet</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground">My Reflection Snapshot</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/my-space/happy-sheet")}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
+                  >
+                    Open
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Submissions Today</p>
+                    <p className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-300">
+                      {submissionsToday} / 1
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Total Entries</p>
+                    <p className="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-300">{myHappySheets.length}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-background/40 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Recent Entries</p>
+                  {recentHappySheetEntries.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No submissions yet.</p>
+                  ) : (
+                    recentHappySheetEntries.map((entry) => (
+                      <p key={entry.id} className="text-xs text-slate-700 dark:text-foreground/90 line-clamp-1">
+                        {(entry.what_made_you_happy || entry.what_made_others_happy || "Shared a reflection").slice(0, 70)}
+                      </p>
+                    ))
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Latest Submission</p>
+                    <p className="mt-1 text-xs font-semibold text-foreground">
+                      {latestHappySheetEntry
+                        ? new Date(latestHappySheetEntry.created_at || `${latestHappySheetEntry.date}T00:00:00`).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }).replace(",", " -")
+                        : "No entries yet"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Most Common Theme</p>
+                    <p className="mt-1 text-sm font-bold text-fuchsia-600 dark:text-fuchsia-300">
+                      {dominantTheme?.score ? dominantTheme.label : "Positive"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className={`${overviewCardBase} p-5`}>
+              <div className={`${overviewCardGlow} from-violet-500/20 via-fuchsia-500/10 to-transparent dark:from-violet-500/20 dark:via-fuchsia-500/10`} />
+              {overviewEdgeGlow}
+              <div className="relative space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">The Lighthouse</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground">Personal Projects</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/my-space/learning-canvas")}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
+                  >
+                    Manage
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Old</p>
+                    <p className="mt-1 text-xl font-bold text-amber-700 dark:text-amber-300">{lighthouseGroups.old.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Current</p>
+                    <p className="mt-1 text-xl font-bold text-violet-700 dark:text-violet-300">{lighthouseGroups.current.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Future</p>
+                    <p className="mt-1 text-xl font-bold text-sky-700 dark:text-sky-300">{lighthouseGroups.future.length}</p>
+                  </div>
+                </div>
+
+                {!latestPersonalProject ? (
+                  <p className="text-xs text-muted-foreground rounded-xl border border-dashed border-border/70 p-3">
+                    Add your old/current/future projects in Lighthouse. Include links, image references, GitHub, and writeups.
+                  </p>
+                ) : (
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Latest project</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-foreground line-clamp-1">{latestPersonalProject.title}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {latestPersonalProject.github_link && <span className="inline-flex items-center gap-1"><Github className="h-3.5 w-3.5" />GitHub</span>}
+                      {latestPersonalProject.demo_link && <span className="inline-flex items-center gap-1"><ExternalLink className="h-3.5 w-3.5" />Link</span>}
+                      {latestPersonalProject.image_url && <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Image</span>}
+                      {latestPersonalProject.writeup && <span className="inline-flex items-center gap-1"><FileText className="h-3.5 w-3.5" />Writeup</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </article>
+          </section>
 
           <WeeklyProgressEmployeeSection />
 

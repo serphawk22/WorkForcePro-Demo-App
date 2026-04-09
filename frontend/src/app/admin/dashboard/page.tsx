@@ -51,6 +51,23 @@ const fourSideEdgeGlow = (
   </>
 );
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = globalThis.setTimeout(() => reject(new Error(`${label} request timed out`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const router = useRouter();
@@ -75,42 +92,48 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dashboardResult, taskResult, meetingResult, tasksResult, leaveRequestsResult, usersResult, happySheetsResult, personalProjectsResult] = await Promise.all([
+      const [dashboardResult, taskResult, meetingResult] = await Promise.allSettled([
         fetchAdminDashboard(),
         getTaskStats(),
         getActiveMeeting(),
-        getAllTasks(),
-        getAllLeaveRequests(),
-        fetchAllUsers(),
-        getAllTeamHappySheets(100),
-        getMyPersonalProjects(50),
       ]);
 
-      if (usersResult.data) {
-        setActiveUsersCount(usersResult.data.length);
-        setAllUsers(usersResult.data);
+      if (dashboardResult.status === "fulfilled" && dashboardResult.value.data) {
+        setStats(dashboardResult.value.data);
       }
-      if (tasksResult.data) {
-        setAllTasks(tasksResult.data);
+      if (taskResult.status === "fulfilled" && taskResult.value.data) {
+        setTaskStats(taskResult.value.data);
       }
-      if (leaveRequestsResult.data) {
-        setAllLeaveRequests(leaveRequestsResult.data);
+      if (meetingResult.status === "fulfilled" && meetingResult.value.data !== undefined) {
+        setActiveMeeting(meetingResult.value.data);
       }
-      if (happySheetsResult.data) {
-        setTeamHappySheets(happySheetsResult.data);
+
+      // Release the page as soon as the core summary area is ready.
+      setIsLoading(false);
+
+      const [tasksResult, leaveRequestsResult, usersResult, happySheetsResult, personalProjectsResult] = await Promise.allSettled([
+        withTimeout(getAllTasks(), 5000, "Tasks"),
+        withTimeout(getAllLeaveRequests(), 5000, "Leave requests"),
+        withTimeout(fetchAllUsers(), 5000, "Users"),
+        withTimeout(getAllTeamHappySheets(100), 5000, "Happy sheets"),
+        withTimeout(getMyPersonalProjects(50), 5000, "Personal projects"),
+      ]);
+
+      if (usersResult.status === "fulfilled" && usersResult.value.data) {
+        setActiveUsersCount(usersResult.value.data.length);
+        setAllUsers(usersResult.value.data);
       }
-      if (personalProjectsResult.data) {
-        setPersonalProjects(personalProjectsResult.data);
+      if (tasksResult.status === "fulfilled" && tasksResult.value.data) {
+        setAllTasks(tasksResult.value.data);
       }
-      
-      if (dashboardResult.data) {
-        setStats(dashboardResult.data);
+      if (leaveRequestsResult.status === "fulfilled" && leaveRequestsResult.value.data) {
+        setAllLeaveRequests(leaveRequestsResult.value.data);
       }
-      if (taskResult.data) {
-        setTaskStats(taskResult.data);
+      if (happySheetsResult.status === "fulfilled" && happySheetsResult.value.data) {
+        setTeamHappySheets(happySheetsResult.value.data);
       }
-      if (meetingResult.data !== undefined) {
-        setActiveMeeting(meetingResult.data);
+      if (personalProjectsResult.status === "fulfilled" && personalProjectsResult.value.data) {
+        setPersonalProjects(personalProjectsResult.value.data);
       }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
