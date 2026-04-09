@@ -57,6 +57,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const [isHovered, setIsHovered] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [isCompactOpen, setIsCompactOpen] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState<number>(0);
   const PIN_KEY = "workforcepro_sidebarPinned";
   const LAST_PROJECT_WORKSPACE_KEY = "workforcepro_lastProjectWorkspaceId";
   const [isPinned, setIsPinned] = useState<boolean>(() => {
@@ -78,7 +79,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const isOpen = isCompactViewport ? isCompactOpen : (isHovered || isPinned);
-  const effectiveWidth = isCompactViewport ? (isOpen ? 240 : 0) : (isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72));
+  const compactSidebarWidth = viewportWidth > 0
+    ? Math.min(280, Math.max(220, Math.round(viewportWidth * 0.86)))
+    : 240;
+  const effectiveWidth = isCompactViewport
+    ? compactSidebarWidth
+    : (isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72));
 
   // Persist pinned state across route navigation (prevents collapse on menu click).
   useEffect(() => {
@@ -122,6 +128,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   }, [effectiveWidth, isCompactViewport]);
 
   useEffect(() => {
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+
     const media = window.matchMedia("(max-width: 1279px)");
     const updateViewport = () => {
       const compact = media.matches;
@@ -132,8 +141,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     };
 
     updateViewport();
+    window.addEventListener("resize", updateViewportWidth);
     media.addEventListener("change", updateViewport);
-    return () => media.removeEventListener("change", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewportWidth);
+      media.removeEventListener("change", updateViewport);
+    };
   }, []);
 
   useEffect(() => {
@@ -211,6 +224,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
           aria-label={isCompactOpen ? "Close navigation" : "Open navigation"}
           onClick={() => setIsCompactOpen((prev) => !prev)}
           className="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar/90 text-sidebar-foreground shadow-lg backdrop-blur-md xl:hidden"
+          style={{ left: "max(0.75rem, env(safe-area-inset-left))" }}
         >
           {isCompactOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
         </button>
@@ -228,12 +242,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       <aside
       onMouseEnter={() => { if (!isPinned) setIsHovered(true); }}
       onMouseLeave={() => { if (!isPinned) setIsHovered(false); }}
-      className={`glass-sidebar fixed left-0 top-0 h-screen flex flex-col z-40 ${
+      className={`glass-sidebar fixed left-0 top-0 h-dvh flex flex-col z-40 ${
         isCompactViewport ? (isCompactOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
       } ${
         isDragging ? "" : "transition-[width] duration-300 ease-in-out"
       } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
-      style={{ width: effectiveWidth }}
+      style={{ width: effectiveWidth, left: "env(safe-area-inset-left)" }}
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
@@ -273,7 +287,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 flex flex-col gap-1 px-3 py-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 px-3 py-2 pb-3">
         {links.map((link) => {
           if (link.label === "Project Management") {
             const parentActive = pathname.startsWith("/project-management");

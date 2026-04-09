@@ -703,7 +703,6 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     e.preventDefault();
     if (!newTask.title.trim()) { toast.error("Task title is required"); return; }
     if (!newTask.workspace_id) { toast.error("Workspace is required"); return; }
-    if (isAdmin && !newTask.assigned_to) { toast.error("Please assign this project to a team member"); return; }
     setIsCreating(true);
 
     let voicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = uploadedVoicePayload
@@ -763,9 +762,29 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const handleStatusChange = async (taskId: number, selectedStatus: string) => {
     const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
+    const previousTask = tasks.find((task) => task.id === taskId);
+
+    // Optimistic UI update to avoid page-level loading flicker.
+    setTasks((prev) => prev.map((task) => (
+      task.id === taskId ? { ...task, status: backendStatus as Task["status"] } : task
+    )));
+
     const result = await updateTaskStatus(taskId, backendStatus as any);
-    if (result.error) toast.error(result.error);
-    else { toast.success(selectedStatus === "done" ? "Task submitted for review!" : "Status updated!"); loadData(); }
+    if (result.error) {
+      toast.error(result.error);
+      // Revert only the changed row and sync quietly.
+      if (previousTask) {
+        setTasks((prev) => prev.map((task) => (
+          task.id === taskId ? { ...task, status: previousTask.status } : task
+        )));
+      }
+      void loadData(true);
+      return;
+    }
+
+    toast.success(selectedStatus === "done" ? "Task submitted for review!" : "Status updated!");
+    // Quiet refresh keeps the current screen stable while syncing server state.
+    void loadData(true);
   };
 
   const handleAssigneeChange = async (taskId: number, userId?: number) => {

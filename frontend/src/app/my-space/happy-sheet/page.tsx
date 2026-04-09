@@ -527,14 +527,14 @@ export default function HappySheetPage() {
       const canvas = buildReportCanvas(reportDate, reportRes.data);
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((b) => {
-          if (!b) reject(new Error("Failed to generate PNG image."));
+          if (!b) reject(new Error("Failed to generate JPEG image."));
           else resolve(b);
-        }, "image/png");
+        }, "image/jpeg", 0.95);
       });
-      downloadBlob(blob, `workforce-pro-happy-sheet-${reportDate}.png`);
+      downloadBlob(blob, `workforce-pro-happy-sheet-${reportDate}.jpg`);
     } catch (err: any) {
-      console.error("PNG export failed", err);
-      showFloatingToast({ type: "error", message: err?.message || "Failed to download PNG." });
+      console.error("JPEG export failed", err);
+      showFloatingToast({ type: "error", message: err?.message || "Failed to download JPEG." });
     } finally {
       setIsExportingPng(false);
     }

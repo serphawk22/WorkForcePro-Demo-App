@@ -11,6 +11,7 @@ from app.database import get_session
 from app.models import (
     User,
     UserRole,
+    Organization,
     WeeklyProgress,
     WeeklyComment,
     WeeklyProgressCreate,
@@ -51,6 +52,17 @@ def _comments_unread(progress: WeeklyProgress, session: Session) -> bool:
     if progress.last_seen_comments_at is None:
         return True
     return latest > progress.last_seen_comments_at
+
+
+def _assert_weekly_progress_enabled_for_user(session: Session, current_user: User) -> None:
+    org = session.exec(select(Organization).where(Organization.id == current_user.organization_id)).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if current_user.role == UserRole.admin and not org.weekly_progress_enabled_for_admin:
+        raise HTTPException(status_code=403, detail="Weekly progress is disabled for admins by organization settings")
+    if current_user.role == UserRole.employee and not org.weekly_progress_enabled_for_employee:
+        raise HTTPException(status_code=403, detail="Weekly progress is disabled for employees by organization settings")
 
 
 def _to_read(
@@ -105,6 +117,7 @@ async def list_my_weekly_progress(
     current_user: User = Depends(get_current_user),
 ):
     """All weekly entries for the current employee, newest first."""
+    _assert_weekly_progress_enabled_for_user(session, current_user)
     stmt = (
         select(WeeklyProgress)
         .where(
@@ -124,8 +137,7 @@ async def create_or_replace_my_weekly_progress(
     current_user: User = Depends(get_current_user),
 ):
     """Create or replace the entry for this employee for the given week (one per week)."""
-    if current_user.role == UserRole.admin:
-        raise HTTPException(status_code=403, detail="Admins manage entries via admin routes")
+    _assert_weekly_progress_enabled_for_user(session, current_user)
 
     week_start = monday_of_week(body.week_start_date)
     _validate_http_url(body.github_link, "GitHub link")
@@ -174,6 +186,7 @@ async def update_my_weekly_progress(
     current_user: User = Depends(get_current_user),
 ):
     """Update own entry (same week rules: must be owner)."""
+    _assert_weekly_progress_enabled_for_user(session, current_user)
     row = session.exec(
         select(WeeklyProgress).where(
             WeeklyProgress.id == entry_id,
@@ -208,6 +221,7 @@ async def mark_comments_seen(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    _assert_weekly_progress_enabled_for_user(session, current_user)
     row = session.exec(
         select(WeeklyProgress).where(
             WeeklyProgress.id == entry_id,
@@ -229,15 +243,21 @@ async def mark_comments_seen(
 @router.get("/admin", response_model=List[WeeklyProgressRead])
 async def admin_list_weekly_progress(
     week_start: Optional[date] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     employee_id: Optional[int] = None,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin_user),
 ):
-    """All entries, optional filter by week (any date in week → normalized to Monday) or employee."""
+    """All entries, optional filters by week, date range, or employee."""
     stmt = select(WeeklyProgress).where(WeeklyProgress.organization_id == admin.organization_id)
     if week_start:
         mon = monday_of_week(week_start)
         stmt = stmt.where(WeeklyProgress.week_start_date == mon)
+    if start_date:
+        stmt = stmt.where(WeeklyProgress.week_start_date >= monday_of_week(start_date))
+    if end_date:
+        stmt = stmt.where(WeeklyProgress.week_start_date <= monday_of_week(end_date))
     if employee_id is not None:
         stmt = stmt.where(WeeklyProgress.user_id == employee_id)
     stmt = stmt.order_by(WeeklyProgress.week_start_date.desc(), WeeklyProgress.user_id.asc())
@@ -347,6 +367,7 @@ async def employee_add_comment(
     current_user: User = Depends(get_current_user),
 ):
     """Allow employees to add comments on their own weekly entry for two-way discussion."""
+    _assert_weekly_progress_enabled_for_user(session, current_user)
     row = session.exec(
         select(WeeklyProgress).where(
             WeeklyProgress.id == entry_id,

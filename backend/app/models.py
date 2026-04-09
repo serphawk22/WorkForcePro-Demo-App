@@ -101,6 +101,8 @@ class OrganizationBase(SQLModel):
     logo: Optional[str] = Field(default=None, max_length=1000)
     theme: Optional[str] = Field(default=None, max_length=64)
     timezone: Optional[str] = Field(default="UTC", max_length=64)
+    weekly_progress_enabled_for_admin: bool = Field(default=True)
+    weekly_progress_enabled_for_employee: bool = Field(default=True)
 
 
 class Organization(OrganizationBase, table=True):
@@ -119,6 +121,8 @@ class OrganizationUpdate(SQLModel):
     logo: Optional[str] = Field(default=None, max_length=1000)
     theme: Optional[str] = Field(default=None, max_length=64)
     timezone: Optional[str] = Field(default=None, max_length=64)
+    weekly_progress_enabled_for_admin: Optional[bool] = None
+    weekly_progress_enabled_for_employee: Optional[bool] = None
 
 
 class OrganizationRead(OrganizationBase):
@@ -1012,6 +1016,27 @@ class DailyHappySheetReportRow(SQLModel):
     goals_without_greed_impossible: Optional[str] = None
 
 
+class DailyTaskSheetReportRow(SQLModel):
+    """Admin daily task sheet row with nullable entry fields for missing submissions."""
+    user_id: int
+    user_name: str
+    user_email: str
+    date: DateType
+    achievements: Optional[str] = None
+    repo_link: Optional[str] = None
+
+
+class WeeklyProgressReportRow(SQLModel):
+    """Admin weekly progress row with nullable entry fields for missing submissions."""
+    user_id: int
+    user_name: str
+    user_email: str
+    week_start_date: DateType
+    description: Optional[str] = None
+    github_link: Optional[str] = None
+    deployed_link: Optional[str] = None
+
+
 class DreamProject(SQLModel, table=True):
     """Visionary Canvas: My Dream Project tracking model."""
     __tablename__ = "dream_projects"
@@ -1064,18 +1089,33 @@ class PersonalProject(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     title: str = Field(max_length=200)
+    stage: str = Field(default="current", max_length=20)
     tag: Optional[str] = Field(default=None, max_length=50)
+    github_link: Optional[str] = Field(default=None, max_length=500)
+    demo_link: Optional[str] = Field(default=None, max_length=500)
+    image_url: Optional[str] = Field(default=None, max_length=1000)
+    writeup: Optional[str] = Field(default=None, max_length=5000)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PersonalProjectCreate(SQLModel):
     title: str = Field(max_length=200)
+    stage: Optional[str] = Field(default="current", max_length=20)
     tag: Optional[str] = Field(default=None, max_length=50)
+    github_link: Optional[str] = Field(default=None, max_length=500)
+    demo_link: Optional[str] = Field(default=None, max_length=500)
+    image_url: Optional[str] = Field(default=None, max_length=1000)
+    writeup: Optional[str] = Field(default=None, max_length=5000)
 
 class PersonalProjectRead(SQLModel):
     id: int
     user_id: int
     title: str
+    stage: str
     tag: Optional[str]
+    github_link: Optional[str]
+    demo_link: Optional[str]
+    image_url: Optional[str]
+    writeup: Optional[str]
     created_at: datetime
 
 

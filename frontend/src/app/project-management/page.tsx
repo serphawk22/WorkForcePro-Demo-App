@@ -150,12 +150,18 @@ export default function ProjectManagementGlobalPage() {
       value: workspaces.length,
       icon: <Layers3 size={18} className="text-purple-200" />,
       gradient: "from-violet-600 via-fuchsia-600 to-purple-700",
+      onClick: () => {
+        document.getElementById("workspaces-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
     },
     {
       label: "Total Projects",
       value: projects.length,
       icon: <FolderKanban size={18} className="text-purple-200" />,
       gradient: "from-indigo-600 via-purple-600 to-fuchsia-700",
+      onClick: () => {
+        router.push("/project-management/projects");
+      },
     },
     {
       label: "Total Tasks",
@@ -194,7 +200,8 @@ export default function ProjectManagementGlobalPage() {
             {statCards.map((card) => (
               <article
                 key={card.label}
-                className={`rounded-xl border border-white/20 bg-gradient-to-br ${card.gradient} p-4 text-white shadow-lg shadow-purple-900/20 dark:shadow-purple-900/30`}
+                onClick={card.onClick}
+                className={`rounded-xl border border-white/20 bg-gradient-to-br ${card.gradient} p-4 text-white shadow-lg shadow-purple-900/20 dark:shadow-purple-900/30 ${card.onClick ? "cursor-pointer transition-transform hover:-translate-y-0.5" : ""}`}
               >
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-white/80">{card.label}</p>
@@ -206,7 +213,7 @@ export default function ProjectManagementGlobalPage() {
           </section>
 
           {isAdmin && (
-            <section className="rounded-xl border border-border bg-card p-4">
+            <section id="workspaces-section" className="rounded-xl border border-border bg-card p-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Layers3 size={16} />

@@ -11,7 +11,7 @@ from app.models import (
     User, UserCreate, UserRead, UserRole, UserStatus, Attendance, Task, LeaveRequest,
     TaskStatus, LeaveStatus, DashboardStats, Notification, TaskComment, Subtask,
     EmployeePerformance, AttendanceStats, EmployeeListItem, NotificationType,
-    Payroll, TaskSheet, HappySheet, DreamProject, LearningFocus, PersonalProject
+    Payroll, TaskSheet, HappySheet, DreamProject, LearningFocus, PersonalProject, HappySheetStreak
 )
 from app.auth import get_current_admin_user, get_password_hash, ensure_same_organization
 
@@ -25,10 +25,9 @@ async def get_dashboard_stats(
     admin: User = Depends(get_current_admin_user)
 ):
     """Get dashboard statistics (admin only)."""
-    # Total employees
+    # Total active organization users (include admin-role staff)
     employees = session.exec(
         select(User).where(
-            User.role == UserRole.employee,
             User.is_active == True,
             User.organization_id == admin.organization_id,
         )
@@ -457,6 +456,14 @@ async def delete_user(
             happy_sheets = session.exec(select(HappySheet).where(HappySheet.user_id == user_id)).all()
             for hs in happy_sheets:
                 session.delete(hs)
+        except Exception:
+            pass
+        
+        # 8b. Delete happy sheet streaks (has foreign key to users)
+        try:
+            happy_sheet_streaks = session.exec(select(HappySheetStreak).where(HappySheetStreak.user_id == user_id)).all()
+            for hss in happy_sheet_streaks:
+                session.delete(hss)
         except Exception:
             pass
         

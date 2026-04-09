@@ -298,11 +298,13 @@ export default function ProjectDetailPage() {
     };
   }, [taskId, project?.task?.is_recurring]);
 
-  const loadProjectDetails = useCallback(async () => {
+  const loadProjectDetails = useCallback(async (silent = false) => {
     if (!taskId) return;
     
-    setIsLoading(true);
-    setLoadError(null);
+    if (!silent) {
+      setIsLoading(true);
+      setLoadError(null);
+    }
     try {
       const response = await getProjectDetails(taskId);
       if (response.data) {
@@ -322,12 +324,16 @@ export default function ProjectDetailPage() {
     } catch (error) {
       console.error("Error loading project:", error);
       const message = "Failed to load project details";
-      setProject(null);
-      setLoadError(message);
-      toast.error(message);
-      router.push("/project-management/projects");
+      if (!silent) {
+        setProject(null);
+        setLoadError(message);
+        toast.error(message);
+        router.push("/project-management/projects");
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [taskId, router]);
 
@@ -341,15 +347,44 @@ export default function ProjectDetailPage() {
     if (!taskId) return;
     
     const validStatus = newStatus as "todo" | "in_progress" | "submitted" | "approved" | "rejected";
+    const previousStatus = project?.task.status;
+
+    // Optimistic update avoids full-page loading spinner.
+    setProject((prev) => prev ? {
+      ...prev,
+      task: {
+        ...prev.task,
+        status: validStatus,
+      },
+    } : prev);
+
     try {
       const response = await updateTaskStatus(taskId, validStatus);
       if (response.data) {
         toast.success("Status updated successfully!");
-        loadProjectDetails();
+        void loadProjectDetails(true);
       } else {
+        if (previousStatus) {
+          setProject((prev) => prev ? {
+            ...prev,
+            task: {
+              ...prev.task,
+              status: previousStatus,
+            },
+          } : prev);
+        }
         toast.error(response.error || "Failed to update status");
       }
     } catch (error) {
+      if (previousStatus) {
+        setProject((prev) => prev ? {
+          ...prev,
+          task: {
+            ...prev.task,
+            status: previousStatus,
+          },
+        } : prev);
+      }
       console.error("Error updating status:", error);
       toast.error("Failed to update status");
     }

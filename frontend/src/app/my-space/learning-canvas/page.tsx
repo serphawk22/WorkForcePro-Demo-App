@@ -24,7 +24,12 @@ export default function LearningCanvasPage() {
   const [showAddProject, setShowAddProject] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newStage, setNewStage] = useState<"old" | "current" | "future">("current");
   const [newTag, setNewTag] = useState("");
+  const [newGithubLink, setNewGithubLink] = useState("");
+  const [newDemoLink, setNewDemoLink] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [newWriteup, setNewWriteup] = useState("");
   const [isAddingProject, setIsAddingProject] = useState(false);
 
   const loadFocuses = async () => { setIsLoadingFocuses(true); const r = await getAllLearningFocuses(50); if (r.data) setTeamFocuses(r.data); setIsLoadingFocuses(false); };
@@ -52,14 +57,27 @@ export default function LearningCanvasPage() {
     e.preventDefault();
     if (!newTitle.trim()) { toast.error("Project title is required."); return; }
     setIsAddingProject(true);
-    const payload = { title: newTitle, tag: newTag || undefined };
+    const payload = {
+      title: newTitle,
+      stage: newStage,
+      tag: newTag || undefined,
+      github_link: newGithubLink || undefined,
+      demo_link: newDemoLink || undefined,
+      image_url: newImageUrl || undefined,
+      writeup: newWriteup || undefined,
+    };
     const result = editingProjectId
       ? await updatePersonalProjectEntry(editingProjectId, payload)
       : await submitPersonalProject(payload);
     if (result.error) { toast.error(result.error); } else {
       toast.success(editingProjectId ? "Project updated!" : "Project added!");
       setNewTitle("");
+      setNewStage("current");
       setNewTag("");
+      setNewGithubLink("");
+      setNewDemoLink("");
+      setNewImageUrl("");
+      setNewWriteup("");
       setShowAddProject(false);
       setEditingProjectId(null);
       await loadProjects();
@@ -91,7 +109,12 @@ export default function LearningCanvasPage() {
   const handleEditProject = (entry: PersonalProjectEntry) => {
     setEditingProjectId(entry.id);
     setNewTitle(entry.title);
+    setNewStage((entry.stage as "old" | "current" | "future") || "current");
     setNewTag(entry.tag || "");
+    setNewGithubLink(entry.github_link || "");
+    setNewDemoLink(entry.demo_link || "");
+    setNewImageUrl(entry.image_url || "");
+    setNewWriteup(entry.writeup || "");
     setShowAddProject(true);
   };
 
@@ -106,7 +129,12 @@ export default function LearningCanvasPage() {
     if (editingProjectId === entry.id) {
       setEditingProjectId(null);
       setNewTitle("");
+      setNewStage("current");
       setNewTag("");
+      setNewGithubLink("");
+      setNewDemoLink("");
+      setNewImageUrl("");
+      setNewWriteup("");
       setShowAddProject(false);
     }
     toast.success("Project deleted.");
@@ -137,10 +165,23 @@ export default function LearningCanvasPage() {
             </button>
           </div>
           {showAddProject && (
-            <form onSubmit={handleAddProject} className="flex flex-wrap gap-3 mb-4 items-end">
+            <form onSubmit={handleAddProject} className="grid gap-3 mb-4">
               <div className="flex-1 min-w-[180px]"><input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Project title" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" /></div>
-              <div className="w-32"><input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value.toUpperCase())} placeholder="Tag (optional)" maxLength={20} className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" /></div>
-              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isAddingProject ? "Saving..." : editingProjectId ? "Update" : "Add"}</button>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select value={newStage} onChange={(e) => setNewStage(e.target.value as "old" | "current" | "future")} className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input">
+                  <option value="old">Old</option>
+                  <option value="current">Current</option>
+                  <option value="future">Future</option>
+                </select>
+                <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value.toUpperCase())} placeholder="Tag (optional)" maxLength={20} className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <input type="url" value={newGithubLink} onChange={(e) => setNewGithubLink(e.target.value)} placeholder="GitHub link (optional)" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
+                <input type="url" value={newDemoLink} onChange={(e) => setNewDemoLink(e.target.value)} placeholder="Demo link (optional)" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
+              </div>
+              <input type="url" value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} placeholder="Image URL (optional)" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
+              <textarea value={newWriteup} onChange={(e) => setNewWriteup(e.target.value)} placeholder="Writeup (optional)" rows={3} className="w-full p-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
+              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60 w-full md:w-auto" style={{ background: "#D97706" }}>{isAddingProject ? "Saving..." : editingProjectId ? "Update" : "Add"}</button>
             </form>
           )}
           {isLoadingProjects ? (
@@ -154,7 +195,17 @@ export default function LearningCanvasPage() {
                   <Folder size={20} className="text-[#D97706] dark:text-amber-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-[#2B124C] dark:text-purple-100">{proj.title}</p>
-                    {proj.tag && <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded mt-1 inline-block lighthouse-tag">{proj.tag}</span>}
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded inline-block lighthouse-tag">{proj.stage?.toUpperCase() || "CURRENT"}</span>
+                      {proj.tag && <span className="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded inline-block lighthouse-tag">{proj.tag}</span>}
+                    </div>
+                    {(proj.github_link || proj.demo_link) && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {proj.github_link && <a href={proj.github_link} target="_blank" rel="noopener noreferrer" className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline">GitHub</a>}
+                        {proj.demo_link && <a href={proj.demo_link} target="_blank" rel="noopener noreferrer" className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 hover:underline">Demo</a>}
+                      </div>
+                    )}
+                    {proj.writeup && <p className="mt-2 text-[11px] text-[#854F6C] dark:text-purple-300 line-clamp-2">{proj.writeup}</p>}
                   </div>
                   <div className="flex items-center gap-1">
                     <button

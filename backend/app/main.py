@@ -154,6 +154,8 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo VARCHAR(1000)',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS theme VARCHAR(64)',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT \'UTC\'',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_admin BOOLEAN DEFAULT TRUE',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_employee BOOLEAN DEFAULT TRUE',
         # Leave request document attachment columns
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_data TEXT',
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',
@@ -223,6 +225,13 @@ async def lifespan(app: FastAPI):
         'CREATE INDEX IF NOT EXISTS ix_happy_sheet_reactions_entry_id ON happy_sheet_reactions(entry_id)',
         'CREATE INDEX IF NOT EXISTS ix_happy_sheet_comments_entry_id ON happy_sheet_comments(entry_id)',
         'CREATE INDEX IF NOT EXISTS ix_happy_sheet_appreciations_entry_id ON happy_sheet_appreciations(entry_id)',
+        # Personal project metadata columns
+        "ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS stage VARCHAR(20) NOT NULL DEFAULT 'current'",
+        'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS github_link VARCHAR(500)',
+        'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS demo_link VARCHAR(500)',
+        'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)',
+        'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS writeup VARCHAR(5000)',
+        'CREATE INDEX IF NOT EXISTS ix_personal_projects_stage ON personal_projects(stage)',
         ]
 
         for migration in additional_migrations:

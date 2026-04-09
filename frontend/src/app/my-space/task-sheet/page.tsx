@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, CheckCircle2, Link2, Swords, Pencil, Trash2, Filter } from "lucide-react";
+import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   deleteTaskSheetEntry,
@@ -13,6 +13,8 @@ import {
   submitTaskSheet,
   TaskSheetEntry,
   updateTaskSheetEntry,
+  getAdminDailyTaskSheetReport,
+  DailyTaskSheetReportRow,
 } from "@/lib/api";
 
 const todayStr = () => {
@@ -57,15 +59,14 @@ export default function TaskSheetPage() {
   const [achievements, setAchievements] = useState("");
   const [repoLink, setRepoLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [timelineEntries, setTimelineEntries] = useState<TaskSheetEntry[]>([]);
   const [myEntries, setMyEntries] = useState<TaskSheetEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState<TaskSheetEntry | null>(null);
   const [isDeletingEntry, setIsDeletingEntry] = useState(false);
+  const [isExportingPng, setIsExportingPng] = useState(false);
 
   const isAdmin = user?.role === "admin";
 
@@ -118,23 +119,31 @@ export default function TaskSheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!achievements.trim()) { setError("Please describe your achievements for the selected date."); return; }
-    setIsSubmitting(true); setError(null); setSuccess(false);
+    if (!achievements.trim()) {
+      showFloatingToast({ type: "error", message: "Please describe your achievements for the selected date." });
+      return;
+    }
+    setIsSubmitting(true);
     try {
       const payload = { achievements, repo_link: repoLink || undefined, date: selectedDate };
       const res = editingEntryId
         ? await updateTaskSheetEntry(editingEntryId, payload)
         : await submitTaskSheet(payload);
-      if (res.error) { setError(res.error); }
-      else {
-        setSuccess(true);
+      if (res.error) {
+        showFloatingToast({ type: "error", message: res.error });
+      } else {
         setIsUpdate(true);
         await loadTaskSheets();
-        setTimeout(() => setSuccess(false), 5000);
+        showFloatingToast({
+          type: "success",
+          message: editingEntryId ? "Task sheet updated successfully." : "Task sheet saved successfully."
+        });
       }
     } catch (err: any) {
-      setError(err.message || "Failed to submit task sheet.");
-    } finally { setIsSubmitting(false); }
+      showFloatingToast({ type: "error", message: err?.message || "Failed to submit task sheet." });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleEditEntry = (entry: TaskSheetEntry) => {
@@ -143,8 +152,6 @@ export default function TaskSheetPage() {
     setRepoLink(entry.repo_link || "");
     setIsUpdate(true);
     setEditingEntryId(entry.id);
-    setSuccess(false);
-    setError(null);
     showFloatingToast({ type: "success", message: "Entry loaded for editing." });
   };
 
@@ -158,7 +165,7 @@ export default function TaskSheetPage() {
     const entry = pendingDeleteEntry;
     const res = await deleteTaskSheetEntry(entry.id);
     if (res.error) {
-      setError(res.error);
+      showFloatingToast({ type: "error", message: res.error });
       setIsDeletingEntry(false);
       return;
     }
@@ -171,6 +178,155 @@ export default function TaskSheetPage() {
     await loadTaskSheets();
     setPendingDeleteEntry(null);
     setIsDeletingEntry(false);
+    showFloatingToast({ type: "delete", message: "Entry deleted." });
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const getWrappedLines = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number
+  ): string[] => {
+    const words = String(text).split(" ");
+    const lines: string[] = [];
+    let current = "";
+    words.forEach((word) => {
+      const testLine = current ? `${current} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = testLine;
+      }
+    });
+    if (current) lines.push(current);
+    return lines.length ? lines : ["-"];
+  };
+
+  const buildReportCanvas = (date: string, rows: Array<DailyTaskSheetReportRow>) => {
+    const padding = 24;
+    const tableTop = 110;
+    const rowPaddingY = 12;
+    const lineHeight = 20;
+    const headerHeight = 48;
+    const colWidths = [320];
+    const headers = ["Employee Name"];
+    const width = padding * 2 + colWidths.reduce((a, b) => a + b, 0);
+
+    const scratch = document.createElement("canvas");
+    const sctx = scratch.getContext("2d");
+    if (!sctx) throw new Error("Canvas not supported.");
+    sctx.font = "15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+
+    const computedRows = rows.map((row) => {
+      const wrapped = [getWrappedLines(sctx, String(row.user_name || "-"), colWidths[0] - 20)];
+      const height = rowPaddingY * 2 + wrapped[0].length * lineHeight;
+      return { wrapped, height };
+    });
+
+    const bodyHeight = computedRows.reduce((sum, r) => sum + r.height, 0);
+    const height = tableTop + headerHeight + bodyHeight + 20;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "700 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText("WORKFORCE PRO", padding, 28);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "700 28px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText("Daily Task Sheet Report", padding, 62);
+
+    ctx.fillStyle = "#334155";
+    ctx.font = "500 16px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillText(fmtLongDate(date), padding, 86);
+
+    let x = padding;
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "700 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    headers.forEach((h, idx) => {
+      ctx.fillText(h, x + 10, tableTop + 30);
+      x += colWidths[idx];
+      if (idx < colWidths.length - 1) {
+        ctx.beginPath();
+        ctx.moveTo(x, tableTop);
+        ctx.lineTo(x, tableTop + headerHeight);
+        ctx.stroke();
+      }
+    });
+
+    let y = tableTop + headerHeight;
+    computedRows.forEach((rowData, rowIdx) => {
+      let cellX = padding;
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.strokeRect(padding, y, colWidths.reduce((a, b) => a + b, 0), rowData.height);
+
+      rowData.wrapped.forEach((lines) => {
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "600 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        lines.forEach((line, lineIdx) => {
+          ctx.fillText(line, cellX + 10, y + rowPaddingY + 16 + lineIdx * lineHeight);
+        });
+        cellX += colWidths[0];
+      });
+
+      y += rowData.height;
+      if (rowIdx < computedRows.length - 1) {
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(padding + colWidths.reduce((a, b) => a + b, 0), y);
+        ctx.stroke();
+      }
+    });
+
+    return canvas;
+  };
+
+  const handleDownloadPng = async () => {
+    if (user?.role !== "admin") return;
+    setIsExportingPng(true);
+    try {
+      const reportDate = logFilterDate;
+      const reportRes = await getAdminDailyTaskSheetReport(reportDate);
+      if (!reportRes.data) {
+        throw new Error(reportRes.error || "Failed to load daily task sheet report data.");
+      }
+
+      const canvas = buildReportCanvas(reportDate, reportRes.data);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (!b) reject(new Error("Failed to generate JPEG image."));
+          else resolve(b);
+        }, "image/jpeg", 0.95);
+      });
+      downloadBlob(blob, `workforce-pro-task-sheet-${reportDate}.jpg`);
+    } catch (err: any) {
+      console.error("JPEG export failed", err);
+      showFloatingToast({ type: "error", message: err?.message || "Failed to download JPEG." });
+    } finally {
+      setIsExportingPng(false);
+    }
   };
 
   const filteredEntries = useMemo(() => {
@@ -193,8 +349,7 @@ export default function TaskSheetPage() {
             <Swords size={24} className="lighthouse-accent" />
             <h3 className="text-xl font-bold text-[#2B124C] dark:text-purple-100">Log Your Operational Victories</h3>
           </div>
-          {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">⚠️ {error}</div>}
-          {success && <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-medium border border-emerald-100 flex items-center gap-2"><CheckCircle2 size={18} />Task sheet saved successfully for {fmtLongDate(selectedDate)}.</div>}
+
           <div className="mb-5 flex items-center gap-2">
             <Calendar size={15} className="lighthouse-muted" />
             <label className="text-xs font-medium text-[#854F6C] dark:text-purple-400">Entry Date</label>
@@ -202,11 +357,7 @@ export default function TaskSheetPage() {
               type="date"
               value={selectedDate}
               max={todayStr()}
-              onChange={(e) => {
-                setSuccess(false);
-                setError(null);
-                setSelectedDate(e.target.value);
-              }}
+                onChange={(e) => setSelectedDate(e.target.value)}
               className="h-8 px-2 rounded-lg text-sm focus:outline-none transition-all lighthouse-input-white"
             />
           </div>
@@ -248,6 +399,22 @@ export default function TaskSheetPage() {
                 onChange={(e) => setLogFilterDate(e.target.value)}
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
+              {user?.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPng}
+                  disabled={isExportingPng}
+                  className="h-8 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Download daily task sheet PNG"
+                >
+                  {isExportingPng ? (
+                    <div className="h-3 w-3 rounded-full border-2 border-[#522B5B]/30 dark:border-white/20 border-t-[#522B5B] dark:border-t-white animate-spin" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  <span className="hidden sm:inline">{isExportingPng ? "Exporting..." : "Download"}</span>
+                </button>
+              )}
             </div>
           </div>
 

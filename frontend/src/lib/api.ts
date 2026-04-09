@@ -136,6 +136,8 @@ export interface User {
   role: "admin" | "employee";
   is_active: boolean;
   created_at: string;
+  approved_at?: string;
+  approved_by?: number | null;
   age?: number;
   date_joined?: string;
   github_url?: string;
@@ -433,6 +435,19 @@ export interface WeeklyProgressEntry {
   employee_email?: string | null;
 }
 
+export interface OrganizationSettings {
+  id: number;
+  name: string;
+  domain?: string | null;
+  logo?: string | null;
+  theme?: string | null;
+  timezone?: string | null;
+  weekly_progress_enabled_for_admin: boolean;
+  weekly_progress_enabled_for_employee: boolean;
+  created_by?: number | null;
+  created_at: string;
+}
+
 export async function getMyWeeklyProgress(): Promise<ApiResponse<WeeklyProgressEntry[]>> {
   return apiFetch<WeeklyProgressEntry[]>("/weekly-progress/me");
 }
@@ -467,13 +482,31 @@ export async function markWeeklyCommentsSeen(entryId: number): Promise<ApiRespon
 
 export async function getAdminWeeklyProgress(params?: {
   week_start?: string;
+  start_date?: string;
+  end_date?: string;
   employee_id?: number;
 }): Promise<ApiResponse<WeeklyProgressEntry[]>> {
   const sp = new URLSearchParams();
   if (params?.week_start) sp.append("week_start", params.week_start);
+  if (params?.start_date) sp.append("start_date", params.start_date);
+  if (params?.end_date) sp.append("end_date", params.end_date);
   if (params?.employee_id != null) sp.append("employee_id", String(params.employee_id));
   const q = sp.toString();
   return apiFetch<WeeklyProgressEntry[]>(`/weekly-progress/admin${q ? `?${q}` : ""}`);
+}
+
+export async function getMyOrganizationSettings(): Promise<ApiResponse<OrganizationSettings>> {
+  return apiFetch<OrganizationSettings>("/organizations/me");
+}
+
+export async function updateMyOrganizationSettings(data: {
+  weekly_progress_enabled_for_admin?: boolean;
+  weekly_progress_enabled_for_employee?: boolean;
+}): Promise<ApiResponse<OrganizationSettings>> {
+  return apiFetch<OrganizationSettings>("/organizations/me", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getAdminWeeklyByEmployee(userId: number): Promise<ApiResponse<WeeklyProgressEntry[]>> {
@@ -1983,6 +2016,25 @@ export interface DailyHappySheetReportRow {
   goals_without_greed_impossible?: string | null;
 }
 
+export interface DailyTaskSheetReportRow {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  date: string;
+  achievements?: string | null;
+  repo_link?: string | null;
+}
+
+export interface WeeklyProgressReportRow {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  week_start_date: string;
+  description?: string | null;
+  github_link?: string | null;
+  deployed_link?: string | null;
+}
+
 export interface HappySheetReactionSummary {
   emoji: string;
   count: number;
@@ -2065,7 +2117,12 @@ export interface PersonalProjectEntry {
   id: number;
   user_id: number;
   title: string;
+  stage: "old" | "current" | "future";
   tag?: string | null;
+  github_link?: string | null;
+  demo_link?: string | null;
+  image_url?: string | null;
+  writeup?: string | null;
   created_at: string;
 }
 
@@ -2157,6 +2214,14 @@ export async function getTeamHappySheetsByDate(date: string): Promise<ApiRespons
 
 export async function getAdminDailyHappySheetReport(date: string): Promise<ApiResponse<DailyHappySheetReportRow[]>> {
   return apiFetch<DailyHappySheetReportRow[]>(`/my-space/happy-sheet/admin/daily-report?date=${encodeURIComponent(date)}`);
+}
+
+export async function getAdminDailyTaskSheetReport(date: string): Promise<ApiResponse<DailyTaskSheetReportRow[]>> {
+  return apiFetch<DailyTaskSheetReportRow[]>(`/my-space/task-sheet/admin/daily-report?date=${encodeURIComponent(date)}`);
+}
+
+export async function getAdminWeeklyProgressReport(weekStartDate: string): Promise<ApiResponse<WeeklyProgressReportRow[]>> {
+  return apiFetch<WeeklyProgressReportRow[]>(`/my-space/weekly-progress/admin/report?week_start_date=${encodeURIComponent(weekStartDate)}`);
 }
 
 export async function getHappySheetReactions(entryId: number): Promise<ApiResponse<HappySheetReactionSummary[]>> {
@@ -2277,7 +2342,12 @@ export async function deleteLearningFocusEntry(entryId: number): Promise<ApiResp
 // Personal Projects (Learning Canvas)
 export async function submitPersonalProject(data: {
   title: string;
+  stage?: "old" | "current" | "future";
   tag?: string;
+  github_link?: string;
+  demo_link?: string;
+  image_url?: string;
+  writeup?: string;
 }): Promise<ApiResponse<PersonalProjectEntry>> {
   return apiFetch<PersonalProjectEntry>("/my-space/personal-project", {
     method: "POST",
@@ -2291,7 +2361,15 @@ export async function getMyPersonalProjects(limit = 30): Promise<ApiResponse<Per
 
 export async function updatePersonalProjectEntry(
   entryId: number,
-  data: { title: string; tag?: string }
+  data: {
+    title: string;
+    stage?: "old" | "current" | "future";
+    tag?: string;
+    github_link?: string;
+    demo_link?: string;
+    image_url?: string;
+    writeup?: string;
+  }
 ): Promise<ApiResponse<PersonalProjectEntry>> {
   return apiFetch<PersonalProjectEntry>(`/my-space/personal-project/${entryId}`, {
     method: "PUT",

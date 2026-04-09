@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { useAuth } from "@/components/AuthProvider";
 import StatCard from "@/components/dashboard/StatCard";
 import { DollarSign, TrendingUp, ChevronRight, CheckCircle2, Loader2, Download } from "lucide-react";
 import { getPayroll, markPayrollPaid, updatePayrollStatus, PayrollRecord } from "@/lib/api";
@@ -35,6 +36,7 @@ const statusSelectStyle: Record<string, string> = {
 
 export default function PayrollPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -45,6 +47,7 @@ export default function PayrollPage() {
   const [error, setError] = useState("");
 
   const loadPayroll = useCallback(async () => {
+    if (user && user.role !== "admin") return;
     setLoading(true);
     setError("");
     const res = await getPayroll(month, year);
@@ -54,7 +57,13 @@ export default function PayrollPage() {
       setError(res.error || "Failed to load payroll data");
     }
     setLoading(false);
-  }, [month, year]);
+  }, [month, year, user]);
+
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      router.replace("/profile");
+    }
+  }, [user, router]);
 
   useEffect(() => {
     loadPayroll();

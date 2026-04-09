@@ -8,7 +8,7 @@ import {
   Users, UserCheck, UserX, Calendar, Clock, AlertCircle, 
   ListTodo, Target, CalendarDays, Loader2, Award, Copy
 } from "lucide-react";
-import { fetchAdminDashboard, getTaskStats, AdminDashboardStats, TaskStats } from "@/lib/api";
+import { fetchAdminDashboard, fetchAllUsers, getTaskStats, AdminDashboardStats, TaskStats } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -33,6 +34,11 @@ export default function AdminDashboard() {
         fetchAdminDashboard(),
         getTaskStats()
       ]);
+
+      const allUsersResult = await fetchAllUsers();
+      if (allUsersResult.data) {
+        setActiveUsersCount(allUsersResult.data.length);
+      }
       
       if (dashboardResult.data) {
         setStats(dashboardResult.data);
@@ -52,7 +58,7 @@ export default function AdminDashboard() {
   }, [loadData]);
 
   // Calculate attendance metrics
-  const totalEmployees = stats?.total_employees || 0;
+  const totalEmployees = activeUsersCount ?? stats?.total_employees || 0;
   const activeSessions = stats?.active_sessions || 0;
   const presentToday = activeSessions;
   const onLeave = stats?.employees_on_leave_today ?? 0;

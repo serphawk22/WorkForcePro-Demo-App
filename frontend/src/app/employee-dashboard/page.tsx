@@ -7,7 +7,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { Clock, AlertCircle, Zap, Building2, Play, Square, Circle, CheckCircle, Loader2, Calendar, Copy, Video, ExternalLink, ChevronRight, ChevronDown, ListTree, Repeat } from "lucide-react";
 import {
-  fetchEmployeeDashboard, getAllTasks, updateTaskStatus, getTaskSubtasks, updateSubtaskStatus,
+  fetchEmployeeDashboard, getMyTasks, updateTaskStatus, getTaskSubtasks, updateSubtaskStatus,
   getMyRecurringInstancesSummary, updateTaskInstanceStatus,
   Task, Subtask, EmployeeDashboardStats, getActiveMeeting, TeamsMeeting,
   RecurringInstancesSummary, TaskInstanceSummary,
@@ -131,7 +131,7 @@ export default function EmployeeDashboard() {
     try {
       const [statsResponse, tasksResponse, meetingResponse, recurringRes] = await Promise.all([
         fetchEmployeeDashboard(),
-        getAllTasks(),   // all tasks are visible to everyone
+        getMyTasks(),   // only tasks assigned to this employee
         getActiveMeeting(),
         getMyRecurringInstancesSummary(),
       ]);

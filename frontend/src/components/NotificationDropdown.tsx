@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/components/AuthProvider";
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -22,6 +23,7 @@ import {
 
 export function NotificationDropdown() {
   const router = useRouter();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -81,6 +83,64 @@ export function NotificationDropdown() {
     }
   }
 
+  async function handleNotificationClick(notification: Notification) {
+    if (!notification.is_read) {
+      await handleMarkAsRead(notification.id);
+    }
+
+    setIsOpen(false);
+
+    const notificationType = (notification.type || "").toLowerCase();
+
+    const taskLinkedTypes = new Set([
+      "task_assigned",
+      "task_submitted",
+      "task_approved",
+      "task_rejected",
+      "task_comment",
+      "subtask_assigned",
+      "subtask_reviewing",
+      "subtask_approved",
+      "subtask_rejected",
+    ]);
+
+    if (taskLinkedTypes.has(notificationType)) {
+      if (notification.task_id) {
+        router.push(`/project-management/${notification.task_id}`);
+      } else {
+        router.push("/project-management");
+      }
+      return;
+    }
+
+    if (notificationType === "weekly_progress_comment") {
+      router.push(user?.role === "admin" ? "/admin/weekly-progress" : "/weekly-progress");
+      return;
+    }
+
+    if (notificationType === "salary_paid") {
+      router.push(user?.role === "admin" ? "/payroll" : "/profile");
+      return;
+    }
+
+    if (notificationType === "leave_approved" || notificationType === "leave_rejected") {
+      router.push("/requests");
+      return;
+    }
+
+    if (notificationType === "new_registration") {
+      router.push("/admin/approvals");
+      return;
+    }
+
+    if (notificationType === "user_approved" || notificationType === "user_rejected") {
+      router.push("/profile");
+      return;
+    }
+
+    router.push(user?.role === "admin" ? "/admin/dashboard" : "/employee-dashboard");
+  }
+
   function formatTime(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();
@@ -111,58 +171,51 @@ export function NotificationDropdown() {
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
-        <div className="flex items-center justify-between px-2 py-2">
-          <h3 className="font-semibold">Notifications</h3>
+      <DropdownMenuContent
+        align="end"
+        className="w-[min(560px,95vw)] p-0"
+        sideOffset={10}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h3 className="font-semibold text-base">Notifications</h3>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={handleMarkAllAsRead}
-              className="h-auto p-1 text-xs"
+              className="h-auto px-2 py-1 text-xs"
             >
               Mark all as read
             </Button>
           )}
         </div>
-        <DropdownMenuSeparator />
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-[70vh] overflow-y-auto">
           {loading ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
               Loading...
             </div>
           ) : notifications.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
               No notifications
             </div>
           ) : (
             notifications.map((notification) => (
               <DropdownMenuItem
                 key={notification.id}
-                className={`flex flex-col items-start px-4 py-3 cursor-pointer ${
+                className={`flex flex-col items-start px-5 py-4 cursor-pointer ${
                   !notification.is_read ? "bg-muted/50" : ""
                 }`}
-                onClick={() => {
-                  if (notification.type === "weekly_progress_comment") {
-                    if (!notification.is_read) {
-                      handleMarkAsRead(notification.id);
-                    }
-                    setIsOpen(false);
-                    router.push("/weekly-progress");
-                    return;
-                  }
-                  if (!notification.is_read) {
-                    handleMarkAsRead(notification.id);
-                  }
+                onSelect={() => {
+                  void handleNotificationClick(notification);
                 }}
               >
                 <div className="flex items-start justify-between w-full gap-2">
-                  <p className="text-sm flex-1">{notification.message}</p>
+                  <p className="text-sm leading-relaxed flex-1">{notification.message}</p>
                   {!notification.is_read && (
                     <div className="h-2 w-2 rounded-full bg-blue-600 mt-1 flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground mt-1">
+                <span className="text-xs text-muted-foreground mt-1.5">
                   {formatTime(notification.created_at)}
                 </span>
               </DropdownMenuItem>

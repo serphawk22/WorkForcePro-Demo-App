@@ -10,8 +10,10 @@ import {
   updateMyWeeklyProgress,
   markWeeklyCommentsSeen,
   postMyWeeklyComment,
+  getMyOrganizationSettings,
   type WeeklyProgressEntry,
 } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 
 function mondayOfDate(d: Date): Date {
   const x = new Date(d);
@@ -37,9 +39,11 @@ const accent: Accent = {
 };
 
 export default function WeeklyProgressEmployeeSection() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState<WeeklyProgressEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [featureEnabled, setFeatureEnabled] = useState(true);
 
   const defaultWeekMonday = useMemo(() => mondayOfDate(new Date()), []);
   const [weekPicker, setWeekPicker] = useState(toYMD(defaultWeekMonday));
@@ -50,10 +54,23 @@ export default function WeeklyProgressEmployeeSection() {
   const [postingReplyId, setPostingReplyId] = useState<number | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
+    const orgRes = await getMyOrganizationSettings();
+    if (orgRes.data && user?.role) {
+      const enabled = user.role === "admin"
+        ? orgRes.data.weekly_progress_enabled_for_admin
+        : orgRes.data.weekly_progress_enabled_for_employee;
+      setFeatureEnabled(enabled);
+      if (!enabled) {
+        setEntries([]);
+        setLoading(false);
+        return;
+      }
+    }
+
     const res = await getMyWeeklyProgress();
     if (res.data) setEntries(res.data);
     setLoading(false);
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
     load();
@@ -162,6 +179,10 @@ export default function WeeklyProgressEmployeeSection() {
         {loading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : !featureEnabled ? (
+          <div className="rounded-xl border border-dashed border-border p-6 text-center">
+            <p className="text-sm text-muted-foreground">Weekly Progress is currently disabled for your role by your organization admin.</p>
           </div>
         ) : (
           <div className="grid gap-8 lg:grid-cols-2">

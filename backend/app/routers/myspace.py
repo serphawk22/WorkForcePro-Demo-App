@@ -30,6 +30,9 @@ from app.models import (
     HappySheetLeaderboardItem,
     HappySheetAiInsights,
     DailyHappySheetReportRow,
+    DailyTaskSheetReportRow,
+    WeeklyProgressReportRow,
+    WeeklyProgress,
     DreamProject,
     DreamProjectCreate,
     DreamProjectWithUser,
@@ -986,7 +989,19 @@ async def create_personal_project(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new personal project folder/tag."""
-    project = PersonalProject(user_id=current_user.id, title=data.title, tag=data.tag)
+    stage = (data.stage or "current").strip().lower()
+    if stage not in {"old", "current", "future"}:
+        raise HTTPException(status_code=400, detail="stage must be one of: old, current, future")
+    project = PersonalProject(
+        user_id=current_user.id,
+        title=data.title,
+        stage=stage,
+        tag=data.tag,
+        github_link=data.github_link,
+        demo_link=data.demo_link,
+        image_url=data.image_url,
+        writeup=data.writeup,
+    )
     session.add(project)
     session.commit()
     session.refresh(project)
@@ -1022,8 +1037,17 @@ async def update_personal_project(
     if project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this entry")
 
+    stage = (data.stage or "current").strip().lower()
+    if stage not in {"old", "current", "future"}:
+        raise HTTPException(status_code=400, detail="stage must be one of: old, current, future")
+
     project.title = data.title
+    project.stage = stage
     project.tag = data.tag
+    project.github_link = data.github_link
+    project.demo_link = data.demo_link
+    project.image_url = data.image_url
+    project.writeup = data.writeup
     session.add(project)
     session.commit()
     session.refresh(project)
@@ -1045,3 +1069,72 @@ async def delete_personal_project(
     session.delete(project)
     session.commit()
     return {"message": "Personal project entry deleted"}
+
+
+@router.get("/task-sheet/admin/daily-report", response_model=List[DailyTaskSheetReportRow])
+async def get_daily_task_sheet_report(
+    date: str,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Get all employees with their task sheet entry for the selected date (admin only)."""
+    try:
+        target_date = DateType.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    results = session.exec(
+        select(User, TaskSheet)
+        .outerjoin(
+            TaskSheet,
+            and_(TaskSheet.user_id == User.id, TaskSheet.date == target_date),
+        )
+        .order_by(User.name.asc())
+    ).all()
+
+    return [
+        DailyTaskSheetReportRow(
+            user_id=user.id,
+            user_name=user.name,
+            user_email=user.email,
+            date=target_date,
+            achievements=sheet.achievements if sheet else None,
+            repo_link=sheet.repo_link if sheet else None,
+        )
+        for user, sheet in results
+    ]
+
+
+@router.get("/weekly-progress/admin/report", response_model=List[WeeklyProgressReportRow])
+async def get_weekly_progress_report(
+    week_start_date: str,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    """Get all employees with their weekly progress entry for the selected week (admin only)."""
+    try:
+        target_week = DateType.fromisoformat(week_start_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    results = session.exec(
+        select(User, WeeklyProgress)
+        .outerjoin(
+            WeeklyProgress,
+            and_(WeeklyProgress.user_id == User.id, WeeklyProgress.week_start_date == target_week),
+        )
+        .order_by(User.name.asc())
+    ).all()
+
+    return [
+        WeeklyProgressReportRow(
+            user_id=user.id,
+            user_name=user.name,
+            user_email=user.email,
+            week_start_date=target_week,
+            description=progress.description if progress else None,
+            github_link=progress.github_link if progress else None,
+            deployed_link=progress.deployed_link if progress else None,
+        )
+        for user, progress in results
+    ]

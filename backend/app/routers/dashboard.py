@@ -31,11 +31,10 @@ async def get_admin_dashboard(
     try:
         today = date.today()
         
-        # Total employees (exclude admin users)
+        # Total active organization users (include admin-role staff)
         total_employees = session.exec(
             select(func.count(User.id)).where(
                 User.is_active == True,
-                User.role != UserRole.admin,
                 User.organization_id == current_user.organization_id,
             )
         ).one() or 0
