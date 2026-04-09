@@ -93,9 +93,9 @@ export default function AdminDashboard() {
     setIsLoading(true);
     try {
       const [dashboardResult, taskResult, meetingResult] = await Promise.allSettled([
-        fetchAdminDashboard(),
-        getTaskStats(),
-        getActiveMeeting(),
+        withTimeout(fetchAdminDashboard(), 6000, "Admin dashboard"),
+        withTimeout(getTaskStats(), 6000, "Task stats"),
+        withTimeout(getActiveMeeting(), 6000, "Active meeting"),
       ]);
 
       if (dashboardResult.status === "fulfilled" && dashboardResult.value.data) {

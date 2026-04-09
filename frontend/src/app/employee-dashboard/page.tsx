@@ -490,112 +490,6 @@ export default function EmployeeDashboard() {
             />
           </div>
 
-          {/* Teams Meeting Card */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {activeMeeting ? (
-              <div
-                className="admin-dashboard-card col-span-full rounded-xl glass-card glow-sm p-5 border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-transparent to-transparent"
-                style={employeeCardAccentStyles.meeting}
-              >
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="admin-dashboard-card-icon shrink-0 p-2.5 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/40">
-                    <Video className="h-5 w-5 text-white" />
-                  </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-0.5">Teams Meeting</p>
-                      <p className="font-bold text-foreground truncate">{activeMeeting.title}</p>
-                      <p className="text-xs text-muted-foreground">Shared by {activeMeeting.creator_name}</p>
-                    </div>
-                  </div>
-                  <a
-                    href={activeMeeting.meeting_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-500/30 shrink-0"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Join Meeting
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div
-                className="admin-dashboard-card col-span-full rounded-xl glass-card p-5 border border-border/40 flex items-center gap-3 text-muted-foreground"
-                style={employeeCardAccentStyles.neutral}
-              >
-                <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary">
-                  <Video className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">No active Teams meeting</p>
-                  <p className="text-xs">Your admin hasn&apos;t shared a meeting link yet.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Recurring task occurrences */}
-          <div
-            className="admin-dashboard-card rounded-xl glass-card glow-sm"
-            style={employeeCardAccentStyles.recurring}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-card-foreground flex items-center gap-2">
-                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-amber-500 shadow-lg shadow-amber-500/40">
-                    <Repeat size={18} className="text-white" />
-                  </div>
-                  Recurring tasks
-                </h3>
-                <Link href="/project-management" className="text-sm font-semibold text-primary hover:text-primary-light transition-colors px-3 py-1.5 rounded-lg glass-light hover:glow-sm">
-                  Projects
-                </Link>
-              </div>
-              {!recurringSummary ||
-              (recurringSummary.today.length === 0 &&
-                recurringSummary.upcoming.length === 0 &&
-                recurringSummary.completed_recent.length === 0) ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  No recurring occurrences yet. When your admin assigns a repeating task, scheduled dates will show here.
-                </p>
-              ) : (
-                <div className="grid gap-6 md:grid-cols-3">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Today</p>
-                    <div className="space-y-2">
-                      {recurringSummary.today.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Nothing due today</p>
-                      ) : (
-                        recurringSummary.today.map(renderRecurringRow)
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Upcoming</p>
-                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                      {recurringSummary.upcoming.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No upcoming</p>
-                      ) : (
-                        recurringSummary.upcoming.map(renderRecurringRow)
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2 tracking-wider">Recently completed</p>
-                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                      {recurringSummary.completed_recent.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">None yet</p>
-                      ) : (
-                        recurringSummary.completed_recent.map(renderRecurringRow)
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
           <section className="grid gap-4 xl:grid-cols-2">
             <article className={`${overviewCardBase} p-5`}>
               <div className={`${overviewCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
@@ -720,6 +614,112 @@ export default function EmployeeDashboard() {
               </div>
             </article>
           </section>
+
+          {/* Teams Meeting Card */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {activeMeeting ? (
+              <div
+                className="admin-dashboard-card col-span-full rounded-xl glass-card glow-sm p-5 border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-transparent to-transparent"
+                style={employeeCardAccentStyles.meeting}
+              >
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="admin-dashboard-card-icon shrink-0 p-2.5 rounded-xl bg-blue-500 shadow-lg shadow-blue-500/40">
+                    <Video className="h-5 w-5 text-white" />
+                  </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-blue-400 font-semibold uppercase tracking-wide mb-0.5">Teams Meeting</p>
+                      <p className="font-bold text-foreground truncate">{activeMeeting.title}</p>
+                      <p className="text-xs text-muted-foreground">Shared by {activeMeeting.creator_name}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={activeMeeting.meeting_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-500/30 shrink-0"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Join Meeting
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="admin-dashboard-card col-span-full rounded-xl glass-card p-5 border border-border/40 flex items-center gap-3 text-muted-foreground"
+                style={employeeCardAccentStyles.neutral}
+              >
+                <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary">
+                  <Video className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">No active Teams meeting</p>
+                  <p className="text-xs">Your admin hasn&apos;t shared a meeting link yet.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recurring task occurrences */}
+          <div
+            className="admin-dashboard-card rounded-xl glass-card glow-sm"
+            style={employeeCardAccentStyles.recurring}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-card-foreground flex items-center gap-2">
+                  <div className="admin-dashboard-card-icon p-2 rounded-lg bg-amber-500 shadow-lg shadow-amber-500/40">
+                    <Repeat size={18} className="text-white" />
+                  </div>
+                  Recurring tasks
+                </h3>
+                <Link href="/project-management" className="text-sm font-semibold text-primary hover:text-primary-light transition-colors px-3 py-1.5 rounded-lg glass-light hover:glow-sm">
+                  Projects
+                </Link>
+              </div>
+              {!recurringSummary ||
+              (recurringSummary.today.length === 0 &&
+                recurringSummary.upcoming.length === 0 &&
+                recurringSummary.completed_recent.length === 0) ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No recurring occurrences yet. When your admin assigns a repeating task, scheduled dates will show here.
+                </p>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Today</p>
+                    <div className="space-y-2">
+                      {recurringSummary.today.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Nothing due today</p>
+                      ) : (
+                        recurringSummary.today.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 mb-2 tracking-wider">Upcoming</p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {recurringSummary.upcoming.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No upcoming</p>
+                      ) : (
+                        recurringSummary.upcoming.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-2 tracking-wider">Recently completed</p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {recurringSummary.completed_recent.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">None yet</p>
+                      ) : (
+                        recurringSummary.completed_recent.map(renderRecurringRow)
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           <WeeklyProgressEmployeeSection />
 
