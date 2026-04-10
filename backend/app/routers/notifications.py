@@ -6,10 +6,55 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import User, Notification, NotificationRead, NotificationType
+from app.models import User, Notification, NotificationRead, NotificationType, Task, TaskStatus
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
+
+def _prune_stale_task_notifications(session: Session, user_id: int) -> None:
+    """Delete all task-linked notifications for tasks already completed/submitted."""
+    actionable_types = {
+        NotificationType.TASK_ASSIGNED,
+        NotificationType.TASK_SUBMITTED,
+        NotificationType.TASK_APPROVED,
+        NotificationType.TASK_COMMENT,
+        NotificationType.TASK_REJECTED,
+        NotificationType.SUBTASK_ASSIGNED,
+        NotificationType.SUBTASK_REVIEWING,
+        NotificationType.SUBTASK_APPROVED,
+        NotificationType.SUBTASK_REJECTED,
+    }
+    statement = select(Notification).where(
+        Notification.user_id == user_id,
+        Notification.task_id.is_not(None),
+        Notification.type.in_(actionable_types),
+    )
+    notifications = session.exec(statement).all()
+    if not notifications:
+        return
+
+    task_ids = {n.task_id for n in notifications if n.task_id is not None}
+    if not task_ids:
+        return
+
+    tasks = session.exec(select(Task).where(Task.id.in_(task_ids))).all()
+    completed_task_ids = {
+        task.id
+        for task in tasks
+        if task.id is not None and task.status in [TaskStatus.submitted, TaskStatus.approved]
+    }
+    if not completed_task_ids:
+        return
+
+    deleted = False
+    for notification in notifications:
+        if notification.task_id in completed_task_ids:
+            session.delete(notification)
+            deleted = True
+
+    if deleted:
+        session.commit()
 
 
 def create_notification(
@@ -40,6 +85,7 @@ async def get_notifications(
     current_user: User = Depends(get_current_user)
 ):
     """Get all notifications for current user."""
+    _prune_stale_task_notifications(session, current_user.id)
     statement = select(Notification).where(
         Notification.user_id == current_user.id
     ).order_by(Notification.created_at.desc())
@@ -66,6 +112,7 @@ async def get_unread_count(
     current_user: User = Depends(get_current_user)
 ):
     """Get count of unread notifications."""
+    _prune_stale_task_notifications(session, current_user.id)
     statement = select(Notification).where(
         Notification.user_id == current_user.id,
         Notification.is_read == False
@@ -81,7 +128,7 @@ async def mark_notification_read(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Mark a notification as read."""
+    """Mark a notification as read (and remove it from the feed)."""
     statement = select(Notification).where(Notification.id == notification_id)
     notification = session.exec(statement).first()
     
@@ -98,12 +145,10 @@ async def mark_notification_read(
             detail="Not authorized to mark this notification"
         )
     
-    notification.is_read = True
-    session.add(notification)
+    session.delete(notification)
     session.commit()
-    session.refresh(notification)
-    
-    return {"message": "Notification marked as read"}
+
+    return {"message": "Notification removed"}
 
 
 @router.patch("/read-all")
@@ -111,7 +156,7 @@ async def mark_all_notifications_read(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Mark all notifications as read for current user."""
+    """Mark all notifications as read for current user (clear feed)."""
     statement = select(Notification).where(
         Notification.user_id == current_user.id,
         Notification.is_read == False
@@ -120,9 +165,8 @@ async def mark_all_notifications_read(
     notifications = session.exec(statement).all()
     
     for notification in notifications:
-        notification.is_read = True
-        session.add(notification)
+        session.delete(notification)
     
     session.commit()
     
-    return {"message": f"Marked {len(notifications)} notifications as read"}
+    return {"message": f"Cleared {len(notifications)} notifications"}

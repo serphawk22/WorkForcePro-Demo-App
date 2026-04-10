@@ -31,6 +31,64 @@ function toYMD(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function normalizePointerLines(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function buildWeeklyDescription(
+  weeklyEntry: string,
+  highlightsRaw: string,
+  difficultiesRaw: string,
+): string {
+  const highlights = normalizePointerLines(highlightsRaw);
+  const difficulties = normalizePointerLines(difficultiesRaw);
+
+  const sections = [
+    `Weekly Entry:\n${weeklyEntry.trim()}`,
+    "",
+    "Highlights:",
+    ...(highlights.length > 0 ? highlights.map((item) => `- ${item}`) : ["- None"]),
+    "",
+    "Difficulties / Abnormalities:",
+    ...(difficulties.length > 0 ? difficulties.map((item) => `- ${item}`) : ["- None"]),
+  ];
+
+  return sections.join("\n");
+}
+
+function parseWeeklyDescription(description: string): {
+  weeklyEntry: string;
+  highlights: string;
+  difficulties: string;
+} {
+  const text = (description || "").trim();
+  if (!text) {
+    return { weeklyEntry: "", highlights: "", difficulties: "" };
+  }
+
+  const weeklyMatch = text.match(/Weekly Entry:\s*([\s\S]*?)(?:\n\s*Highlights:|$)/i);
+  const highlightsMatch = text.match(/Highlights:\s*([\s\S]*?)(?:\n\s*Difficulties\s*\/\s*Abnormalities:|$)/i);
+  const difficultiesMatch = text.match(/Difficulties\s*\/\s*Abnormalities:\s*([\s\S]*)$/i);
+
+  if (!weeklyMatch && !highlightsMatch && !difficultiesMatch) {
+    return { weeklyEntry: text, highlights: "", difficulties: "" };
+  }
+
+  const highlightsLines = normalizePointerLines(highlightsMatch?.[1] || "").join("\n");
+  const difficultiesLines = normalizePointerLines(difficultiesMatch?.[1] || "").join("\n");
+
+  return {
+    weeklyEntry: (weeklyMatch?.[1] || "").trim(),
+    highlights: highlightsLines,
+    difficulties: difficultiesLines,
+  };
+}
+
 type Accent = CSSProperties & { "--admin-card-accent"?: string; "--admin-card-accent-secondary"?: string };
 
 const accent: Accent = {
@@ -47,7 +105,9 @@ export default function WeeklyProgressEmployeeSection() {
 
   const defaultWeekMonday = useMemo(() => mondayOfDate(new Date()), []);
   const [weekPicker, setWeekPicker] = useState(toYMD(defaultWeekMonday));
-  const [description, setDescription] = useState("");
+  const [weeklyEntry, setWeeklyEntry] = useState("");
+  const [highlights, setHighlights] = useState("");
+  const [difficulties, setDifficulties] = useState("");
   const [githubLink, setGithubLink] = useState("");
   const [deployedLink, setDeployedLink] = useState("");
   const [replyText, setReplyText] = useState<Record<number, string>>({});
@@ -82,11 +142,16 @@ export default function WeeklyProgressEmployeeSection() {
 
   useEffect(() => {
     if (currentWeekEntry) {
-      setDescription(currentWeekEntry.description);
+      const parsed = parseWeeklyDescription(currentWeekEntry.description);
+      setWeeklyEntry(parsed.weeklyEntry);
+      setHighlights(parsed.highlights);
+      setDifficulties(parsed.difficulties);
       setGithubLink(currentWeekEntry.github_link || "");
       setDeployedLink(currentWeekEntry.deployed_link || "");
     } else {
-      setDescription("");
+      setWeeklyEntry("");
+      setHighlights("");
+      setDifficulties("");
       setGithubLink("");
       setDeployedLink("");
     }
@@ -94,15 +159,16 @@ export default function WeeklyProgressEmployeeSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (description.trim().length < 10) {
-      toast.error("Description must be at least 10 characters.");
+    if (weeklyEntry.trim().length < 10) {
+      toast.error("Weekly entry must be at least 10 characters.");
       return;
     }
+    const description = buildWeeklyDescription(weeklyEntry, highlights, difficulties);
     setSaving(true);
     try {
       if (currentWeekEntry) {
         const res = await updateMyWeeklyProgress(currentWeekEntry.id, {
-          description: description.trim(),
+          description,
           github_link: githubLink.trim() || undefined,
           deployed_link: deployedLink.trim() || undefined,
         });
@@ -114,7 +180,7 @@ export default function WeeklyProgressEmployeeSection() {
       } else {
         const res = await upsertMyWeeklyProgress({
           week_start_date: weekStartForForm,
-          description: description.trim(),
+          description,
           github_link: githubLink.trim() || undefined,
           deployed_link: deployedLink.trim() || undefined,
         });
@@ -200,16 +266,38 @@ export default function WeeklyProgressEmployeeSection() {
                   <p className="text-[10px] text-muted-foreground mt-1">Reporting week: {formatWeek(weekStartForForm)}</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">What did you work on? *</label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Weekly Entry *</label>
                   <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    value={weeklyEntry}
+                    onChange={(e) => setWeeklyEntry(e.target.value)}
                     rows={5}
                     className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    placeholder="Summarize your accomplishments, blockers, and plans…"
+                    placeholder="Summarize what you delivered this week, key outcomes, and plan for next week..."
                     required
                     minLength={10}
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Highlights (Pointers)</label>
+                  <textarea
+                    value={highlights}
+                    onChange={(e) => setHighlights(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-emerald-500/30 text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/35"
+                    placeholder={"One point per line\nCompleted login bug fix\nImproved deployment stability"}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Use one pointer per line.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Difficulties / Abnormalities (Pointers)</label>
+                  <textarea
+                    value={difficulties}
+                    onChange={(e) => setDifficulties(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-amber-500/30 text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/35"
+                    placeholder={"One point per line\nAPI timeout issue in staging\nUnexpected dependency conflict"}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Capture blockers, risks, or unusual incidents as pointers.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1">GitHub link (optional)</label>
@@ -273,7 +361,10 @@ export default function WeeklyProgressEmployeeSection() {
                           type="button"
                           onClick={() => {
                             setWeekPicker(entry.week_start_date);
-                            setDescription(entry.description);
+                            const parsed = parseWeeklyDescription(entry.description);
+                            setWeeklyEntry(parsed.weeklyEntry);
+                            setHighlights(parsed.highlights);
+                            setDifficulties(parsed.difficulties);
                             setGithubLink(entry.github_link || "");
                             setDeployedLink(entry.deployed_link || "");
                           }}
@@ -282,7 +373,39 @@ export default function WeeklyProgressEmployeeSection() {
                           Load in form
                         </button>
                       </div>
-                      <p className="text-xs text-card-foreground whitespace-pre-wrap line-clamp-4">{entry.description}</p>
+                      {(() => {
+                        const parsed = parseWeeklyDescription(entry.description);
+                        const highlightPointers = normalizePointerLines(parsed.highlights);
+                        const difficultyPointers = normalizePointerLines(parsed.difficulties);
+                        return (
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weekly Entry</p>
+                              <p className="text-xs text-card-foreground whitespace-pre-wrap line-clamp-4">{parsed.weeklyEntry || entry.description}</p>
+                            </div>
+                            {highlightPointers.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Highlights</p>
+                                <ul className="mt-1 space-y-1">
+                                  {highlightPointers.slice(0, 3).map((item, idx) => (
+                                    <li key={`${entry.id}-h-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {difficultyPointers.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Difficulties / Abnormalities</p>
+                                <ul className="mt-1 space-y-1">
+                                  {difficultyPointers.slice(0, 3).map((item, idx) => (
+                                    <li key={`${entry.id}-d-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="flex flex-wrap gap-2 mt-2">
                         {entry.github_link && (
                           <a

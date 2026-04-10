@@ -8,7 +8,7 @@ import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdo
 import {
   Plus, Search, Circle, Loader2, X, CheckCircle2, Clock, AlertCircle,
   Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy, Repeat,
-  Mic, Square, Play, Pause, Trash2, RotateCcw,
+  Mic, Square, Play, Pause, Trash2, RotateCcw, SlidersHorizontal, MessageSquarePlus,
 } from "lucide-react";
 import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
@@ -36,6 +36,52 @@ const statusColors: Record<string, string> = {
 };
 
 const MAX_VOICE_NOTE_SECONDS = 90;
+
+type ListColumnId =
+  | "refId"
+  | "task"
+  | "workspace"
+  | "priority"
+  | "status"
+  | "reporter"
+  | "resolution"
+  | "createdDate"
+  | "startDate"
+  | "updatedDate"
+  | "assignee"
+  | "dueDate"
+  | "actions";
+
+const DEFAULT_VISIBLE_COLUMNS: ListColumnId[] = [
+  "refId",
+  "task",
+  "workspace",
+  "priority",
+  "status",
+  "reporter",
+  "createdDate",
+  "startDate",
+  "updatedDate",
+  "assignee",
+  "dueDate",
+  "actions",
+];
+
+const LIST_COLUMN_DEFS: Array<{ id: ListColumnId; label: string; adminOnly?: boolean }> = [
+  { id: "refId", label: "Ref ID" },
+  { id: "task", label: "Task" },
+  { id: "workspace", label: "Workspace" },
+  { id: "priority", label: "Priority" },
+  { id: "status", label: "Status" },
+  { id: "reporter", label: "Reporter" },
+  { id: "resolution", label: "Resolution" },
+  { id: "createdDate", label: "Created Date" },
+  { id: "startDate", label: "Start Date" },
+  { id: "updatedDate", label: "Updated Date" },
+  { id: "assignee", label: "Assignee" },
+  { id: "dueDate", label: "Due Date" },
+  { id: "actions", label: "Actions", adminOnly: true },
+];
 
 type TaskEditForm = TaskCreate & {
   status?: Task["status"];
@@ -77,19 +123,24 @@ function getProfilePictureUrl(profilePicture?: string | null) {
 
 interface ProjectsClientProps {
   workspaceQuery?: string | null;
+  statusQuery?: string | null;
+  editQuery?: string | null;
 }
 
-export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
+export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }: ProjectsClientProps) {
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === "admin";
+  const canManageTasks = isAdmin;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(statusQuery || "");
   const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
+  const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined);
+  const [assigneeFilter, setAssigneeFilter] = useState<number | undefined>(undefined);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -127,9 +178,11 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const [isUpdatingTask, setIsUpdatingTask] = useState(false);
   const [isSearchingById, setIsSearchingById] = useState(false);
   const [resolutionEdits, setResolutionEdits] = useState<Record<number, string>>({});
+  const [visibleColumns, setVisibleColumns] = useState<ListColumnId[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [newTask, setNewTask] = useState<TaskCreate>({
     title: "", description: "", priority: "medium", workspace_id: 0,
-    assigned_to: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
+    assigned_to: undefined, assigned_by: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
     is_recurring: false,
     recurrence_type: "weekly",
     recurrence_interval: 1,
@@ -169,6 +222,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const editVoiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const editVoiceAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const consumedEditTaskIdRef = useRef<number | null>(null);
 
   const WEEKDAY_OPTS = [
     { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
@@ -177,6 +231,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const statusFilterOptions: DropdownOption[] = useMemo(() => [
     { value: "__all", label: "All Status", icon: <Circle className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "overdue", label: "Overdue", icon: <AlertCircle className="h-3.5 w-3.5 text-red-400" /> },
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
     ...(isAdmin ? [
@@ -195,11 +250,33 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     { value: "__all", label: "All Workspaces", icon: <span className="text-muted-foreground">📁</span> },
     ...workspaces.map((ws) => ({
       value: String(ws.id),
-      label: `${ws.icon || "📁"} ${ws.name}`.trim(),
+      label: ws.name,
       icon: <span>{ws.icon || "📁"}</span>,
       description: ws.description || undefined,
     })),
   ], [workspaces]);
+
+  const assigneeFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Users", icon: <span className="text-muted-foreground">👤</span> },
+    ...employees.map((emp) => ({
+      value: String(emp.id),
+      label: emp.name,
+      description: emp.role,
+      avatarSrc: getProfilePictureUrl(emp.profile_picture),
+      avatarFallback: emp.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+      icon: <span className="text-primary">{emp.role === "admin" ? "⭐" : "👤"}</span>,
+    })),
+  ], [employees]);
+
+  const projectFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Projects", icon: <span className="text-muted-foreground">🗂️</span> },
+    ...tasks.map((task) => ({
+      value: String(task.id),
+      label: task.title,
+      description: task.public_id || undefined,
+      icon: <span className="text-primary">#</span>,
+    })),
+  ], [tasks]);
 
   const priorityOptions: DropdownOption[] = [
     { value: "low", label: "Low", icon: <span className="text-green-400">🟢</span> },
@@ -208,7 +285,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   ];
 
   const adminStatusOptions: DropdownOption[] = [
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
+    { value: "reviewing", label: "Testing", icon: <span className="text-amber-400">🟡</span> },
     { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
     { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
   ];
@@ -216,7 +293,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   const employeeStatusOptions: DropdownOption[] = [
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "done", label: "Done", icon: <span className="text-green-400">●</span> },
+    { value: "done", label: "Move to Testing", icon: <span className="text-green-400">●</span> },
   ];
 
   const employeeOptions: DropdownOption[] = useMemo(() => employees.map((emp) => ({
@@ -229,7 +306,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const workspaceSelectOptions: DropdownOption[] = useMemo(() => workspaces.map((ws) => ({
     value: String(ws.id),
-    label: `${ws.icon || "📁"} ${ws.name}`.trim(),
+    label: ws.name,
     icon: <span>{ws.icon || "📁"}</span>,
   })), [workspaces]);
 
@@ -553,6 +630,44 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     title: "", description: "", assigned_to: undefined, priority: "medium",
   });
 
+  const columnPreferenceKey = useMemo(
+    () => `wfp-project-list-columns-${user?.id || "anon"}`,
+    [user?.id]
+  );
+
+  const visibleColumnCount = useMemo(() => {
+    return LIST_COLUMN_DEFS.filter((column) => {
+      if (column.adminOnly && !isAdmin) return false;
+      return visibleColumns.includes(column.id);
+    }).length;
+  }, [isAdmin, visibleColumns]);
+
+  const isColumnVisible = useCallback(
+    (columnId: ListColumnId) => visibleColumns.includes(columnId),
+    [visibleColumns]
+  );
+
+  const sameLocalDay = (isoDate: string) => {
+    const left = new Date(isoDate);
+    const right = new Date();
+    return left.getFullYear() === right.getFullYear()
+      && left.getMonth() === right.getMonth()
+      && left.getDate() === right.getDate();
+  };
+
+  const toggleVisibleColumn = (columnId: ListColumnId) => {
+    setVisibleColumns((prev) => {
+      if (prev.includes(columnId)) {
+        if (visibleColumnCount <= 1) {
+          toast.error("Keep at least one column visible");
+          return prev;
+        }
+        return prev.filter((id) => id !== columnId);
+      }
+      return [...prev, columnId];
+    });
+  };
+
   // Auto-redirect on 6-char Ref ID
   useEffect(() => {
     const trimmed = searchQuery.trim().toUpperCase();
@@ -576,8 +691,9 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
+    const apiStatusFilter = statusFilter === "overdue" ? undefined : (statusFilter || undefined);
     const [tasksResult, empResult, workspaceResult] = await Promise.all([
-      getAllTasks(statusFilter || undefined, undefined, workspaceFilter, { rootsOnly: true }),
+      getAllTasks(apiStatusFilter, assigneeFilter, workspaceFilter, { rootsOnly: true }),
       getAssignableUsers(),
       getWorkspaces(),
     ]);
@@ -590,7 +706,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     );
 
     if (workspaceFilterInvalid) {
-      const fallbackTasks = await getAllTasks(statusFilter || undefined, undefined, undefined, { rootsOnly: true });
+      const fallbackTasks = await getAllTasks(apiStatusFilter, assigneeFilter, undefined, { rootsOnly: true });
       if (fallbackTasks.data) {
         setTasks(fallbackTasks.data);
         tasksToPrime = fallbackTasks.data;
@@ -615,7 +731,18 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     }
   // loadSubtasksQuietly is stable (defined below with useCallback + no deps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, statusFilter, workspaceFilter, workspaceQuery]);
+  }, [assigneeFilter, router, statusFilter, workspaceFilter, workspaceQuery]);
+
+  useEffect(() => {
+    setStatusFilter(statusQuery || "");
+  }, [statusQuery]);
+
+  useEffect(() => {
+    if (!projectFilter) return;
+    if (!tasks.some((task) => task.id === projectFilter)) {
+      setProjectFilter(undefined);
+    }
+  }, [projectFilter, tasks]);
 
   useEffect(() => {
     if (!workspaceQuery) return;
@@ -689,6 +816,39 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
   }, [resolutionEdits]);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(columnPreferenceKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const allowed = new Set(
+        LIST_COLUMN_DEFS
+          .filter((column) => (column.adminOnly ? isAdmin : true))
+          .map((column) => column.id)
+      );
+      const normalized = parsed.filter((id): id is ListColumnId => allowed.has(id));
+      if (normalized.length > 0) {
+        setVisibleColumns(normalized);
+      }
+    } catch {
+      // Ignore malformed local storage data.
+    }
+  }, [columnPreferenceKey, isAdmin]);
+
+  useEffect(() => {
+    try {
+      const filtered = visibleColumns.filter((columnId) => {
+        const definition = LIST_COLUMN_DEFS.find((column) => column.id === columnId);
+        if (!definition) return false;
+        return definition.adminOnly ? isAdmin : true;
+      });
+      localStorage.setItem(columnPreferenceKey, JSON.stringify(filtered));
+    } catch {
+      // Ignore browser storage write failures.
+    }
+  }, [columnPreferenceKey, isAdmin, visibleColumns]);
+
+  useEffect(() => {
     const handleRefresh = async () => {
       // Silent reload — keeps the table visible so expandedTasks state stays intact
       await loadData(true);
@@ -703,6 +863,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     e.preventDefault();
     if (!newTask.title.trim()) { toast.error("Task title is required"); return; }
     if (!newTask.workspace_id) { toast.error("Workspace is required"); return; }
+    if (!newTask.assigned_to) { toast.error("Assignee is required"); return; }
+    if (!newTask.due_date) { toast.error("Due date is required"); return; }
+    const reporterId = newTask.assigned_by || user?.id;
+    if (!reporterId) { toast.error("Reporter is required"); return; }
     setIsCreating(true);
 
     let voicePayload: Pick<TaskCreate, "voice_note_url" | "voice_note_transcript"> = uploadedVoicePayload
@@ -737,14 +901,14 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
       setVoiceNoteTranscriptPreview(uploadResult.data.voice_note_transcript || null);
     }
 
-    const result = await createTask({ ...newTask, ...voicePayload });
+    const result = await createTask({ ...newTask, assigned_by: reporterId, ...voicePayload });
     if (result.error) toast.error(result.error);
     else {
       toast.success("Project created!");
       closeCreateModal();
       setNewTask({
         title: "", description: "", priority: "medium", workspace_id: workspaceFilter || 0,
-        assigned_to: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
+        assigned_to: undefined, assigned_by: user?.id, due_date: undefined, github_link: undefined, deployed_link: undefined,
         is_recurring: false, recurrence_type: "weekly", recurrence_interval: 1, repeat_days: [],
         recurrence_start_date: undefined, recurrence_end_date: undefined, monthly_day: undefined,
       });
@@ -764,6 +928,41 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
     const previousTask = tasks.find((task) => task.id === taskId);
 
+    if (!isAdmin && user) {
+      if (selectedStatus === "in_progress") {
+        const dailyPlan = window.prompt("Add today's in-progress update before continuing:");
+        if (!dailyPlan || !dailyPlan.trim()) {
+          toast.error("Daily in-progress comment is required");
+          return;
+        }
+        const commentResult = await createTaskComment({ task_id: taskId, comment: dailyPlan.trim() });
+        if (commentResult.error) {
+          toast.error(commentResult.error);
+          return;
+        }
+      }
+
+      if (selectedStatus === "done") {
+        const commentsResult = await getTaskComments(taskId);
+        const hasTodaysUpdate = (commentsResult.data || []).some(
+          (comment) => comment.user_id === user.id && sameLocalDay(comment.created_at)
+        );
+
+        if (!hasTodaysUpdate) {
+          const completionUpdate = window.prompt("Add today's completion/testing handoff update:");
+          if (!completionUpdate || !completionUpdate.trim()) {
+            toast.error("Add today's progress comment before moving to testing");
+            return;
+          }
+          const commentResult = await createTaskComment({ task_id: taskId, comment: completionUpdate.trim() });
+          if (commentResult.error) {
+            toast.error(commentResult.error);
+            return;
+          }
+        }
+      }
+    }
+
     // Optimistic UI update to avoid page-level loading flicker.
     setTasks((prev) => prev.map((task) => (
       task.id === taskId ? { ...task, status: backendStatus as Task["status"] } : task
@@ -782,9 +981,23 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
       return;
     }
 
-    toast.success(selectedStatus === "done" ? "Task submitted for review!" : "Status updated!");
+    toast.success(selectedStatus === "done" ? "Task moved to testing!" : "Status updated!");
     // Quiet refresh keeps the current screen stable while syncing server state.
     void loadData(true);
+  };
+
+  const handleQuickDailyUpdate = async (taskId: number) => {
+    const update = window.prompt("Add today's progress update:");
+    if (!update || !update.trim()) {
+      toast.error("Comment cannot be empty");
+      return;
+    }
+    const result = await createTaskComment({ task_id: taskId, comment: update.trim() });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Daily update saved");
   };
 
   const handleAssigneeChange = async (taskId: number, userId?: number) => {
@@ -854,6 +1067,35 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     });
     setShowEditTaskModal(true);
   };
+
+  useEffect(() => {
+    if (!editQuery) {
+      consumedEditTaskIdRef.current = null;
+      return;
+    }
+
+    const editTaskId = Number(editQuery);
+    if (Number.isNaN(editTaskId) || editTaskId <= 0) return;
+    if (consumedEditTaskIdRef.current === editTaskId) return;
+
+    const taskToEdit = tasks.find((task) => task.id === editTaskId);
+    if (!taskToEdit) return;
+
+    consumedEditTaskIdRef.current = editTaskId;
+
+    if (canManageTasks) {
+      handleOpenEditTask(taskToEdit);
+    } else {
+      toast.error("You are not allowed to edit this task");
+    }
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("edit");
+      const query = params.toString();
+      router.replace(query ? `/project-management/projects?${query}` : "/project-management/projects");
+    }
+  }, [canManageTasks, editQuery, router, tasks]);
 
   const handleWorkspaceChange = async (taskId: number, nextWorkspaceId: number) => {
     const result = await updateTask(taskId, { workspace_id: nextWorkspaceId });
@@ -1059,7 +1301,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               )}
             </div>
           </td>
-          <td className="py-3.5 px-4">
+          <td className={`py-3.5 px-4 ${isColumnVisible("refId") ? "" : "hidden"}`}>
             {subtask.public_id ? (
               <div className="flex items-center gap-1">
                 <span className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
@@ -1071,7 +1313,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               </div>
             ) : <span className="text-[10px] text-muted-foreground italic">—</span>}
           </td>
-          <td className="py-3.5 px-4 min-w-[280px]">
+          <td className={`py-3.5 px-4 min-w-[280px] ${isColumnVisible("task") ? "" : "hidden"}`}>
             <div className="relative" style={{ paddingLeft: `${depth * 20 + 14}px` }}>
               <span className="pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-y-1/2 bg-primary/30 dark:bg-primary/45" />
               <span className="pointer-events-none absolute left-3 top-0 h-full w-px bg-primary/20 dark:bg-primary/35" />
@@ -1090,7 +1332,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               {subtask.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{subtask.description}</p>}
             </div>
           </td>
-          <td className="py-3.5 px-4 min-w-[140px]">
+          <td className={`py-3.5 px-4 min-w-[140px] ${isColumnVisible("workspace") ? "" : "hidden"}`}>
             <div onClick={(e) => e.stopPropagation()}>
               <div className="inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-card-foreground opacity-90">
                 <span
@@ -1102,7 +1344,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               </div>
             </div>
           </td>
-          <td className="py-3.5 px-4">
+          <td className={`py-3.5 px-4 ${isColumnVisible("priority") ? "" : "hidden"}`}>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenu
                 value={subtask.priority}
@@ -1113,8 +1355,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               />
             </div>
           </td>
-          <td className="py-3.5 px-4">
-            <div onClick={(e) => e.stopPropagation()}>
+          <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
+            <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
               <DropdownMenu
                 value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
                 onValueChange={(value) => handleStatusChange(subtask.id, value)}
@@ -1123,9 +1365,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                 disabled={!isAdmin && (subtask.status === "submitted" || subtask.status === "approved")}
                 triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
               />
+              {!isAdmin && subtask.status === "in_progress" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleQuickDailyUpdate(subtask.id);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <MessageSquarePlus size={11} /> Daily Update
+                </button>
+              )}
             </div>
           </td>
-          <td className="py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px]">
+          <td className={`py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px] ${isColumnVisible("reporter") ? "" : "hidden"}`}>
             {isAdmin ? (
               <div onClick={(e) => e.stopPropagation()}>
                 <DropdownMenu
@@ -1140,7 +1394,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               getReporterName(subtask)
             )}
           </td>
-          <td className="py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px]">
+          <td className={`py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px] ${isColumnVisible("resolution") ? "" : "hidden"}`}>
             <input
               type="text"
               value={getEditableResolution(subtask)}
@@ -1150,7 +1404,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               className="w-full rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-xs text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/40"
             />
           </td>
-          <td className="py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap">
+          <td className={`py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap ${isColumnVisible("createdDate") ? "" : "hidden"}`}>
+            {subtask.created_at ? new Date(subtask.created_at).toLocaleDateString("en-IN") : "--"}
+          </td>
+          <td className={`py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap ${isColumnVisible("startDate") ? "" : "hidden"}`}>
             <input
               type="date"
               value={subtask.start_date ? new Date(subtask.start_date).toISOString().slice(0, 10) : ""}
@@ -1159,10 +1416,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               className="rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-card-foreground"
             />
           </td>
-          <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+          <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
             {getTaskUpdatedDate(subtask)}
           </td>
-          <td className="py-3.5 px-4 min-w-[220px]">
+          <td className={`py-3.5 px-4 min-w-[220px] ${isColumnVisible("assignee") ? "" : "hidden"}`}>
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                 {subtask.assignee_name ? subtask.assignee_name.split(" ").map((n) => n[0]).join("") : "?"}
@@ -1190,7 +1447,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               )}
             </div>
           </td>
-          <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+          <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>
             <input
               type="date"
               value={subtask.due_date ? new Date(subtask.due_date).toISOString().slice(0, 10) : ""}
@@ -1199,7 +1456,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               className="rounded-md border border-border bg-card/70 px-2 py-1 text-xs text-card-foreground"
             />
           </td>
-          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+          <td className={`py-3.5 px-4 text-center whitespace-nowrap ${isAdmin && isColumnVisible("actions") ? "" : "hidden"}`}>
             {isAdmin && (
               <div className="flex items-center justify-center gap-3">
                 <button onClick={(e) => { e.stopPropagation(); openSubtaskPanel(subtask, rootTask); }} className="text-primary hover:text-primary/80 text-xs">Edit</button>
@@ -1418,11 +1675,26 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     }
   };
 
-  const filteredTasks = tasks.filter(t =>
-    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.public_id?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTasks = tasks.filter((t) => {
+    if (projectFilter && t.id !== projectFilter) return false;
+
+    const matchesSearch =
+      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.public_id?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter !== "overdue") return true;
+    if (!t.due_date || t.status === "approved") return false;
+
+    const dueDate = new Date(t.due_date);
+    if (Number.isNaN(dueDate.getTime())) return false;
+    const today = new Date();
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  });
 
   const getTaskUpdatedDate = (task: Task) => {
     const subtasks = taskChildren[task.id] || [];
@@ -1448,7 +1720,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
     const map: Record<string, string> = {
       approved: "Resolved",
       rejected: "Rejected",
-      reviewing: "Reviewing",
+      reviewing: "Testing",
       submitted: "Pending",
       in_progress: "Open",
       todo: "Unresolved",
@@ -1474,7 +1746,10 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
 
   const newProjectBtn = isAdmin ? (
     <button
-      onClick={() => setShowCreateModal(true)}
+      onClick={() => {
+        setNewTask((prev) => ({ ...prev, assigned_by: prev.assigned_by || user?.id }));
+        setShowCreateModal(true);
+      }}
       className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 transition-opacity"
       style={{ background: "#522B5B" }}
     >
@@ -1513,6 +1788,20 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
             triggerClassName="w-full lg:w-56"
             disabled={workspaceScopedView}
           />
+          <DropdownMenu
+            value={assigneeFilter ? String(assigneeFilter) : "__all"}
+            onValueChange={(value) => setAssigneeFilter(value === "__all" ? undefined : Number(value))}
+            options={assigneeFilterOptions}
+            placeholder="All Users"
+            triggerClassName="w-full lg:w-52"
+          />
+          <DropdownMenu
+            value={projectFilter ? String(projectFilter) : "__all"}
+            onValueChange={(value) => setProjectFilter(value === "__all" ? undefined : Number(value))}
+            options={projectFilterOptions}
+            placeholder="All Projects"
+            triggerClassName="w-full lg:w-56"
+          />
           {workspaceScopedView && selectedWorkspace && (
             <div className="inline-flex w-full lg:w-auto items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
               <span
@@ -1523,6 +1812,44 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <span>{selectedWorkspace.name} workspace projects</span>
             </div>
           )}
+          <div className="relative w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowColumnSettings((prev) => !prev)}
+              className="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <SlidersHorizontal size={14} />
+              Customize List Fields
+            </button>
+            {showColumnSettings && (
+              <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-border bg-card p-3 shadow-xl">
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">Visible Columns</div>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {LIST_COLUMN_DEFS.filter((column) => !column.adminOnly || isAdmin).map((column) => {
+                    const checked = isColumnVisible(column.id);
+                    return (
+                      <label key={column.id} className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleVisibleColumn(column.id)}
+                          disabled={checked && visibleColumnCount <= 1}
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowColumnSettings(false)}
+                  className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -1536,18 +1863,19 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               <thead>
                 <tr className="border-b text-xs uppercase tracking-wider bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-400 font-semibold">
                   <th className="py-3 px-4 text-center font-semibold"></th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Ref ID</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Task</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Workspace</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Priority</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Status</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Reporter</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Resolution</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Start Date</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Updated Date</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Assignee</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Due Date</th>
-                  <th className="py-3 px-4 text-center font-semibold whitespace-nowrap">Actions</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("refId") ? "" : "hidden"}`}>Ref ID</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("task") ? "" : "hidden"}`}>Task</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("workspace") ? "" : "hidden"}`}>Workspace</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("priority") ? "" : "hidden"}`}>Priority</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("status") ? "" : "hidden"}`}>Status</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("reporter") ? "" : "hidden"}`}>Reporter</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("resolution") ? "" : "hidden"}`}>Resolution</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("createdDate") ? "" : "hidden"}`}>Created Date</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("startDate") ? "" : "hidden"}`}>Start Date</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>Updated Date</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("assignee") ? "" : "hidden"}`}>Assignee</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>Due Date</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${canManageTasks && isColumnVisible("actions") ? "" : "hidden"}`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: "#DFB6B2" }}>
@@ -1566,19 +1894,27 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           {expandedTasks.has(task.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className={`py-3.5 px-4 ${isColumnVisible("refId") ? "" : "hidden"}`}>
                         {task.public_id ? (
                           <div className="flex items-center gap-1">
-                            <span className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/project-management/${task.id}`);
+                              }}
+                              className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                              title="Open project details"
+                            >
                               {task.public_id}
-                            </span>
+                            </button>
                             <button onClick={(e) => handleCopyRefId(e, task.public_id)} className="text-muted-foreground hover:text-purple-400 transition-colors p-0.5">
                               <Copy size={11} />
                             </button>
                           </div>
                         ) : <span className="text-[10px] text-muted-foreground italic">—</span>}
                       </td>
-                      <td className="py-3.5 px-4 min-w-[280px]">
+                      <td className={`py-3.5 px-4 min-w-[280px] ${isColumnVisible("task") ? "" : "hidden"}`}>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-card-foreground">{task.title}</span>
@@ -1604,9 +1940,45 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                             )}
                           </div>
                           {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/project-management/${task.id}`);
+                              }}
+                              className="text-[10px] font-semibold text-primary hover:text-primary/80"
+                            >
+                              Open
+                            </button>
+                            {canManageTasks && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditTask(task);
+                                }}
+                                className="text-[10px] font-semibold text-amber-500 hover:text-amber-400"
+                              >
+                                Quick Edit
+                              </button>
+                            )}
+                            {task.workspace_id && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/project-management/workspaces/${task.workspace_id}`);
+                                }}
+                                className="text-[10px] font-semibold text-blue-400 hover:text-blue-300"
+                              >
+                                Workspace
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 min-w-[140px]">
+                      <td className={`py-3.5 px-4 min-w-[140px] ${isColumnVisible("workspace") ? "" : "hidden"}`}>
                         {isAdmin ? (
                           <div onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu
@@ -1618,17 +1990,26 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                             />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 text-xs text-foreground">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (task.workspace_id) {
+                                router.push(`/project-management/workspaces/${task.workspace_id}`);
+                              }
+                            }}
+                            className="flex items-center gap-2 text-xs text-foreground hover:text-primary transition-colors"
+                          >
                             <span
                               className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
                               style={{ backgroundColor: task.workspace_color || "#6b7280" }}
                             />
                             <span>{task.workspace_icon || "•"}</span>
                             <span>{task.workspace_name || "Unassigned"}</span>
-                          </div>
+                          </button>
                         )}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className={`py-3.5 px-4 ${isColumnVisible("priority") ? "" : "hidden"}`}>
                         <div onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu
                             value={task.priority}
@@ -1639,8 +2020,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           />
                         </div>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <div onClick={(e) => e.stopPropagation()}>
+                      <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
+                        <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
                           <DropdownMenu
                             value={isAdmin ? task.status : (task.status === "submitted" ? "done" : task.status)}
                             onValueChange={(value) => handleStatusChange(task.id, value)}
@@ -1649,9 +2030,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                             disabled={!isAdmin && (task.status === "submitted" || task.status === "approved")}
                             triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
                           />
+                          {!isAdmin && task.status === "in_progress" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleQuickDailyUpdate(task.id);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                            >
+                              <MessageSquarePlus size={11} /> Daily Update
+                            </button>
+                          )}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px]">
+                      <td className={`py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px] ${isColumnVisible("reporter") ? "" : "hidden"}`}>
                         {isAdmin ? (
                           <div onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu
@@ -1666,7 +2059,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           getReporterName(task)
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px]">
+                      <td className={`py-3.5 px-4 text-xs whitespace-nowrap text-center min-w-[180px] ${isColumnVisible("resolution") ? "" : "hidden"}`}>
                         <input
                           type="text"
                           value={getEditableResolution(task)}
@@ -1676,18 +2069,21 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           className="w-full rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-xs text-primary font-medium focus:outline-none focus:ring-1 focus:ring-primary/40"
                         />
                       </td>
-                      <td className="py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap">
+                      <td className={`py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap ${isColumnVisible("createdDate") ? "" : "hidden"}`}>
+                        {task.created_at ? new Date(task.created_at).toLocaleDateString("en-IN") : "--"}
+                      </td>
+                      <td className={`py-3.5 px-4 text-muted-foreground text-xs whitespace-nowrap ${isColumnVisible("startDate") ? "" : "hidden"}`}>
                         {task.start_date ? new Date(task.start_date).toLocaleDateString("en-IN") : "--"}
                       </td>
-                      <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
+                      <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
                         {getTaskUpdatedDate(task)}
                       </td>
-                      <td className="py-3.5 px-4 min-w-[220px]">
+                      <td className={`py-3.5 px-4 min-w-[220px] ${isColumnVisible("assignee") ? "" : "hidden"}`}>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                             {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
                           </div>
-                          {isAdmin ? (
+                          {canManageTasks ? (
                             <div onClick={(e) => e.stopPropagation()}>
                               <DropdownMenu
                                 value={task.assigned_to ? String(task.assigned_to) : "__unassigned"}
@@ -1697,7 +2093,7 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                                   ...employeeOptions,
                                 ]}
                                 placeholder="Assignee"
-                                triggerClassName="w-[210px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                                triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
                               />
                             </div>
                           ) : (
@@ -1710,16 +2106,40 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                           )}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span>{formatDate(task.due_date)}</span>
+                      <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>
+                        <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                          {canManageTasks ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="date"
+                                value={task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : ""}
+                                onChange={(e) => {
+                                  void handleSubtaskDateChange(task.id, "due_date", e.target.value);
+                                }}
+                                className="w-[140px] rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                              />
+                              {task.due_date && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleSubtaskDateChange(task.id, "due_date", "");
+                                  }}
+                                  className="text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span>{formatDate(task.due_date)}</span>
+                          )}
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getTimelineChipClass(getTimelineChip(task).tone)}`}>
                             {getTimelineChip(task).label}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {isAdmin && (
+                      <td className={`py-3.5 px-4 text-center whitespace-nowrap ${canManageTasks && isColumnVisible("actions") ? "" : "hidden"}`}>
+                        {canManageTasks && (
                           <div className="flex items-center justify-center gap-3">
                             <button onClick={(e) => { e.stopPropagation(); handleOpenEditTask(task); }} className="text-primary hover:text-primary/80 text-xs">Edit</button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-red-500 hover:text-red-600 text-xs">Delete</button>
@@ -1877,8 +2297,8 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-1 text-foreground">Due Date</label>
-                  <input type="date" value={newTask.due_date || ""} onChange={e => setNewTask({ ...newTask, due_date: e.target.value || undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" />
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Due Date *</label>
+                  <input type="date" value={newTask.due_date || ""} onChange={e => setNewTask({ ...newTask, due_date: e.target.value || undefined })} className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none" required />
                 </div>
               </div>
               {isAdmin && (
@@ -1889,6 +2309,18 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
                     onValueChange={(value) => setNewTask({ ...newTask, assigned_to: value ? Number(value) : undefined })}
                     options={employeeOptions}
                     placeholder="Select team member"
+                    triggerClassName="w-full"
+                  />
+                </div>
+              )}
+              {isAdmin && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-foreground">Reporter *</label>
+                  <DropdownMenu
+                    value={newTask.assigned_by ? String(newTask.assigned_by) : (user?.id ? String(user.id) : "")}
+                    onValueChange={(value) => setNewTask({ ...newTask, assigned_by: value ? Number(value) : undefined })}
+                    options={employeeOptions}
+                    placeholder="Select reporter"
                     triggerClassName="w-full"
                   />
                 </div>

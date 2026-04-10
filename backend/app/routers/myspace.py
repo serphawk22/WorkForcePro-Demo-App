@@ -227,9 +227,9 @@ async def delete_task_sheet_entry(
 async def get_all_task_sheets(
     limit: int = 50,
     session: Session = Depends(get_session),
-    admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Get all task sheets (admin only)."""
+    """Get all task sheets (visible to all authenticated users)."""
     results = session.exec(
         select(TaskSheet, User).join(User).order_by(TaskSheet.date.desc()).limit(limit)
     ).all()

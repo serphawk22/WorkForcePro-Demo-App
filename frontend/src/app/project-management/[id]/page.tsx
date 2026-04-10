@@ -611,16 +611,15 @@ export default function ProjectDetailPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   };
 
-  const filterSubtaskTreeByAssignee = (nodes: any[], filterValue: string): any[] => {
-    if (filterValue === "all") return nodes;
-
-    const isMatch = (node: any) => {
-      if (filterValue.startsWith("id:")) {
-        const selectedId = Number(filterValue.replace("id:", ""));
+  const filterSubtaskTree = (nodes: any[], assigneeFilterValue: string): any[] => {
+    const matchesAssignee = (node: any) => {
+      if (assigneeFilterValue === "all") return true;
+      if (assigneeFilterValue.startsWith("id:")) {
+        const selectedId = Number(assigneeFilterValue.replace("id:", ""));
         return Number(node.assigned_to) === selectedId;
       }
 
-      const selectedName = filterValue.replace("name:", "").toLowerCase();
+      const selectedName = assigneeFilterValue.replace("name:", "").toLowerCase();
       return (node.assignee_name || "").toLowerCase() === selectedName;
     };
 
@@ -628,7 +627,7 @@ export default function ProjectDetailPage() {
       const result: any[] = [];
       for (const item of items) {
         const filteredChildren = item.children?.length ? walk(item.children) : [];
-        if (isMatch(item) || filteredChildren.length > 0) {
+        if (matchesAssignee(item) || filteredChildren.length > 0) {
           result.push({ ...item, children: filteredChildren });
         }
       }
@@ -644,7 +643,7 @@ export default function ProjectDetailPage() {
 
   const filteredSubtasks = useMemo(() => {
     return project?.subtasks
-      ? filterSubtaskTreeByAssignee(project.subtasks, selectedSubtaskAssigneeFilter)
+      ? filterSubtaskTree(project.subtasks, selectedSubtaskAssigneeFilter)
       : [];
   }, [project?.subtasks, selectedSubtaskAssigneeFilter]);
 
@@ -1594,7 +1593,7 @@ export default function ProjectDetailPage() {
                   <div className="rounded-lg border border-dashed border-border p-6 text-center">
                     <p className="text-sm text-muted-foreground">
                       {subtasks.length > 0
-                        ? "No subtasks match this assignee filter."
+                        ? "No subtasks match selected assignee."
                         : "No subtasks yet. Add one to start breaking down this task."}
                     </p>
                   </div>

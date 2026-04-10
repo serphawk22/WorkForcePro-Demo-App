@@ -55,6 +55,7 @@ export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === "admin";
+  const canManageTasks = isAdmin;
   const workspaceFilter = workspaceQuery ? Number(workspaceQuery) : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -233,9 +234,23 @@ export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
                         )}
                         <span className="text-sm font-semibold truncate text-foreground">{task.title}</span>
                       </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ml-2 bg-gradient-to-r ${meta.gradient} border border-current/20 drop-shadow-sm`} style={{ color: meta.color }}>
-                        {meta.label}
-                      </span>
+                      <div className="ml-2 flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full bg-gradient-to-r ${meta.gradient} border border-current/20 drop-shadow-sm`} style={{ color: meta.color }}>
+                          {meta.label}
+                        </span>
+                        {canManageTasks && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/project-management/projects?edit=${task.id}`);
+                            }}
+                            className="rounded-md border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

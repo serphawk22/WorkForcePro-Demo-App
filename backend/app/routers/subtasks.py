@@ -67,9 +67,18 @@ async def create_subtask(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot create subtasks on approved tasks"
         )
+
+    requested_assignee_id = subtask_data.assigned_to
+    assignment_alert_message = None
+    if task.assigned_to and requested_assignee_id != task.assigned_to:
+        requested_assignee_id = task.assigned_to
+        assignment_alert_message = (
+            f"Assignment corrected automatically for subtask '{subtask_data.title}'. "
+            f"Because it belongs to task #{task.id}, it was assigned to that task's assignee."
+        )
     
     # Assignee is mandatory for subtask creation.
-    assignee_stmt = select(User).where(User.id == subtask_data.assigned_to)
+    assignee_stmt = select(User).where(User.id == requested_assignee_id)
     assignee = session.exec(assignee_stmt).first()
     if not assignee:
         raise HTTPException(
@@ -102,7 +111,7 @@ async def create_subtask(
         parent_subtask_id=subtask_data.parent_subtask_id,  # Support nested subtasks
         title=subtask_data.title,
         description=subtask_data.description,
-        assigned_to=subtask_data.assigned_to,
+        assigned_to=requested_assignee_id,
         assigned_by=current_user.id,
         priority=subtask_data.priority,
         due_date=subtask_data.due_date,
@@ -121,6 +130,15 @@ async def create_subtask(
             type=NotificationType.SUBTASK_ASSIGNED,
             message=f"{current_user.name} assigned you a subtask: '{subtask.title}' under task #{task.id}",
             task_id=task.id
+        )
+
+    if assignment_alert_message:
+        create_notification(
+            session=session,
+            user_id=current_user.id,
+            type=NotificationType.TASK_COMMENT,
+            message=assignment_alert_message,
+            task_id=task.id,
         )
     
     return subtask
@@ -366,15 +384,19 @@ async def update_subtask(
             detail="Subtask not found"
         )
     ensure_same_organization(current_user, subtask.organization_id, "subtask")
+
+    parent_task = session.exec(select(Task).where(Task.id == subtask.parent_task_id)).first()
+    if not parent_task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent task not found"
+        )
+    ensure_same_organization(current_user, parent_task.organization_id, "parent task")
     
     # Check permission
     if current_user.role != UserRole.admin:
-        # Get parent task
-        task_stmt = select(Task).where(Task.id == subtask.parent_task_id)
-        task = session.exec(task_stmt).first()
-        
         # Only parent task assignee can update
-        if not task or task.assigned_to != current_user.id:
+        if parent_task.assigned_to != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update subtasks on your tasks"
@@ -402,6 +424,15 @@ async def update_subtask(
             )
         ensure_same_organization(current_user, assignee.organization_id, "assignee")
 
+    assignment_alert_message = None
+    requested_assignee_id = update_data.get("assigned_to", subtask.assigned_to)
+    if parent_task.assigned_to and requested_assignee_id != parent_task.assigned_to:
+        update_data["assigned_to"] = parent_task.assigned_to
+        assignment_alert_message = (
+            f"Assignment corrected automatically for subtask '{subtask.title}'. "
+            f"Because it belongs to task #{parent_task.id}, it was assigned to that task's assignee."
+        )
+
     # Update fields
     for key, value in update_data.items():
         setattr(subtask, key, value)
@@ -419,6 +450,15 @@ async def update_subtask(
             type=NotificationType.SUBTASK_ASSIGNED,
             message=f"New subtask assigned: '{subtask.title}' (Reassigned by {current_user.name})",
             task_id=subtask.parent_task_id
+        )
+
+    if assignment_alert_message:
+        create_notification(
+            session=session,
+            user_id=current_user.id,
+            type=NotificationType.TASK_COMMENT,
+            message=assignment_alert_message,
+            task_id=parent_task.id,
         )
     
     # Reload and refresh to ensure all fields are correctly populated for response

@@ -42,7 +42,7 @@ export default function StatCard({
 }: StatCardProps) {
   const inner = (
     <div
-      className={`group relative rounded-xl glass-card ${enablePremiumHover ? "admin-dashboard-card" : "glass-card-hover"} p-5 transition-all duration-300 overflow-hidden glow-sm ${enablePremiumHover ? "dark:hover:glow-md" : "hover:scale-[1.02] hover:glow-md"} ${href ? "cursor-pointer active:scale-[0.97]" : ""}`}
+      className={`group relative rounded-xl glass-card ${enablePremiumHover ? "admin-dashboard-card hover:-translate-y-1.5 hover:scale-[1.03] active:translate-y-0 active:scale-[0.96]" : "glass-card-hover"} p-5 transition-all duration-300 overflow-hidden glow-sm ${enablePremiumHover ? "dark:hover:glow-md" : "hover:scale-[1.02] hover:glow-md"} ${href ? "cursor-pointer" : ""}`}
       style={hoverAccentStyle}
     >
       {/* Gradient overlay on hover */}

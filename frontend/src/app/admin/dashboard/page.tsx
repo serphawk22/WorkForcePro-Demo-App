@@ -37,7 +37,7 @@ const adminCardAccentStyles: Record<"primary" | "blue", AdminCardAccentStyle> = 
 };
 
 const premiumCardBase =
-  "admin-dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 backdrop-blur-xl shadow-[0_16px_45px_rgba(109,40,217,0.14)] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-violet-300/80 hover:shadow-[0_24px_70px_rgba(124,58,237,0.2)] active:translate-y-0 active:scale-[0.99] dark:border-white/10 dark:bg-white/8 dark:from-transparent dark:via-transparent dark:to-transparent dark:shadow-[0_18px_60px_rgba(8,6,20,0.28)] dark:hover:shadow-[0_24px_80px_rgba(124,58,237,0.22)]";
+  "admin-dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 backdrop-blur-xl shadow-[0_16px_45px_rgba(109,40,217,0.14)] transition-all duration-300 ease-out hover:-translate-y-1.5 hover:scale-[1.03] hover:border-violet-300/80 hover:shadow-[0_26px_76px_rgba(124,58,237,0.24)] active:translate-y-0 active:scale-[0.96] dark:border-white/10 dark:bg-white/8 dark:from-transparent dark:via-transparent dark:to-transparent dark:shadow-[0_18px_60px_rgba(8,6,20,0.28)] dark:hover:shadow-[0_24px_80px_rgba(124,58,237,0.22)]";
 
 const premiumCardGlow =
   "absolute inset-0 bg-gradient-to-br opacity-80 transition-opacity duration-300 group-hover:opacity-100";
@@ -293,6 +293,15 @@ export default function AdminDashboard() {
       valueTone: "text-emerald-600 dark:text-emerald-300",
       redirectUrl: "/project-management",
     },
+    {
+      title: "Team Productivity",
+      value: `${completionRate}%`,
+      subtitle: `${completedTasks}/${totalTasks || 0} tasks approved`,
+      accent: "from-indigo-500/24 via-blue-500/12 to-transparent dark:from-indigo-500/20 dark:via-blue-500/10",
+      accentDark: "dark:from-indigo-500/20 dark:via-blue-500/10",
+      valueTone: "text-indigo-600 dark:text-indigo-300",
+      redirectUrl: "/project-management/reports",
+    },
   ];
 
   const quickActions = [
@@ -458,7 +467,7 @@ export default function AdminDashboard() {
               </div>
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {prioritySummaryCards.map((card) => (
                 <button
                   key={card.title}

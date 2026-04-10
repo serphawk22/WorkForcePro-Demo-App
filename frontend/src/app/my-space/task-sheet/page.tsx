@@ -68,15 +68,13 @@ export default function TaskSheetPage() {
   const [isDeletingEntry, setIsDeletingEntry] = useState(false);
   const [isExportingPng, setIsExportingPng] = useState(false);
 
-  const isAdmin = user?.role === "admin";
-
   const loadTaskSheets = useCallback(async () => {
     if (!user) return;
 
     try {
       setIsLoadingHistory(true);
       const [timelineRes, personalRes] = await Promise.all([
-        isAdmin ? getAllTaskSheets(500) : getMyTaskSheets(500),
+        getAllTaskSheets(500),
         getMyTaskSheets(500),
       ]);
 
@@ -89,7 +87,7 @@ export default function TaskSheetPage() {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [isAdmin, user]);
+  }, [user]);
 
   useEffect(() => {
     void loadTaskSheets();

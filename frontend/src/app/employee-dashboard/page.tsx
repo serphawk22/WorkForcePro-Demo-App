@@ -464,9 +464,9 @@ export default function EmployeeDashboard() {
             />
             <StatCard
               icon={Zap}
-              label="Productivity"
+              label="Team Productivity"
               value={`${productivityScore}%`}
-              subtitle={`${tasksCompleted} completed`}
+              subtitle={`${tasksCompleted} tasks completed`}
               trend={productivityScore >= 50 ? "Great" : "Keep going"}
               trendType={productivityScore >= 50 ? "up" : "stable"}
               iconColor="bg-yellow-400"

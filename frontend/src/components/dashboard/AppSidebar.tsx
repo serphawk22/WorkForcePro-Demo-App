@@ -50,6 +50,16 @@ interface SidebarProps {
   userHandle?: string;
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "").trim();
+  if (normalized.length !== 6) return `rgba(107, 114, 128, ${alpha})`;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some((value) => Number.isNaN(value))) return `rgba(107, 114, 128, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function AppSidebar({ role = "admin", userName = "Administrator", userHandle = "@admin" }: SidebarProps) {
   const pathname = usePathname() || "";
   const router = useRouter();
@@ -352,6 +362,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                     {workspaces.map((ws) => {
                       const wsPath = `/project-management/workspaces/${ws.id}`;
                       const wsActive = String(ws.id) === activeWorkspaceId;
+                      const badgeBg = hexToRgba(ws.color || "#6b7280", wsActive ? 0.26 : 0.16);
+                      const badgeBorder = hexToRgba(ws.color || "#6b7280", wsActive ? 0.58 : 0.35);
                       return (
                         <Link
                           key={ws.id}
@@ -371,11 +383,16 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                           }`}
                         >
                           <span
-                            className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
-                            style={{ backgroundColor: ws.color || "#6b7280" }}
+                            className="inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 transition-all duration-200 hover:-translate-y-0.5"
+                            style={{ backgroundColor: badgeBg, borderColor: badgeBorder }}
                             aria-hidden
-                          />
-                          <span className="text-sm leading-none">{ws.icon || "•"}</span>
+                          >
+                            <span
+                              className="inline-flex h-2 w-2 rounded-full border border-white/25"
+                              style={{ backgroundColor: ws.color || "#6b7280" }}
+                            />
+                            <span className="text-sm leading-none">{ws.icon || "📁"}</span>
+                          </span>
                           <span className="truncate">{ws.name}</span>
                         </Link>
                       );

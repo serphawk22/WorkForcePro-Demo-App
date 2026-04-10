@@ -20,6 +20,26 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 
+const WORKSPACE_ICON_OPTIONS = [
+  { value: "⭐", label: "Star" },
+  { value: "📁", label: "Folder" },
+  { value: "📊", label: "Analytics" },
+  { value: "📘", label: "Book" },
+  { value: "🧠", label: "Brain" },
+  { value: "⚙", label: "Settings" },
+];
+
+const WORKSPACE_COLOR_OPTIONS = [
+  { value: "#7C3AED", label: "Purple" },
+  { value: "#2563EB", label: "Blue" },
+  { value: "#EA580C", label: "Orange" },
+  { value: "#16A34A", label: "Green" },
+  { value: "#DB2777", label: "Pink" },
+];
+
+const getColorPickerValue = (color: string) =>
+  /^#[0-9A-Fa-f]{6}$/.test(color) ? color : "#7C3AED";
+
 const STATUS_OPTIONS = [
   { value: "", label: "All Status" },
   { value: "todo", label: "To Do" },
@@ -159,7 +179,7 @@ export default function WorkspaceProjectsPage() {
   const onCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!workspaceForm.name.trim()) {
-      toast.error("Workspace name is required");
+      toast.error("Workspace title is required");
       return;
     }
 
@@ -404,40 +424,97 @@ export default function WorkspaceProjectsPage() {
 
       {showCreateWsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5">
+          <div className="w-full max-w-md rounded-2xl border border-white/25 bg-gradient-to-br from-white/90 to-purple-50/70 p-5 shadow-2xl backdrop-blur-xl dark:border-white/15 dark:from-violet-950/70 dark:to-fuchsia-950/40">
             <h3 className="text-lg font-bold text-foreground">Create Workspace</h3>
             <form onSubmit={onCreateWorkspace} className="mt-4 space-y-3">
-              <input
-                value={workspaceForm.name}
-                onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Workspace Name"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                required
-              />
-              <textarea
-                value={workspaceForm.description}
-                onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Description (optional)"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                rows={3}
-              />
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Title</label>
+                <input
+                  value={workspaceForm.name}
+                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Workspace Title"
+                  className="w-full rounded-lg border border-border bg-background/85 px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</label>
+                <textarea
+                  value={workspaceForm.description}
+                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe this workspace"
+                  className="w-full rounded-lg border border-border bg-background/85 px-3 py-2 text-sm"
+                  rows={3}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  value={workspaceForm.icon}
-                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                  placeholder="Icon"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                />
-                <input
-                  type="color"
-                  value={workspaceForm.color}
-                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-border bg-background px-1"
-                />
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
+                      const active = workspaceForm.icon === iconOpt.value;
+                      return (
+                        <button
+                          key={iconOpt.value}
+                          type="button"
+                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
+                          title={iconOpt.label}
+                          className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
+                            active
+                              ? "border-primary bg-primary/15 text-primary shadow-sm"
+                              : "border-border bg-background/80 hover:border-primary/40"
+                          }`}
+                        >
+                          {iconOpt.value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    value={workspaceForm.icon}
+                    onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
+                    placeholder="Any emoji"
+                    className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Color</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {WORKSPACE_COLOR_OPTIONS.map((colorOpt) => {
+                      const active = workspaceForm.color === colorOpt.value;
+                      return (
+                        <button
+                          key={colorOpt.value}
+                          type="button"
+                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, color: colorOpt.value }))}
+                          title={colorOpt.label}
+                          className={`h-9 rounded-lg border transition-all duration-200 hover:-translate-y-0.5 ${
+                            active ? "border-white shadow-md ring-2 ring-primary/45" : "border-white/30"
+                          }`}
+                          style={{ backgroundColor: colorOpt.value }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={getColorPickerValue(workspaceForm.color)}
+                      onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
+                      className="h-8 w-10 rounded border border-border bg-background p-0.5"
+                    />
+                    <input
+                      value={workspaceForm.color}
+                      onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
+                      placeholder="Any color (hex/rgb/hsl/name)"
+                      className="w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowCreateWsModal(false)} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" disabled={savingWorkspace} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+                <button type="submit" disabled={savingWorkspace} className="rounded-lg bg-gradient-to-r from-primary to-fuchsia-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25">
                   {savingWorkspace ? "Saving..." : "Create"}
                 </button>
               </div>
@@ -448,40 +525,97 @@ export default function WorkspaceProjectsPage() {
 
       {showEditWsModal && workspace && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5">
+          <div className="w-full max-w-md rounded-2xl border border-white/25 bg-gradient-to-br from-white/90 to-purple-50/70 p-5 shadow-2xl backdrop-blur-xl dark:border-white/15 dark:from-violet-950/70 dark:to-fuchsia-950/40">
             <h3 className="text-lg font-bold text-foreground">Edit Workspace</h3>
             <form onSubmit={onEditWorkspace} className="mt-4 space-y-3">
-              <input
-                value={workspaceForm.name}
-                onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Workspace Name"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                required
-              />
-              <textarea
-                value={workspaceForm.description}
-                onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Description (optional)"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                rows={3}
-              />
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Title</label>
+                <input
+                  value={workspaceForm.name}
+                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Workspace Title"
+                  className="w-full rounded-lg border border-border bg-background/85 px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</label>
+                <textarea
+                  value={workspaceForm.description}
+                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe this workspace"
+                  className="w-full rounded-lg border border-border bg-background/85 px-3 py-2 text-sm"
+                  rows={3}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  value={workspaceForm.icon}
-                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                  placeholder="Icon"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                />
-                <input
-                  type="color"
-                  value={workspaceForm.color}
-                  onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-border bg-background px-1"
-                />
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
+                      const active = workspaceForm.icon === iconOpt.value;
+                      return (
+                        <button
+                          key={iconOpt.value}
+                          type="button"
+                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
+                          title={iconOpt.label}
+                          className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
+                            active
+                              ? "border-primary bg-primary/15 text-primary shadow-sm"
+                              : "border-border bg-background/80 hover:border-primary/40"
+                          }`}
+                        >
+                          {iconOpt.value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    value={workspaceForm.icon}
+                    onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
+                    placeholder="Any emoji"
+                    className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Color</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {WORKSPACE_COLOR_OPTIONS.map((colorOpt) => {
+                      const active = workspaceForm.color === colorOpt.value;
+                      return (
+                        <button
+                          key={colorOpt.value}
+                          type="button"
+                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, color: colorOpt.value }))}
+                          title={colorOpt.label}
+                          className={`h-9 rounded-lg border transition-all duration-200 hover:-translate-y-0.5 ${
+                            active ? "border-white shadow-md ring-2 ring-primary/45" : "border-white/30"
+                          }`}
+                          style={{ backgroundColor: colorOpt.value }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={getColorPickerValue(workspaceForm.color)}
+                      onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
+                      className="h-8 w-10 rounded border border-border bg-background p-0.5"
+                    />
+                    <input
+                      value={workspaceForm.color}
+                      onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, color: e.target.value }))}
+                      placeholder="Any color (hex/rgb/hsl/name)"
+                      className="w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowEditWsModal(false)} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" disabled={savingWorkspace} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+                <button type="submit" disabled={savingWorkspace} className="rounded-lg bg-gradient-to-r from-primary to-fuchsia-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25">
                   {savingWorkspace ? "Saving..." : "Save"}
                 </button>
               </div>

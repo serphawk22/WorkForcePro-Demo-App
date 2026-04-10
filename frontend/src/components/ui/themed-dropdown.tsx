@@ -26,6 +26,8 @@ type DropdownMenuProps = {
   optionClassName?: string;
   disabled?: boolean;
   align?: "start" | "center" | "end";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function DropdownMenu({
@@ -39,8 +41,17 @@ export function DropdownMenu({
   optionClassName,
   disabled,
   align = "start",
+  open: controlledOpen,
+  onOpenChange,
 }: DropdownMenuProps) {
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = React.useCallback((nextOpen: boolean) => {
+    onOpenChange?.(nextOpen);
+    if (controlledOpen === undefined) {
+      setInternalOpen(nextOpen);
+    }
+  }, [controlledOpen, onOpenChange]);
   const [activeIndex, setActiveIndex] = React.useState(() => {
     const selectedIndex = options.findIndex((option) => option.value === value);
     if (selectedIndex >= 0) return selectedIndex;
@@ -129,7 +140,7 @@ export function DropdownMenu({
             {selectedOption?.icon && <span className="shrink-0 text-muted-foreground">{selectedOption.icon}</span>}
             <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>{selectedOption?.label || placeholder}</span>
           </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 data-[state=open]:rotate-180" />
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -141,7 +152,6 @@ export function DropdownMenu({
           menuClassName,
         )}
         onEscapeKeyDown={() => setOpen(false)}
-        onPointerDownOutside={() => setOpen(false)}
       >
         <div className="max-h-72 overflow-auto pr-1">
           {options.map((option, index) => {

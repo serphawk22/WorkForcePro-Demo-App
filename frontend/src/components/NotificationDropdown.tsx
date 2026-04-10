@@ -54,8 +54,9 @@ export function NotificationDropdown() {
     setLoading(true);
     const response = await getNotifications();
     if (response.data) {
-      setNotifications(response.data);
-      setUnreadCount(response.data.filter((n) => !n.is_read).length);
+      const unreadOnly = response.data.filter((n) => !n.is_read);
+      setNotifications(unreadOnly);
+      setUnreadCount(unreadOnly.length);
     }
     setLoading(false);
   }
@@ -63,12 +64,8 @@ export function NotificationDropdown() {
   async function handleMarkAsRead(notificationId: number) {
     const response = await markNotificationRead(notificationId);
     if (response.data) {
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notificationId ? { ...n, is_read: true } : n
-        )
-      );
+      // Remove immediately from visible list.
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
       setUnreadCount((prev) => Math.max(0, prev - 1));
     }
   }
@@ -76,9 +73,7 @@ export function NotificationDropdown() {
   async function handleMarkAllAsRead() {
     const response = await markAllNotificationsRead();
     if (response.data) {
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, is_read: true }))
-      );
+      setNotifications([]);
       setUnreadCount(0);
     }
   }

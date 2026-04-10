@@ -53,6 +53,28 @@ ALLOWED_VOICE_MIME_TYPES = {
 MAX_VOICE_NOTE_BYTES = 8 * 1024 * 1024
 
 
+def _clear_actionable_task_notifications(session: Session, task_id: int) -> None:
+    """Remove all task-linked notifications once a task is completed/submitted."""
+    actionable_types = [
+        NotificationType.TASK_ASSIGNED,
+        NotificationType.TASK_SUBMITTED,
+        NotificationType.TASK_APPROVED,
+        NotificationType.TASK_COMMENT,
+        NotificationType.TASK_REJECTED,
+        NotificationType.SUBTASK_ASSIGNED,
+        NotificationType.SUBTASK_REVIEWING,
+        NotificationType.SUBTASK_APPROVED,
+        NotificationType.SUBTASK_REJECTED,
+    ]
+    statement = select(Notification).where(
+        Notification.task_id == task_id,
+        Notification.type.in_(actionable_types),
+    )
+    notifications = session.exec(statement).all()
+    for notification in notifications:
+        session.delete(notification)
+
+
 def _resolve_voice_content_type(raw_content_type: str, filename: Optional[str]) -> str:
     content_type = (raw_content_type or "").lower().strip().split(";", 1)[0].strip()
     if content_type:
@@ -671,6 +693,23 @@ async def update_task_status(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Employees can only change status to 'To Do', 'In Progress', or 'Done'"
             )
+
+        # Require at least one progress update comment today before submitting for review/testing.
+        if new_status == TaskStatus.submitted:
+            today_start_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            tomorrow_start_utc = today_start_utc + timedelta(days=1)
+            todays_comment_stmt = select(TaskComment).where(
+                TaskComment.task_id == task.id,
+                TaskComment.user_id == current_user.id,
+                TaskComment.created_at >= today_start_utc,
+                TaskComment.created_at < tomorrow_start_utc,
+            )
+            has_todays_comment = session.exec(todays_comment_stmt).first()
+            if not has_todays_comment:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Add today's progress comment before moving task to testing",
+                )
         
         # When employee marks task as "Done" (submitted), notify all admins
         if new_status == TaskStatus.submitted:
@@ -731,6 +770,11 @@ async def update_task_status(
                 )
     
     task.status = new_status
+
+    # Once work is completed/submitted, clear older actionable notifications for this task.
+    if new_status in [TaskStatus.submitted, TaskStatus.approved]:
+        _clear_actionable_task_notifications(session, task.id)
+
     if new_status == TaskStatus.approved:
         task.completed_at = task.completed_at or datetime.now(timezone.utc)
     elif new_status in [TaskStatus.todo, TaskStatus.in_progress, TaskStatus.submitted, TaskStatus.reviewing, TaskStatus.rejected]:
@@ -962,16 +1006,47 @@ async def create_task(
                 detail="Child task must belong to the same workspace as the parent task",
             )
 
+    requested_assignee_id = task_data.assigned_to
+    assignment_alert_message: Optional[str] = None
+    if parent_task and parent_task.assigned_to and requested_assignee_id != parent_task.assigned_to:
+        requested_assignee_id = parent_task.assigned_to
+        assignment_alert_message = (
+            f"Assignment corrected automatically for task '{task_data.title}'. "
+            f"Because it belongs to project #{parent_task.id}, it was assigned to that project's assignee."
+        )
+
+    if not requested_assignee_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee is required",
+        )
+
+    if not task_data.due_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Due date is required",
+        )
+
+    reporter_id = task_data.assigned_by or admin.id
+    reporter = session.exec(select(User).where(User.id == reporter_id)).first()
+    if not reporter:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reporter not found",
+        )
+    ensure_same_organization(admin, reporter.organization_id, "reporter")
+
     # Verify assignee exists if provided
     assignee = None
-    if task_data.assigned_to:
-        assignee_stmt = select(User).where(User.id == task_data.assigned_to)
+    if requested_assignee_id:
+        assignee_stmt = select(User).where(User.id == requested_assignee_id)
         assignee = session.exec(assignee_stmt).first()
         if not assignee:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Assigned user not found"
             )
+        ensure_same_organization(admin, assignee.organization_id, "assignee")
     
     # Validate GitHub and deployed links if provided
     if task_data.github_link and not (task_data.github_link.startswith("http://") or task_data.github_link.startswith("https://")):
@@ -1023,8 +1098,8 @@ async def create_task(
         actual_hours=task_data.actual_hours,
         workspace_id=task_data.workspace_id,
         parent_task_id=task_data.parent_task_id,
-        assigned_to=task_data.assigned_to,
-        assigned_by=task_data.assigned_by or admin.id,
+        assigned_to=requested_assignee_id,
+        assigned_by=reporter_id,
         github_link=task_data.github_link,
         deployed_link=task_data.deployed_link,
         public_id=generate_public_id(session, Task),
@@ -1054,6 +1129,15 @@ async def create_task(
             type=NotificationType.TASK_ASSIGNED,
             message=f"New task assigned: Task #{task.id} - {task.title}",
             task_id=task.id
+        )
+
+    if assignment_alert_message:
+        create_notification(
+            session=session,
+            user_id=admin.id,
+            type=NotificationType.TASK_COMMENT,
+            message=assignment_alert_message,
+            task_id=task.id,
         )
     
     return task
@@ -1385,6 +1469,7 @@ async def update_task(
     
     # Update fields
     update_data = task_data.model_dump(exclude_unset=True)
+    parent_task = None
     if "parent_task_id" in update_data and update_data["parent_task_id"] is not None:
         parent_task = session.exec(select(Task).where(Task.id == update_data["parent_task_id"])).first()
         if not parent_task:
@@ -1398,6 +1483,36 @@ async def update_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Task cannot be its own parent"
             )
+    elif task.parent_task_id:
+        parent_task = session.exec(select(Task).where(Task.id == task.parent_task_id)).first()
+
+    assignment_alert_message: Optional[str] = None
+    requested_assignee_id = update_data.get("assigned_to", task.assigned_to)
+    if parent_task and parent_task.assigned_to and requested_assignee_id != parent_task.assigned_to:
+        update_data["assigned_to"] = parent_task.assigned_to
+        assignment_alert_message = (
+            f"Assignment corrected automatically for task '{task.title}'. "
+            f"Because it belongs to project #{parent_task.id}, it was assigned to that project's assignee."
+        )
+
+    if "assigned_to" in update_data and update_data["assigned_to"] is not None:
+        assignee = session.exec(select(User).where(User.id == update_data["assigned_to"])).first()
+        if not assignee:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assigned user not found"
+            )
+        ensure_same_organization(admin, assignee.organization_id, "assignee")
+
+    if "assigned_by" in update_data and update_data["assigned_by"] is not None:
+        reporter = session.exec(select(User).where(User.id == update_data["assigned_by"])).first()
+        if not reporter:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reporter not found"
+            )
+        ensure_same_organization(admin, reporter.organization_id, "reporter")
+
     if "workspace_id" in update_data and update_data["workspace_id"] is not None:
         workspace = session.exec(select(Workspace).where(Workspace.id == update_data["workspace_id"])).first()
         if not workspace:
@@ -1434,6 +1549,15 @@ async def update_task(
             type=NotificationType.TASK_ASSIGNED,
             message=f"New task assigned: Task #{task.id} - {task.title} (Reassigned by {admin.name})",
             task_id=task.id
+        )
+
+    if assignment_alert_message:
+        create_notification(
+            session=session,
+            user_id=admin.id,
+            type=NotificationType.TASK_COMMENT,
+            message=assignment_alert_message,
+            task_id=task.id,
         )
     
     return task

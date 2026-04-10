@@ -57,6 +57,7 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === "admin";
+  const canManageTasks = isAdmin;
   const workspaceFilter = workspaceQuery ? Number(workspaceQuery) : undefined;
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -214,6 +215,20 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
                           </div>
                         )}
                       </div>
+                      {canManageTasks && (
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/project-management/projects?edit=${task.id}`);
+                            }}
+                            className="rounded-md border border-primary/35 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
