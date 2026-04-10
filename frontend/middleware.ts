@@ -11,6 +11,15 @@ function isEmployeePortalRoute(pathname: string): boolean {
   return false;
 }
 
+function normalizeRole(rawRole: unknown): "admin" | "employee" | "manager" | null {
+  if (typeof rawRole !== "string") return null;
+  const role = rawRole.trim().toLowerCase();
+  if (role === "admin" || role.endsWith(".admin")) return "admin";
+  if (role === "employee" || role.endsWith(".employee")) return "employee";
+  if (role === "manager" || role.endsWith(".manager")) return "manager";
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
@@ -44,8 +53,9 @@ export async function middleware(request: NextRequest) {
             payload = JSON.parse(atob(padded));
           }
           const isExpiredRoot = payload.exp * 1000 < Date.now();
-          if (!isExpiredRoot && payload.role) {
-            const dashboardUrl = payload.role === "admin" ? "/admin/dashboard" : "/employee-dashboard";
+          const role = normalizeRole(payload.role);
+          if (!isExpiredRoot && role) {
+            const dashboardUrl = role === "admin" ? "/admin/dashboard" : "/employee-dashboard";
             return NextResponse.redirect(new URL(dashboardUrl, request.url));
           }
         } catch {
@@ -78,7 +88,7 @@ export async function middleware(request: NextRequest) {
         payload = JSON.parse(atob(padded));
       }
       
-      userRole = payload.role;
+      userRole = normalizeRole(payload.role);
       isExpired = payload.exp * 1000 < Date.now();
       
       console.log('[MIDDLEWARE] Token found - Role:', userRole, 'Expired:', isExpired);

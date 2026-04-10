@@ -68,17 +68,15 @@ async def create_subtask(
             detail="Cannot create subtasks on approved tasks"
         )
     
-    # Verify assignee exists if provided
-    assignee = None
-    if subtask_data.assigned_to:
-        assignee_stmt = select(User).where(User.id == subtask_data.assigned_to)
-        assignee = session.exec(assignee_stmt).first()
-        if not assignee:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Assigned user not found"
-            )
-            ensure_same_organization(current_user, assignee.organization_id, "assignee")
+    # Assignee is mandatory for subtask creation.
+    assignee_stmt = select(User).where(User.id == subtask_data.assigned_to)
+    assignee = session.exec(assignee_stmt).first()
+    if not assignee:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assigned user not found"
+        )
+    ensure_same_organization(current_user, assignee.organization_id, "assignee")
 
     # If creating nested subtask, verify parent_subtask belongs to same task.
     if subtask_data.parent_subtask_id is not None:
@@ -385,8 +383,26 @@ async def update_subtask(
     # Track original assignee for notification logic
     original_assignee_id = subtask.assigned_to
 
-    # Update fields
     update_data = subtask_data.model_dump(exclude_unset=True)
+
+    # Subtasks must remain assigned to an employee.
+    if "assigned_to" in update_data and update_data["assigned_to"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee is required for subtasks"
+        )
+
+    if "assigned_to" in update_data:
+        assignee_stmt = select(User).where(User.id == update_data["assigned_to"])
+        assignee = session.exec(assignee_stmt).first()
+        if not assignee:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assigned user not found"
+            )
+        ensure_same_organization(current_user, assignee.organization_id, "assignee")
+
+    # Update fields
     for key, value in update_data.items():
         setattr(subtask, key, value)
     

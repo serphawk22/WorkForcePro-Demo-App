@@ -217,9 +217,11 @@ export default function TaskSheetPage() {
     const rowPaddingY = 12;
     const lineHeight = 20;
     const headerHeight = 48;
-    const colWidths = [320];
-    const headers = ["Employee Name"];
-    const width = padding * 2 + colWidths.reduce((a, b) => a + b, 0);
+    const colWidths = [260, 700];
+    const headers = ["Employee Name", "Entry"];
+    const tableWidth = colWidths.reduce((a, b) => a + b, 0);
+    const dividerX = padding + colWidths[0];
+    const width = padding * 2 + tableWidth;
 
     const scratch = document.createElement("canvas");
     const sctx = scratch.getContext("2d");
@@ -227,8 +229,12 @@ export default function TaskSheetPage() {
     sctx.font = "15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
 
     const computedRows = rows.map((row) => {
-      const wrapped = [getWrappedLines(sctx, String(row.user_name || "-"), colWidths[0] - 20)];
-      const height = rowPaddingY * 2 + wrapped[0].length * lineHeight;
+      const wrapped = [
+        getWrappedLines(sctx, String(row.user_name || "-"), colWidths[0] - 20),
+        getWrappedLines(sctx, String(row.achievements || "-"), colWidths[1] - 20),
+      ];
+      const maxLines = Math.max(wrapped[0].length, wrapped[1].length);
+      const height = rowPaddingY * 2 + maxLines * lineHeight;
       return { wrapped, height };
     });
 
@@ -258,47 +264,49 @@ export default function TaskSheetPage() {
 
     let x = padding;
     ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+    ctx.fillRect(padding, tableTop, tableWidth, headerHeight);
     ctx.strokeStyle = "#e2e8f0";
     ctx.lineWidth = 1;
-    ctx.strokeRect(padding, tableTop, colWidths.reduce((a, b) => a + b, 0), headerHeight);
+    ctx.strokeRect(padding, tableTop, tableWidth, headerHeight);
 
     ctx.fillStyle = "#0f172a";
     ctx.font = "700 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
     headers.forEach((h, idx) => {
       ctx.fillText(h, x + 10, tableTop + 30);
       x += colWidths[idx];
-      if (idx < colWidths.length - 1) {
-        ctx.beginPath();
-        ctx.moveTo(x, tableTop);
-        ctx.lineTo(x, tableTop + headerHeight);
-        ctx.stroke();
-      }
     });
 
     let y = tableTop + headerHeight;
     computedRows.forEach((rowData, rowIdx) => {
       let cellX = padding;
       ctx.strokeStyle = "#e2e8f0";
-      ctx.strokeRect(padding, y, colWidths.reduce((a, b) => a + b, 0), rowData.height);
+      ctx.strokeRect(padding, y, tableWidth, rowData.height);
 
-      rowData.wrapped.forEach((lines) => {
+      rowData.wrapped.forEach((lines, colIdx) => {
         ctx.fillStyle = "#0f172a";
         ctx.font = "600 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
         lines.forEach((line, lineIdx) => {
           ctx.fillText(line, cellX + 10, y + rowPaddingY + 16 + lineIdx * lineHeight);
         });
-        cellX += colWidths[0];
+        cellX += colWidths[colIdx];
       });
 
       y += rowData.height;
       if (rowIdx < computedRows.length - 1) {
         ctx.beginPath();
         ctx.moveTo(padding, y);
-        ctx.lineTo(padding + colWidths.reduce((a, b) => a + b, 0), y);
+        ctx.lineTo(padding + tableWidth, y);
         ctx.stroke();
       }
     });
+
+    // Match inner divider to table outer border style.
+    ctx.beginPath();
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.moveTo(dividerX + 0.5, tableTop);
+    ctx.lineTo(dividerX + 0.5, tableTop + headerHeight + bodyHeight);
+    ctx.stroke();
 
     return canvas;
   };

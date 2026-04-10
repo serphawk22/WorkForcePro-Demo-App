@@ -591,7 +591,7 @@ export interface Subtask {
 export interface SubtaskCreate {
   title: string;
   description?: string;
-  assigned_to?: number;
+  assigned_to: number;
   parent_subtask_id?: number;  // For creating nested subtasks
 }
 

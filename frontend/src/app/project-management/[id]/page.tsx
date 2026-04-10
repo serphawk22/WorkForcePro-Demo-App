@@ -558,13 +558,17 @@ export default function ProjectDetailPage() {
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskId || !newSubtask.title.trim()) return;
+    if (!newSubtask.assigned_to) {
+      toast.error("Please assign this subtask to an employee");
+      return;
+    }
 
     setIsCreatingSubtask(true);
     try {
       const response = await createSubtask(taskId, {
         title: newSubtask.title.trim(),
         description: newSubtask.description.trim() || undefined,
-        assigned_to: newSubtask.assigned_to ? Number(newSubtask.assigned_to) : undefined,
+        assigned_to: Number(newSubtask.assigned_to),
         parent_subtask_id: selectedParentSubtaskId ?? undefined,
       });
 
@@ -1692,13 +1696,14 @@ export default function ProjectDetailPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-foreground">Assign To</label>
+                  <label className="mb-1 block text-xs font-semibold text-foreground">Assign To *</label>
                   <select
                     value={newSubtask.assigned_to}
                     onChange={(e) => setNewSubtask((prev) => ({ ...prev, assigned_to: e.target.value }))}
                     className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    required
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">Select team member</option>
                     {assignableUsers.map((u) => (
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}

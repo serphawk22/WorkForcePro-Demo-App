@@ -17,77 +17,6 @@ export default function LoginPage() {
   const [serverWaking, setServerWaking] = useState(false);
   const router = useRouter();
 
-  const pageStyles = {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px",
-    background:
-      "radial-gradient(circle at top, rgba(124, 58, 237, 0.24), transparent 36%), linear-gradient(180deg, rgba(8, 6, 20, 0.98), rgba(16, 10, 34, 0.98))",
-    color: "hsl(var(--foreground))",
-  } as const;
-
-  const shellStyles = {
-    width: "100%",
-    maxWidth: "420px",
-  } as const;
-
-  const cardStyles = {
-    borderRadius: "24px",
-    padding: "32px",
-    background: "linear-gradient(145deg, rgba(48, 24, 82, 0.88), rgba(28, 16, 48, 0.92))",
-    border: "1px solid rgba(255, 255, 255, 0.10)",
-    boxShadow: "0 18px 70px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04) inset",
-    backdropFilter: "blur(22px)",
-    WebkitBackdropFilter: "blur(22px)",
-  } as const;
-
-  const labelStyles = {
-    display: "block",
-    fontSize: "0.875rem",
-    fontWeight: 500,
-    color: "rgba(255, 244, 232, 0.92)",
-    marginBottom: "8px",
-  } as const;
-
-  const inputStyles = {
-    width: "100%",
-    height: "46px",
-    borderRadius: "14px",
-    padding: "0 16px 0 40px",
-    background: "rgba(255, 255, 255, 0.08)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
-    color: "white",
-    outline: "none",
-    boxSizing: "border-box",
-  } as const;
-
-  const passwordButtonStyles = {
-    width: "46px",
-    height: "46px",
-    borderRadius: "14px",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
-    background: "rgba(255, 255, 255, 0.08)",
-    color: "white",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  } as const;
-
-  const submitStyles = {
-    width: "100%",
-    height: "48px",
-    borderRadius: "9999px",
-    border: "none",
-    fontWeight: 700,
-    fontSize: "0.95rem",
-    color: "white",
-    background: "linear-gradient(135deg, hsl(289 36% 26%), hsl(266 62% 18%))",
-    boxShadow: "0 10px 24px rgba(124, 58, 237, 0.35)",
-  } as const;
-
   // 2️⃣ Auto-redirect if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -237,8 +166,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={pageStyles}>
-      <div style={shellStyles}>
+    <div className="login-page-shell">
+      <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center shadow-primary">
@@ -250,7 +179,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div style={cardStyles}>
+        <div className="login-page-card">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-card-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground mt-1">Sign in to your account to continue</p>
@@ -284,7 +213,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label style={labelStyles}>Email</label>
+              <label className="login-page-label">Email</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
                 <input
@@ -293,15 +222,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="text-sm"
-                  style={inputStyles}
+                  className="login-page-input text-sm"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label style={labelStyles}>Password</label>
+              <label className="login-page-label">Password</label>
               <div className="flex items-stretch gap-2">
                 <div className="relative flex-1">
                   <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
@@ -311,15 +239,14 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="text-sm"
-                    style={inputStyles}
+                    className="login-page-input text-sm"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  style={passwordButtonStyles}
+                  className="login-page-password-toggle"
                 >
                   {showPassword ? <Eye size={16} /> : <EyeClosed size={16} />}
                 </button>
@@ -339,8 +266,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full inline-flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              style={submitStyles}
+              className="login-page-submit w-full inline-flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

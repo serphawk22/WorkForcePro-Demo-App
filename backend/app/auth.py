@@ -147,6 +147,34 @@ def ensure_same_organization(current_user: User, org_id: Optional[int], resource
         )
 
 
+def normalize_role_value(raw_role: object) -> str:
+    """Normalize enum/string role values to canonical lowercase role names."""
+    if raw_role is None:
+        return ""
+    if isinstance(raw_role, UserRole):
+        return raw_role.value
+    if hasattr(raw_role, "value"):
+        try:
+            value = str(getattr(raw_role, "value")).strip().lower()
+            if value:
+                return value
+        except Exception:
+            pass
+    role_str = str(raw_role).strip().lower()
+    if role_str.endswith(".admin"):
+        return "admin"
+    if role_str.endswith(".manager"):
+        return "manager"
+    if role_str.endswith(".employee"):
+        return "employee"
+    return role_str
+
+
+def is_admin_user(user: User) -> bool:
+    """Return True when a user has admin privileges."""
+    return normalize_role_value(user.role) == UserRole.admin.value
+
+
 def get_current_user_optional(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
@@ -166,7 +194,7 @@ def get_current_admin_user(
 ) -> User:
     """Verify the current user is an admin."""
     current_user = get_current_user(request, token, session)
-    if current_user.role != UserRole.admin:
+    if not is_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

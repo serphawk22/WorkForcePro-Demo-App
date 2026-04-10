@@ -14,6 +14,7 @@ from app.auth import (
     create_access_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     get_current_user,
+    normalize_role_value,
     set_auth_cookie,
     clear_auth_cookie,
     COOKIE_NAME,
@@ -158,6 +159,8 @@ def login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user account"
         )
+
+    role_value = normalize_role_value(user.role)
     
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -165,7 +168,7 @@ def login(
         data={
             "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
-            "role": user.role.value,
+            "role": role_value,
             "name": user.name,
             "organization_id": user.organization_id,
         },
@@ -178,7 +181,7 @@ def login(
         user_id=user.id,
         email=user.email,
         name=user.name,
-        role=user.role.value,
+        role=role_value,
         organization_id=user.organization_id,
     )
 
@@ -223,6 +226,8 @@ def login_json(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user account"
         )
+
+    role_value = normalize_role_value(user.role)
     
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -230,7 +235,7 @@ def login_json(
         data={
             "sub": str(user.id),  # JWT sub claim must be a string
             "email": user.email,
-            "role": user.role.value,
+            "role": role_value,
             "name": user.name,
             "organization_id": user.organization_id,
         },
@@ -246,7 +251,7 @@ def login_json(
         user_id=user.id,
         email=user.email,
         name=user.name,
-        role=user.role.value,
+        role=role_value,
         organization_id=user.organization_id,
     )
 
@@ -275,14 +280,15 @@ def verify_session(
     current_user: User = Depends(get_current_user)
 ):
     """Verify if the current session is valid."""
-    print(f"[VERIFY] User authenticated: {current_user.email} (Role: {current_user.role.value})")
+    role_value = normalize_role_value(current_user.role)
+    print(f"[VERIFY] User authenticated: {current_user.email} (Role: {role_value})")
     return {
         "authenticated": True,
         "user": {
             "id": current_user.id,
             "email": current_user.email,
             "name": current_user.name,
-            "role": current_user.role.value,
+            "role": role_value,
             "organization_id": current_user.organization_id,
         }
     }

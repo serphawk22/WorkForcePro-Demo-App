@@ -966,10 +966,16 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
         ? assigneeValue
         : undefined;
 
+    if (!Number.isFinite(parsedAssignee as number)) {
+      toast.error("Please assign this subtask to an employee");
+      setIsCreatingSubtask(false);
+      return;
+    }
+
     const result = await createSubtask(taskId, {
       title: newSubtask.title,
       description: newSubtask.description || "",
-      assigned_to: Number.isFinite(parsedAssignee as number) ? parsedAssignee : undefined,
+      assigned_to: parsedAssignee as number,
       parent_subtask_id: selectedParentSubtaskId ?? undefined,
     });
     if (result.error) {
@@ -1164,12 +1170,12 @@ export default function ProjectsPage({ workspaceQuery }: ProjectsClientProps) {
               {isAdmin ? (
                 <div onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu
-                    value={subtask.assigned_to ? String(subtask.assigned_to) : "__unassigned"}
-                    onValueChange={(value) => handleAssigneeChange(subtask.id, value === "__unassigned" ? undefined : Number(value))}
-                    options={[
-                      { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
-                      ...employeeOptions,
-                    ]}
+                    value={subtask.assigned_to ? String(subtask.assigned_to) : ""}
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      handleAssigneeChange(subtask.id, Number(value));
+                    }}
+                    options={employeeOptions}
                     placeholder="Assignee"
                     triggerClassName="w-[210px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
                   />
