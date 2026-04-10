@@ -8,7 +8,7 @@ import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdo
 import {
   Plus, Search, Circle, Loader2, X, CheckCircle2, Clock, AlertCircle,
   Github, ExternalLink, ChevronRight, ChevronDown, ListTree, Link, Save, Copy, Repeat,
-  Mic, Square, Play, Pause, Trash2, RotateCcw, SlidersHorizontal, MessageSquarePlus,
+  Mic, Square, Play, Pause, Trash2, RotateCcw, SlidersHorizontal,
 } from "lucide-react";
 import {
   getAllTasks, createTask, updateTaskStatus, updateTaskLinks, updateTask,
@@ -986,20 +986,6 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
     void loadData(true);
   };
 
-  const handleQuickDailyUpdate = async (taskId: number) => {
-    const update = window.prompt("Add today's progress update:");
-    if (!update || !update.trim()) {
-      toast.error("Comment cannot be empty");
-      return;
-    }
-    const result = await createTaskComment({ task_id: taskId, comment: update.trim() });
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success("Daily update saved");
-  };
-
   const handleAssigneeChange = async (taskId: number, userId?: number) => {
     const result = await updateTask(taskId, { assigned_to: userId });
     if (result.error) toast.error(result.error);
@@ -1356,7 +1342,7 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
             </div>
           </td>
           <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
-            <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
+            <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenu
                 value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
                 onValueChange={(value) => handleStatusChange(subtask.id, value)}
@@ -1365,18 +1351,6 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
                 disabled={!isAdmin && (subtask.status === "submitted" || subtask.status === "approved")}
                 triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
               />
-              {!isAdmin && subtask.status === "in_progress" && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleQuickDailyUpdate(subtask.id);
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
-                >
-                  <MessageSquarePlus size={11} /> Daily Update
-                </button>
-              )}
             </div>
           </td>
           <td className={`py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px] ${isColumnVisible("reporter") ? "" : "hidden"}`}>
@@ -2021,7 +1995,7 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
                         </div>
                       </td>
                       <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
-                        <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
+                        <div onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu
                             value={isAdmin ? task.status : (task.status === "submitted" ? "done" : task.status)}
                             onValueChange={(value) => handleStatusChange(task.id, value)}
@@ -2030,18 +2004,6 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
                             disabled={!isAdmin && (task.status === "submitted" || task.status === "approved")}
                             triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
                           />
-                          {!isAdmin && task.status === "in_progress" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleQuickDailyUpdate(task.id);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition-colors"
-                            >
-                              <MessageSquarePlus size={11} /> Daily Update
-                            </button>
-                          )}
                         </div>
                       </td>
                       <td className={`py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px] ${isColumnVisible("reporter") ? "" : "hidden"}`}>
