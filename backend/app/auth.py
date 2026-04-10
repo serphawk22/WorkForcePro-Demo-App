@@ -172,7 +172,12 @@ def normalize_role_value(raw_role: object) -> str:
 
 def is_admin_user(user: User) -> bool:
     """Return True when a user has admin privileges."""
-    return normalize_role_value(user.role) == UserRole.admin.value
+    normalized = normalize_role_value(user.role)
+    if normalized in {UserRole.admin.value, UserRole.manager.value}:
+        return True
+    # Backward compatibility for legacy/custom role labels like
+    # "administrator", "super_admin", "org-admin", etc.
+    return "admin" in normalized
 
 
 def get_current_user_optional(

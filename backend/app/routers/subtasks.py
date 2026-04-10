@@ -26,7 +26,7 @@ from app.models import (
     User, Task, Subtask, SubtaskCreate, SubtaskUpdate, SubtaskRead, SubtaskWithAssignee,
     SubtaskStatus, UserRole, NotificationType, TaskStatus
 )
-from app.auth import get_current_user, get_current_admin_user, ensure_same_organization
+from app.auth import get_current_user, get_current_admin_user, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["Subtasks"])
@@ -247,7 +247,7 @@ async def get_task_subtasks_hierarchy(
     subtask_dict = {}
     for subtask in subtasks:
         # Check permission
-        if current_user.role != UserRole.admin:
+        if not is_admin_user(current_user):
             if task.assigned_to != current_user.id and subtask.assigned_to != current_user.id:
                 continue
         
@@ -325,7 +325,7 @@ async def update_subtask_status(
     admin_statuses = {SubtaskStatus.reviewing, SubtaskStatus.approved, SubtaskStatus.rejected}
     employee_statuses = {SubtaskStatus.todo, SubtaskStatus.in_progress, SubtaskStatus.completed}
 
-    if current_user.role == UserRole.admin:
+    if is_admin_user(current_user):
         # Admin can only set reviewing, approved, rejected
         if new_status not in admin_statuses:
             raise HTTPException(
@@ -353,7 +353,7 @@ async def update_subtask_status(
     session.refresh(subtask)
 
     # Notify the assignee when admin reviews their subtask
-    if current_user.role == UserRole.admin and subtask.assigned_to:
+    if is_admin_user(current_user) and subtask.assigned_to:
         notification_map = {
             SubtaskStatus.reviewing: (NotificationType.SUBTASK_REVIEWING, f"Your subtask '{subtask.title}' is under review"),
             SubtaskStatus.approved: (NotificationType.SUBTASK_APPROVED, f"Your subtask '{subtask.title}' has been approved! "),
@@ -394,7 +394,7 @@ async def update_subtask(
     ensure_same_organization(current_user, parent_task.organization_id, "parent task")
     
     # Check permission
-    if current_user.role != UserRole.admin:
+    if not is_admin_user(current_user):
         # Only parent task assignee can update
         if parent_task.assigned_to != current_user.id:
             raise HTTPException(
@@ -498,7 +498,7 @@ async def delete_subtask(
         )
     
     # Check permission
-    if current_user.role != UserRole.admin:
+    if not is_admin_user(current_user):
         # Get parent task
         task_stmt = select(Task).where(Task.id == subtask.parent_task_id)
         task = session.exec(task_stmt).first()

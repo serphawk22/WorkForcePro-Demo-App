@@ -284,8 +284,20 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
     { value: "high", label: "High", icon: <span className="text-red-400">🔴</span> },
   ];
 
-  const adminStatusOptions: DropdownOption[] = [
-    { value: "reviewing", label: "Testing", icon: <span className="text-amber-400">🟡</span> },
+  const taskAdminStatusOptions: DropdownOption[] = [
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span>, disabled: true },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span>, disabled: true },
+    { value: "submitted", label: "Completed", icon: <span className="text-green-400">●</span>, disabled: true },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
+  ];
+
+  const subtaskAdminStatusOptions: DropdownOption[] = [
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span>, disabled: true },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span>, disabled: true },
+    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span>, disabled: true },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
     { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
     { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
   ];
@@ -293,7 +305,7 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
   const employeeStatusOptions: DropdownOption[] = [
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "done", label: "Move to Testing", icon: <span className="text-green-400">●</span> },
+    { value: "done", label: "Completed", icon: <span className="text-green-400">●</span> },
   ];
 
   const employeeOptions: DropdownOption[] = useMemo(() => employees.map((emp) => ({
@@ -928,41 +940,6 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
     const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
     const previousTask = tasks.find((task) => task.id === taskId);
 
-    if (!isAdmin && user) {
-      if (selectedStatus === "in_progress") {
-        const dailyPlan = window.prompt("Add today's in-progress update before continuing:");
-        if (!dailyPlan || !dailyPlan.trim()) {
-          toast.error("Daily in-progress comment is required");
-          return;
-        }
-        const commentResult = await createTaskComment({ task_id: taskId, comment: dailyPlan.trim() });
-        if (commentResult.error) {
-          toast.error(commentResult.error);
-          return;
-        }
-      }
-
-      if (selectedStatus === "done") {
-        const commentsResult = await getTaskComments(taskId);
-        const hasTodaysUpdate = (commentsResult.data || []).some(
-          (comment) => comment.user_id === user.id && sameLocalDay(comment.created_at)
-        );
-
-        if (!hasTodaysUpdate) {
-          const completionUpdate = window.prompt("Add today's completion/testing handoff update:");
-          if (!completionUpdate || !completionUpdate.trim()) {
-            toast.error("Add today's progress comment before moving to testing");
-            return;
-          }
-          const commentResult = await createTaskComment({ task_id: taskId, comment: completionUpdate.trim() });
-          if (commentResult.error) {
-            toast.error(commentResult.error);
-            return;
-          }
-        }
-      }
-    }
-
     // Optimistic UI update to avoid page-level loading flicker.
     setTasks((prev) => prev.map((task) => (
       task.id === taskId ? { ...task, status: backendStatus as Task["status"] } : task
@@ -1346,9 +1323,9 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
               <DropdownMenu
                 value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
                 onValueChange={(value) => handleStatusChange(subtask.id, value)}
-                options={isAdmin ? adminStatusOptions : employeeStatusOptions}
+                options={isAdmin ? subtaskAdminStatusOptions : employeeStatusOptions}
                 placeholder="Status"
-                disabled={!isAdmin && (subtask.status === "submitted" || subtask.status === "approved")}
+                disabled={isAdmin && !["completed", "reviewing", "approved", "rejected"].includes(subtask.status)}
                 triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
               />
             </div>
@@ -1999,9 +1976,9 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
                           <DropdownMenu
                             value={isAdmin ? task.status : (task.status === "submitted" ? "done" : task.status)}
                             onValueChange={(value) => handleStatusChange(task.id, value)}
-                            options={isAdmin ? adminStatusOptions : employeeStatusOptions}
+                            options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
                             placeholder="Status"
-                            disabled={!isAdmin && (task.status === "submitted" || task.status === "approved")}
+                            disabled={isAdmin && !["submitted", "reviewing", "approved", "rejected"].includes(task.status)}
                             triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
                           />
                         </div>
@@ -2559,16 +2536,11 @@ export default function ProjectsPage({ workspaceQuery, statusQuery, editQuery }:
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-foreground">Status</label>
                   <DropdownMenu
-                    value={[
-                      "reviewing",
-                      "approved",
-                      "rejected",
-                    ].includes(editingTaskForm.status || selectedTaskForEdit.status)
-                      ? (editingTaskForm.status || selectedTaskForEdit.status)
-                      : "reviewing"}
+                    value={editingTaskForm.status || selectedTaskForEdit.status}
                     onValueChange={(value) => setEditingTaskForm({ ...editingTaskForm, status: value as Task["status"] })}
-                    options={adminStatusOptions}
+                    options={taskAdminStatusOptions}
                     placeholder="Status"
+                    disabled={!['submitted', 'reviewing', 'approved', 'rejected'].includes(editingTaskForm.status || selectedTaskForEdit.status)}
                     triggerClassName="w-full"
                   />
                 </div>

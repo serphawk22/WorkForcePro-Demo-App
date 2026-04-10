@@ -33,7 +33,7 @@ from app.models import (
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
     SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus, Workspace,
 )
-from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization
+from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
 
@@ -534,7 +534,7 @@ async def get_recurring_task_instances(
     if not getattr(task, "is_recurring", False):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task is not recurring")
 
-    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
+    if task.assigned_to != current_user.id and not is_admin_user(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this task")
 
     # Ensure instances exist around today
@@ -616,7 +616,7 @@ async def update_task_instance_status(
     if not task:
         raise HTTPException(status_code=404, detail="Parent task not found")
     _ensure_task_access(current_user, task, "task")
-    if current_user.role != UserRole.admin and task.assigned_to != current_user.id:
+    if not is_admin_user(current_user) and task.assigned_to != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this instance")
 
     inst.status = body.status
@@ -647,7 +647,7 @@ async def materialize_recurring_instances(
     import os
     secret = os.getenv("CRON_SECRET", "")
     cron_ok = bool(secret and x_cron_secret == secret)
-    admin_ok = current_user is not None and current_user.role == UserRole.admin
+    admin_ok = current_user is not None and is_admin_user(current_user)
     if not cron_ok and not admin_ok:
         raise HTTPException(status_code=403, detail="Not authorized")
     n = materialize_all_recurring_tasks(session, horizon_days=180)
@@ -678,7 +678,7 @@ async def update_task_status(
     _ensure_task_access(current_user, task, "task")
     
     # Check permission: must be assigned to task or be admin
-    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
+    if task.assigned_to != current_user.id and not is_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this task"
@@ -694,23 +694,6 @@ async def update_task_status(
                 detail="Employees can only change status to 'To Do', 'In Progress', or 'Done'"
             )
 
-        # Require at least one progress update comment today before submitting for review/testing.
-        if new_status == TaskStatus.submitted:
-            today_start_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-            tomorrow_start_utc = today_start_utc + timedelta(days=1)
-            todays_comment_stmt = select(TaskComment).where(
-                TaskComment.task_id == task.id,
-                TaskComment.user_id == current_user.id,
-                TaskComment.created_at >= today_start_utc,
-                TaskComment.created_at < tomorrow_start_utc,
-            )
-            has_todays_comment = session.exec(todays_comment_stmt).first()
-            if not has_todays_comment:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Add today's progress comment before moving task to testing",
-                )
-        
         # When employee marks task as "Done" (submitted), notify all admins
         if new_status == TaskStatus.submitted:
             task.done_by_employee = True
@@ -731,7 +714,7 @@ async def update_task_status(
                     task_id=task.id
                 )
     
-    elif current_user.role == UserRole.admin:
+    elif is_admin_user(current_user):
         # Admin can only set: reviewing, approved, rejected
         allowed_statuses = [TaskStatus.reviewing, TaskStatus.approved, TaskStatus.rejected]
         if new_status not in allowed_statuses:
@@ -807,7 +790,7 @@ async def update_task_links(
     _ensure_task_access(current_user, task, "task")
     
     # Check permission: must be assigned to task or be admin
-    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
+    if task.assigned_to != current_user.id and not is_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this task"
@@ -1288,7 +1271,7 @@ async def get_task(
     _ensure_task_access(current_user, task, "task")
     
     # Check permission
-    if task.assigned_to != current_user.id and current_user.role != UserRole.admin:
+    if task.assigned_to != current_user.id and not is_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this task"

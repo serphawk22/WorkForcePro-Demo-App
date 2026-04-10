@@ -41,7 +41,13 @@ interface AuthContextType {
 function normalizeUserRole(rawRole: unknown): "admin" | "employee" {
   if (typeof rawRole !== "string") return "employee";
   const normalized = rawRole.trim().toLowerCase();
-  if (normalized === "admin" || normalized.endsWith(".admin")) return "admin";
+  if (
+    normalized === "admin" ||
+    normalized === "manager" ||
+    normalized.endsWith(".admin") ||
+    normalized.endsWith(".manager") ||
+    normalized.includes("admin")
+  ) return "admin";
   if (normalized === "employee" || normalized.endsWith(".employee")) return "employee";
   return "employee";
 }

@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
+import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 import { 
   ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle,
   Github, ExternalLink, ListTree, MessageSquare, Send, Edit, Save, X,
@@ -647,6 +648,33 @@ export default function ProjectDetailPage() {
       : [];
   }, [project?.subtasks, selectedSubtaskAssigneeFilter]);
 
+  const taskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
+    { value: "todo", label: "To Do", icon: <Circle size={12} />, disabled: true },
+    { value: "in_progress", label: "In Progress", icon: <Clock size={12} />, disabled: true },
+    { value: "submitted", label: "Completed", icon: <CheckCircle2 size={12} />, disabled: true },
+    { value: "reviewing", label: "Reviewing", icon: <AlertCircle size={12} /> },
+    { value: "approved", label: "Approved", icon: <CheckCircle2 size={12} /> },
+    { value: "rejected", label: "Rejected", icon: <X size={12} /> },
+  ]), []);
+
+  const subtaskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
+    { value: "todo", label: "To Do", icon: <Circle size={12} />, disabled: true },
+    { value: "in_progress", label: "In Progress", icon: <Clock size={12} />, disabled: true },
+    { value: "completed", label: "Completed", icon: <CheckCircle2 size={12} />, disabled: true },
+    { value: "reviewing", label: "Reviewing", icon: <AlertCircle size={12} /> },
+    { value: "approved", label: "Approved", icon: <CheckCircle2 size={12} /> },
+    { value: "rejected", label: "Rejected", icon: <X size={12} /> },
+  ]), []);
+
+  const subtaskAssigneeFilterOptions: DropdownOption[] = useMemo(() => ([
+    { value: "all", label: "All Assignees", icon: <User size={12} /> },
+    ...subtaskAssigneeOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      icon: <User size={12} />,
+    })),
+  ]), [subtaskAssigneeOptions]);
+
   const renderSubtaskTree = (subtasks: any[], level = 0) => {
     return subtasks.map((subtask) => (
       <div key={subtask.id} className="space-y-2">
@@ -718,44 +746,42 @@ export default function ProjectDetailPage() {
             
             <div className="flex items-center gap-2">
               {isAdmin ? (
-                <select
+                <DropdownMenu
                   value={subtask.status}
-                  onChange={(e) => handleSubtaskStatusChange(subtask.id, e.target.value)}
-                  className={`text-xs rounded-lg px-3 py-1.5 border border-white/20 bg-white/50 dark:bg-white/10 backdrop-blur-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${
+                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, value)}
+                  options={subtaskAdminStatusOptions}
+                  disabled={!['completed', 'reviewing', 'approved', 'rejected'].includes(subtask.status)}
+                  triggerClassName={`w-[145px] rounded-lg px-3 py-1.5 text-xs font-medium ${
                     subtask.status === 'approved' ? 'text-green-500' :
                     subtask.status === 'rejected' ? 'text-red-500' :
                     subtask.status === 'reviewing' ? 'text-purple-500' : 'text-muted-foreground'
                   }`}
-                >
-                  <option value="reviewing">Reviewing</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
+                />
               ) : (
-                <select
+                <DropdownMenu
                   value={subtask.status}
-                  onChange={(e) => handleSubtaskStatusChange(subtask.id, e.target.value)}
-                  disabled={subtask.assigned_to !== user?.id}
-                  className={`text-xs rounded-lg px-3 py-1.5 border border-white/20 bg-white/50 dark:bg-white/10 backdrop-blur-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50 ${
+                  onValueChange={(value) => handleSubtaskStatusChange(subtask.id, value)}
+                  options={['reviewing', 'approved', 'rejected'].includes(subtask.status)
+                    ? [{
+                        value: subtask.status,
+                        label: subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1),
+                        icon: <AlertCircle size={12} />,
+                        disabled: true,
+                      }]
+                    : [
+                        { value: 'todo', label: 'To Do', icon: <Circle size={12} /> },
+                        { value: 'in_progress', label: 'In Progress', icon: <Clock size={12} /> },
+                        { value: 'completed', label: 'Completed', icon: <CheckCircle2 size={12} /> },
+                      ]}
+                  disabled={subtask.assigned_to !== user?.id || ['reviewing', 'approved', 'rejected'].includes(subtask.status)}
+                  triggerClassName={`w-[145px] rounded-lg px-3 py-1.5 text-xs font-medium ${
                     subtask.status === 'completed' ? 'text-green-500' :
                     subtask.status === 'in_progress' ? 'text-blue-500' :
                     subtask.status === 'approved' ? 'text-green-500' :
                     subtask.status === 'rejected' ? 'text-red-500' :
                     subtask.status === 'reviewing' ? 'text-purple-500' : 'text-muted-foreground'
                   }`}
-                >
-                  {['reviewing', 'approved', 'rejected'].includes(subtask.status) ? (
-                    <option value={subtask.status} disabled style={{textTransform:'capitalize'}}>
-                      {subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1)}
-                    </option>
-                  ) : (
-                    <>
-                      <option value="todo">To Do</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                    </>
-                  )}
-                </select>
+                />
               )}
             </div>
           </div>
@@ -1083,19 +1109,17 @@ export default function ProjectDetailPage() {
                 </span>
                 
                 {isAdmin ? (
-                  <select
+                  <DropdownMenu
                     value={task.status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border-none cursor-pointer ${statusColors[task.status]}`}
-                  >
-                    <option value="reviewing">Reviewing</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+                    onValueChange={(value) => handleStatusChange(value)}
+                    options={taskAdminStatusOptions}
+                    disabled={!['submitted', 'reviewing', 'approved', 'rejected'].includes(task.status)}
+                    triggerClassName={`w-[170px] rounded-full px-3 py-1.5 text-xs font-semibold ${statusColors[task.status]}`}
+                  />
                 ) : (
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusColors[task.status]}`}>
                     {statusIcons[task.status]}
-                    {task.status === "submitted" ? "Done (Pending Review)" : 
+                    {task.status === "submitted" ? "Completed (Pending Review)" : 
                      task.status === "approved" ? "Approved" :
                      task.status === "rejected" ? "Needs Changes" :
                      task.status === "in_progress" ? "In Progress" : "To Do"}
@@ -1567,16 +1591,12 @@ export default function ProjectDetailPage() {
                   Subtasks ({filteredSubtasks.length}{selectedSubtaskAssigneeFilter === "all" ? "" : ` of ${subtasks.length}`})
                 </h2>
                 <div className="flex items-center gap-2">
-                  <select
+                  <DropdownMenu
                     value={selectedSubtaskAssigneeFilter}
-                    onChange={(e) => setSelectedSubtaskAssigneeFilter(e.target.value)}
-                    className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs text-foreground"
-                  >
-                    <option value="all">All Assignees</option>
-                    {subtaskAssigneeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                    onValueChange={setSelectedSubtaskAssigneeFilter}
+                    options={subtaskAssigneeFilterOptions}
+                    triggerClassName="w-[170px] rounded-lg px-2.5 py-2 text-xs font-medium"
+                  />
 
                   <button
                     onClick={() => openAddSubtaskModal(null)}
