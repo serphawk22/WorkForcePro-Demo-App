@@ -196,6 +196,7 @@ export interface Task {
   deployed_link?: string | null;
   created_at: string;
   updated_at: string;
+  latest_comment_at?: string | null;
   assignee_name?: string;
   assignee_email?: string;
   assigned_by_name?: string;
@@ -444,6 +445,8 @@ export interface OrganizationSettings {
   timezone?: string | null;
   weekly_progress_enabled_for_admin: boolean;
   weekly_progress_enabled_for_employee: boolean;
+  task_warning_stage_days: number;
+  task_warning_comment_days: number;
   created_by?: number | null;
   created_at: string;
 }
@@ -502,6 +505,8 @@ export async function getMyOrganizationSettings(): Promise<ApiResponse<Organizat
 export async function updateMyOrganizationSettings(data: {
   weekly_progress_enabled_for_admin?: boolean;
   weekly_progress_enabled_for_employee?: boolean;
+  task_warning_stage_days?: number;
+  task_warning_comment_days?: number;
 }): Promise<ApiResponse<OrganizationSettings>> {
   return apiFetch<OrganizationSettings>("/organizations/me", {
     method: "PUT",

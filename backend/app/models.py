@@ -103,6 +103,8 @@ class OrganizationBase(SQLModel):
     timezone: Optional[str] = Field(default="UTC", max_length=64)
     weekly_progress_enabled_for_admin: bool = Field(default=True)
     weekly_progress_enabled_for_employee: bool = Field(default=True)
+    task_warning_stage_days: int = Field(default=3, ge=1, le=30)
+    task_warning_comment_days: int = Field(default=2, ge=1, le=30)
 
 
 class Organization(OrganizationBase, table=True):
@@ -123,6 +125,8 @@ class OrganizationUpdate(SQLModel):
     timezone: Optional[str] = Field(default=None, max_length=64)
     weekly_progress_enabled_for_admin: Optional[bool] = None
     weekly_progress_enabled_for_employee: Optional[bool] = None
+    task_warning_stage_days: Optional[int] = Field(default=None, ge=1, le=30)
+    task_warning_comment_days: Optional[int] = Field(default=None, ge=1, le=30)
 
 
 class OrganizationRead(OrganizationBase):
@@ -410,6 +414,7 @@ class TaskRead(TaskBase):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    latest_comment_at: Optional[datetime] = None
     is_recurring: bool = False
     recurrence_type: Optional[str] = None
     recurrence_interval: int = 1

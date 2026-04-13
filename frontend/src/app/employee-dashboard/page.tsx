@@ -367,6 +367,32 @@ export default function EmployeeDashboard() {
     (a, b) => +new Date(b.created_at) - +new Date(a.created_at)
   )[0] || null;
 
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekAhead = new Date(todayStart);
+  weekAhead.setDate(weekAhead.getDate() + 7);
+
+  const projectSummary = {
+    totalAssigned: tasks.length,
+    active: activeTasks.length,
+    todo: activeTasks.filter((task) => task.status === "todo").length,
+    inProgress: activeTasks.filter((task) => task.status === "in_progress").length,
+    inReview: tasks.filter((task) => task.status === "submitted" || task.status === "reviewing").length,
+    overdue: activeTasks.filter((task) => {
+      if (!task.due_date) return false;
+      return new Date(task.due_date) < todayStart;
+    }).length,
+    dueThisWeek: activeTasks.filter((task) => {
+      if (!task.due_date) return false;
+      const due = new Date(task.due_date);
+      return due >= todayStart && due <= weekAhead;
+    }).length,
+  };
+
+  const nextDueProject = [...activeTasks]
+    .filter((task) => task.due_date)
+    .sort((a, b) => +new Date(a.due_date!) - +new Date(b.due_date!))[0] || null;
+
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={["employee"]}>
@@ -490,7 +516,7 @@ export default function EmployeeDashboard() {
             />
           </div>
 
-          <section className="grid gap-4 xl:grid-cols-2">
+          <section className="grid gap-4 xl:grid-cols-3">
             <article className={`${overviewCardBase} p-5`}>
               <div className={`${overviewCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
               {overviewEdgeGlow}
@@ -611,6 +637,69 @@ export default function EmployeeDashboard() {
                     </div>
                   </div>
                 )}
+              </div>
+            </article>
+
+            <article className={`${overviewCardBase} p-5`}>
+              <div className={`${overviewCardGlow} from-cyan-500/20 via-blue-500/10 to-transparent dark:from-cyan-500/20 dark:via-blue-500/10`} />
+              {overviewEdgeGlow}
+              <div className="relative space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Projects</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground">Project Summary</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/project-management")}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
+                  >
+                    View
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Assigned</p>
+                    <p className="mt-1 text-2xl font-bold text-cyan-700 dark:text-cyan-300">{projectSummary.totalAssigned}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Active</p>
+                    <p className="mt-1 text-2xl font-bold text-blue-700 dark:text-blue-300">{projectSummary.active}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">To Do</p>
+                    <p className="mt-1 text-lg font-bold text-muted-foreground">{projectSummary.todo}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">In Progress</p>
+                    <p className="mt-1 text-lg font-bold text-blue-600 dark:text-blue-300">{projectSummary.inProgress}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">In Review</p>
+                    <p className="mt-1 text-lg font-bold text-amber-600 dark:text-amber-300">{projectSummary.inReview}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Overdue</p>
+                    <p className="mt-1 text-lg font-bold text-rose-600 dark:text-rose-300">{projectSummary.overdue}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-background/40 p-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Upcoming</p>
+                  <p className="text-xs text-foreground">
+                    Due this week: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{projectSummary.dueThisWeek}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground line-clamp-1">
+                    Next due: {nextDueProject
+                      ? `${nextDueProject.title} • ${new Date(nextDueProject.due_date!).toLocaleDateString()}`
+                      : "No upcoming deadlines"}
+                  </p>
+                </div>
               </div>
             </article>
           </section>

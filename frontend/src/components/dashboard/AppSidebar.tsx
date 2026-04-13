@@ -13,7 +13,6 @@ import {
   Users,
   UserCheck,
   LogOut,
-  User,
   Pin,
   ClipboardList,
   ChevronDown,
@@ -24,6 +23,37 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
 
+function LighthouseNavIcon({ size = 18, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M32 5 23.5 10h17z" fill="currentColor" />
+      <rect x="26" y="10" width="12" height="9" rx="1.5" fill="currentColor" />
+      <rect x="26.8" y="10.8" width="3.2" height="6.8" rx="0.7" fill="hsl(var(--background))" opacity="0.95" />
+      <rect x="33.9" y="10.8" width="3.2" height="6.8" rx="0.7" fill="hsl(var(--background))" opacity="0.95" />
+
+      <path d="M18 16.5 7 19.5 18 20.8 25.5 18.9z" fill="currentColor" opacity="0.18" />
+      <path d="M46 16.5 57 19.5 46 20.8 38.5 18.9z" fill="currentColor" opacity="0.18" />
+
+      <path d="M24.7 19h14.6l1.3 3.8H23.4z" fill="currentColor" />
+      <path d="M25.8 22.8h12.4l2.2 18.5H23.6z" fill="currentColor" />
+
+      <path d="M29.4 27.1h5.2v3.3h-5.2z" fill="hsl(var(--background))" />
+      <path d="M29.8 34h4.4v3h-4.4z" fill="hsl(var(--background))" />
+      <path d="M29.8 41.3v-3.1a2.2 2.2 0 0 1 4.4 0v3.1z" fill="hsl(var(--background))" />
+
+      <path d="M9 44.2c10.1-1.9 18.1-1.7 24.1.8 7.7 3.2 15.8 3.2 22.3 1.1-2.5 4.1-7.7 6.4-14.6 6.4-3.4 0-6.7-.6-9.8-1.8-3.7-1.4-8.8-2.5-15.6-1.4-2.9.5-5.4-1.8-6.4-5.1z" fill="currentColor" />
+      <path d="M9.4 48.3c6.1-.6 10.8.2 14.5 1.6 5.1 2 10.6 2.6 16 1.9-3.1 3.8-8.4 6.2-14.5 6.2-7.2 0-13.2-3.3-16-8.1z" fill="currentColor" />
+    </svg>
+  );
+}
+
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
@@ -32,7 +62,7 @@ const adminLinks = [
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
-  { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
+  { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },
   { label: "Weekly Progress", icon: ClipboardList, path: "/admin/weekly-progress" },
 ];
 
@@ -41,7 +71,7 @@ const employeeLinks = [
   { label: "Weekly Progress", icon: ClipboardList, path: "/weekly-progress" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
-  { label: "The Lighthouse", icon: User, path: "/my-space/task-sheet" },
+  { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },
 ];
 
 interface SidebarProps {
@@ -69,6 +99,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   const [isCompactOpen, setIsCompactOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
   const PIN_KEY = "workforcepro_sidebarPinned";
+  const SIDEBAR_WIDTH_KEY = "workforcepro_sidebarWidth";
   const LAST_PROJECT_WORKSPACE_KEY = "workforcepro_lastProjectWorkspaceId";
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -78,7 +109,17 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       return false;
     }
   });
-  const [sidebarWidth, setSidebarWidth] = useState(72);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 280;
+    try {
+      const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      const parsed = raw ? Number(raw) : NaN;
+      if (Number.isFinite(parsed)) {
+        return Math.min(360, Math.max(220, parsed));
+      }
+    } catch {}
+    return 280;
+  });
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragStartX = useRef(0);
@@ -94,7 +135,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     : 240;
   const effectiveWidth = isCompactViewport
     ? compactSidebarWidth
-    : (isPinned ? 240 : isDragging ? sidebarWidth : (isOpen ? 240 : 72));
+    : (isOpen ? sidebarWidth : 72);
 
   // Persist pinned state across route navigation (prevents collapse on menu click).
   useEffect(() => {
@@ -102,6 +143,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       localStorage.setItem(PIN_KEY, String(isPinned));
     } catch {}
   }, [isPinned]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+    } catch {}
+  }, [sidebarWidth]);
 
   useEffect(() => {
     console.log('[AppSidebar] User state changed:', user?.email || 'null');
@@ -179,7 +226,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingRef.current) return;
       const delta = e.clientX - dragStartX.current;
-      const newWidth = Math.min(240, Math.max(60, dragStartWidth.current + delta));
+      const newWidth = Math.min(360, Math.max(220, dragStartWidth.current + delta));
       setSidebarWidth(newWidth);
     };
     const handleMouseUp = () => {
@@ -195,14 +242,13 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   }, []);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    // Pinned behavior: sidebar remains expanded; resizing is disabled while pinned.
-    if (isPinned || isCompactViewport) return;
+    if (isCompactViewport) return;
     dragStartX.current = e.clientX;
-    dragStartWidth.current = isOpen ? 240 : 72;
+    dragStartWidth.current = isOpen ? sidebarWidth : 280;
     isDraggingRef.current = true;
     setIsDragging(true);
     e.preventDefault();
-  }, [isOpen, isPinned, isCompactViewport]);
+  }, [isCompactViewport, isOpen, sidebarWidth]);
 
   const handleCompactNavigate = () => {
     if (isCompactViewport) {
@@ -336,9 +382,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                     parentActive ? "h-5 opacity-100" : "h-0 opacity-0"
                   }`} />
                   <FolderKanban size={18} className={`shrink-0 transition-transform duration-200 ${parentActive ? "scale-110" : "group-hover/item:scale-110"}`} />
-                  <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
-                    isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
-                  }`}>
+                  <span className={`flex-1 min-w-0 truncate whitespace-nowrap transition-all duration-200 ${
+                      isOpen ? "opacity-100" : "opacity-0 max-w-0"
+                    }`}>
                     Project Management
                   </span>
                   {isOpen && (
@@ -437,14 +483,14 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 }`} />
 
                 <link.icon
-                  size={18}
+                  size={link.label === "The Lighthouse" ? 26 : 18}
                   className={`shrink-0 transition-transform duration-200 ${
                     isActive ? "scale-110" : "group-hover/item:scale-110"
                   }`}
                 />
 
-                <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${
-                  isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
+                <span className={`flex-1 min-w-0 truncate whitespace-nowrap transition-all duration-200 ${
+                  isOpen ? "opacity-100" : "opacity-0 max-w-0"
                 }`}>
                   {link.label}
                 </span>

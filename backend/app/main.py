@@ -119,6 +119,10 @@ async def lifespan(app: FastAPI):
             logo VARCHAR(1000),
             theme VARCHAR(64),
             timezone VARCHAR(64) DEFAULT 'UTC',
+            weekly_progress_enabled_for_admin BOOLEAN DEFAULT TRUE,
+            weekly_progress_enabled_for_employee BOOLEAN DEFAULT TRUE,
+            task_warning_stage_days INTEGER DEFAULT 3,
+            task_warning_comment_days INTEGER DEFAULT 2,
             created_by INTEGER,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
@@ -156,6 +160,8 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT \'UTC\'',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_admin BOOLEAN DEFAULT TRUE',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_employee BOOLEAN DEFAULT TRUE',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS task_warning_stage_days INTEGER DEFAULT 3',
+        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS task_warning_comment_days INTEGER DEFAULT 2',
         # Leave request document attachment columns
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_data TEXT',
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS document_filename VARCHAR',

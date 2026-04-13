@@ -54,6 +54,8 @@ export default function WeeklyProgressAdminSection() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [weeklyEnabledForAdmin, setWeeklyEnabledForAdmin] = useState(true);
   const [weeklyEnabledForEmployee, setWeeklyEnabledForEmployee] = useState(true);
+  const [taskWarningStageDays, setTaskWarningStageDays] = useState(3);
+  const [taskWarningCommentDays, setTaskWarningCommentDays] = useState(2);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailUserId, setDetailUserId] = useState<number | null>(null);
@@ -113,6 +115,8 @@ export default function WeeklyProgressAdminSection() {
     } else if (res.data) {
       setWeeklyEnabledForAdmin(res.data.weekly_progress_enabled_for_admin);
       setWeeklyEnabledForEmployee(res.data.weekly_progress_enabled_for_employee);
+      setTaskWarningStageDays(res.data.task_warning_stage_days || 3);
+      setTaskWarningCommentDays(res.data.task_warning_comment_days || 2);
     }
     setSettingsLoading(false);
   }, []);
@@ -128,6 +132,8 @@ export default function WeeklyProgressAdminSection() {
   const saveWeeklySetting = async (payload: {
     weekly_progress_enabled_for_admin?: boolean;
     weekly_progress_enabled_for_employee?: boolean;
+    task_warning_stage_days?: number;
+    task_warning_comment_days?: number;
   }) => {
     setSavingSettings(true);
     const res = await updateMyOrganizationSettings(payload);
@@ -139,6 +145,8 @@ export default function WeeklyProgressAdminSection() {
       if (res.data) {
         setWeeklyEnabledForAdmin(res.data.weekly_progress_enabled_for_admin);
         setWeeklyEnabledForEmployee(res.data.weekly_progress_enabled_for_employee);
+        setTaskWarningStageDays(res.data.task_warning_stage_days || 3);
+        setTaskWarningCommentDays(res.data.task_warning_comment_days || 2);
       }
     }
     setSavingSettings(false);
@@ -446,6 +454,43 @@ export default function WeeklyProgressAdminSection() {
                 />
                 Admin enabled
               </label>
+              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border/70 bg-background/50 px-3 py-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Stage window (days)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={taskWarningStageDays}
+                    disabled={settingsLoading || savingSettings}
+                    onChange={(e) => setTaskWarningStageDays(Number(e.target.value) || 1)}
+                    className="w-28 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Comment window (days)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={taskWarningCommentDays}
+                    disabled={settingsLoading || savingSettings}
+                    onChange={(e) => setTaskWarningCommentDays(Number(e.target.value) || 1)}
+                    className="w-28 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={settingsLoading || savingSettings}
+                  onClick={() => void saveWeeklySetting({
+                    task_warning_stage_days: taskWarningStageDays,
+                    task_warning_comment_days: taskWarningCommentDays,
+                  })}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  Save warning rules
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => load()}

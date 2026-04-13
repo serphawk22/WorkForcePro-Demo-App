@@ -25,9 +25,11 @@ import {
   ProjectDetails,
   TaskComment,
   User as ApiUser,
+  getMyOrganizationSettings,
   updateTask,
   uploadTaskVoiceNote,
 } from "@/lib/api";
+import { getTaskWarningState, type TaskWarningSettings } from "@/lib/taskWarnings";
 import { toast } from "sonner";
 
 const MAX_VOICE_NOTE_SECONDS = 90;
@@ -102,6 +104,10 @@ export default function ProjectDetailPage() {
   const [voiceNoteBlob, setVoiceNoteBlob] = useState<Blob | null>(null);
   const [voiceNotePreviewUrl, setVoiceNotePreviewUrl] = useState<string | null>(null);
   const [isSavingVoiceNote, setIsSavingVoiceNote] = useState(false);
+  const [taskWarningSettings, setTaskWarningSettings] = useState<TaskWarningSettings>({
+    task_warning_stage_days: 3,
+    task_warning_comment_days: 2,
+  });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -270,6 +276,19 @@ export default function ProjectDetailPage() {
       if (response.data) setAssignableUsers(response.data);
     };
     loadAssignableUsers();
+  }, []);
+
+  useEffect(() => {
+    const loadWarningSettings = async () => {
+      const response = await getMyOrganizationSettings();
+      if (response.data) {
+        setTaskWarningSettings({
+          task_warning_stage_days: response.data.task_warning_stage_days || 3,
+          task_warning_comment_days: response.data.task_warning_comment_days || 2,
+        });
+      }
+    };
+    loadWarningSettings();
   }, []);
 
   useEffect(() => {
@@ -642,12 +661,6 @@ export default function ProjectDetailPage() {
     return project?.subtasks ? collectAssigneeOptions(project.subtasks) : [];
   }, [project?.subtasks]);
 
-  const filteredSubtasks = useMemo(() => {
-    return project?.subtasks
-      ? filterSubtaskTree(project.subtasks, selectedSubtaskAssigneeFilter)
-      : [];
-  }, [project?.subtasks, selectedSubtaskAssigneeFilter]);
-
   const taskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
     { value: "todo", label: "To Do", icon: <Circle size={12} />, disabled: true },
     { value: "in_progress", label: "In Progress", icon: <Clock size={12} />, disabled: true },
@@ -674,6 +687,69 @@ export default function ProjectDetailPage() {
       icon: <User size={12} />,
     })),
   ]), [subtaskAssigneeOptions]);
+
+  const priorityOrder: Record<string, number> = {
+    high: 0,
+    medium: 1,
+    low: 2,
+  };
+
+  const statusOrder: Record<string, number> = {
+    in_progress: 0,
+    todo: 1,
+    submitted: 2,
+    reviewing: 3,
+    approved: 4,
+    rejected: 5,
+  };
+
+  const sortSubtaskNodes = useCallback((nodes: any[]): any[] => {
+    return [...nodes]
+      .sort((left, right) => {
+        const leftPriority = priorityOrder[left.priority] ?? 99;
+        const rightPriority = priorityOrder[right.priority] ?? 99;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+        const leftStatus = statusOrder[left.status] ?? 99;
+        const rightStatus = statusOrder[right.status] ?? 99;
+        if (leftStatus !== rightStatus) return leftStatus - rightStatus;
+
+        return String(left.title || "").localeCompare(String(right.title || ""));
+      })
+      .map((node) => ({
+        ...node,
+        children: node.children?.length ? sortSubtaskNodes(node.children) : [],
+      }));
+  }, []);
+
+  const collectInProgressSubtasks = useCallback((nodes: any[]): any[] => {
+    const result: any[] = [];
+
+    const walk = (items: any[]) => {
+      items.forEach((item) => {
+        if (item.status === "in_progress") {
+          result.push(item);
+        }
+        if (item.children?.length) {
+          walk(item.children);
+        }
+      });
+    };
+
+    walk(nodes);
+    return result;
+  }, []);
+
+  const filteredSubtasks = useMemo(() => {
+    const filtered = project?.subtasks
+      ? filterSubtaskTree(project.subtasks, selectedSubtaskAssigneeFilter)
+      : [];
+    return sortSubtaskNodes(filtered);
+  }, [project?.subtasks, selectedSubtaskAssigneeFilter, sortSubtaskNodes]);
+
+  const inProgressSubtasks = useMemo(() => {
+    return collectInProgressSubtasks(filteredSubtasks);
+  }, [collectInProgressSubtasks, filteredSubtasks]);
 
   const renderSubtaskTree = (subtasks: any[], level = 0) => {
     return subtasks.map((subtask) => (
@@ -845,6 +921,11 @@ export default function ProjectDetailPage() {
   }
 
   const { task, subtasks, comments } = project;
+  const latestCommentAt = comments.length > 0 ? comments[comments.length - 1].created_at : task.latest_comment_at || null;
+  const warningState = getTaskWarningState(
+    { ...task, latest_comment_at: latestCommentAt },
+    taskWarningSettings
+  );
 
   const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -916,6 +997,18 @@ export default function ProjectDetailPage() {
               <span className="text-sm font-medium">Back to Projects</span>
             </button>
           </div>
+
+          {warningState.isWarning && warningState.reason && (
+            <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertCircle size={16} />
+                Warning flagged
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-red-600/90 dark:text-red-200/90">
+                {warningState.reason}
+              </p>
+            </div>
+          )}
 
           {/* Project Header Card */}
           <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
@@ -1127,6 +1220,25 @@ export default function ProjectDetailPage() {
                 )}
               </div>
             </div>
+
+            {warningState.isWarning && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-600 dark:text-red-300">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/15">
+                    <AlertCircle size={16} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Task warning</p>
+                    <p className="text-sm leading-relaxed">
+                      {warningState.reason}
+                    </p>
+                    <p className="text-xs text-red-600/80 dark:text-red-300/80">
+                      Thresholds: stage update after {taskWarningSettings.task_warning_stage_days} day(s), comment/activity after {taskWarningSettings.task_warning_comment_days} day(s).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               {/* Assignee */}
@@ -1609,6 +1721,35 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-3">
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">Priority sequence</p>
+                    <p className="text-xs text-muted-foreground">
+                      In progress: <span className="font-semibold text-foreground">{inProgressSubtasks.length}</span>
+                    </p>
+                  </div>
+                  {inProgressSubtasks.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {inProgressSubtasks.slice(0, 6).map((subtask) => (
+                        <span
+                          key={subtask.id}
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-500/25 bg-white/70 px-2.5 py-1 text-xs font-medium text-blue-600 dark:bg-white/5 dark:text-blue-300"
+                        >
+                          <Clock size={11} />
+                          <span className="max-w-[180px] truncate">{subtask.title}</span>
+                        </span>
+                      ))}
+                      {inProgressSubtasks.length > 6 && (
+                        <span className="inline-flex items-center rounded-full border border-border bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+                          +{inProgressSubtasks.length - 6} more
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No subtasks are currently in progress.</p>
+                  )}
+                </div>
+
                 {filteredSubtasks.length > 0 ? renderSubtaskTree(filteredSubtasks) : (
                   <div className="rounded-lg border border-dashed border-border p-6 text-center">
                     <p className="text-sm text-muted-foreground">

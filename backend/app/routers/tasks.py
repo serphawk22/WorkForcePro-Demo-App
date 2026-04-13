@@ -11,7 +11,7 @@ from datetime import datetime, timezone, date, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, UploadFile, File
 from pydantic import BaseModel
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from sqlmodel import Session, select
 
 
@@ -185,7 +185,23 @@ def _workspace_kwargs(workspace: Optional[Workspace], task: Task) -> dict:
         "workspace_color": workspace.color if workspace else None,
     }
 
-def _task_to_with_assignee(session: Session, task: Task) -> TaskWithAssignee:
+
+def _latest_comment_map(session: Session, task_ids: List[int]) -> dict[int, datetime]:
+    if not task_ids:
+        return {}
+
+    rows = session.exec(
+        select(TaskComment.task_id, func.max(TaskComment.created_at))
+        .where(TaskComment.task_id.in_(task_ids))
+        .group_by(TaskComment.task_id)
+    ).all()
+    return {task_id: latest_comment_at for task_id, latest_comment_at in rows}
+
+def _task_to_with_assignee(
+    session: Session,
+    task: Task,
+    latest_comment_at: Optional[datetime] = None,
+) -> TaskWithAssignee:
     assignee = None
     if task.assigned_to:
         assignee_stmt = select(User).where(User.id == task.assigned_to)
@@ -224,6 +240,7 @@ def _task_to_with_assignee(session: Session, task: Task) -> TaskWithAssignee:
         completed_at=task.completed_at,
         created_at=task.created_at,
         updated_at=task.updated_at,
+        latest_comment_at=latest_comment_at,
         assignee_name=assignee.name if assignee else None,
         assignee_email=assignee.email if assignee else None,
         assigned_by_name=assigner.name if assigner else None,
@@ -252,6 +269,7 @@ def _legacy_subtask_to_task_with_assignee(
     subtask: Subtask,
     root_task_id: int,
     workspace: Optional[Workspace],
+    latest_comment_at: Optional[datetime] = None,
 ) -> TaskWithAssignee:
     """Convert legacy `subtasks` rows into task-shaped rows for backward-compatible UI rendering."""
     assignee = None
@@ -292,6 +310,7 @@ def _legacy_subtask_to_task_with_assignee(
         completed_at=None,
         created_at=subtask.created_at,
         updated_at=subtask.updated_at,
+        latest_comment_at=latest_comment_at,
         assignee_name=assignee.name if assignee else None,
         assignee_email=assignee.email if assignee else None,
         assigned_by_name=assigner.name if assigner else None,
@@ -387,6 +406,7 @@ async def get_my_tasks(
     
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
+    latest_comment_lookup = _latest_comment_map(session, [task.id for task in tasks])
     
     result = []
     for task in tasks:
@@ -428,6 +448,7 @@ async def get_my_tasks(
             completed_at=task.completed_at,
             created_at=task.created_at,
             updated_at=task.updated_at,
+            latest_comment_at=latest_comment_lookup.get(task.id),
             assignee_name=assignee.name if assignee else None,
             assignee_email=assignee.email if assignee else None,
             assigned_by_name=assigner.name if assigner else None,
@@ -1243,7 +1264,11 @@ async def get_task_children(
         .order_by(Subtask.created_at.asc())
     ).all()
 
-    task_children_payload = [_task_to_with_assignee(session, child) for child in children]
+    latest_comment_lookup = _latest_comment_map(session, [child.id for child in children])
+    task_children_payload = [
+        _task_to_with_assignee(session, child, latest_comment_lookup.get(child.id))
+        for child in children
+    ]
     legacy_children_payload = [
         _legacy_subtask_to_task_with_assignee(session, subtask, task_id, workspace)
         for subtask in legacy_subtasks
@@ -1286,6 +1311,10 @@ async def get_task(
     if task.workspace_id:
         workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
         workspace = session.exec(workspace_stmt).first()
+
+    latest_comment_at = session.exec(
+        select(func.max(TaskComment.created_at)).where(TaskComment.task_id == task.id)
+    ).first()
     
     return TaskWithAssignee(
         id=task.id,
@@ -1310,6 +1339,7 @@ async def get_task(
         completed_at=task.completed_at,
         created_at=task.created_at,
         updated_at=task.updated_at,
+        latest_comment_at=latest_comment_at,
         assignee_name=assignee.name if assignee else None,
         assignee_email=assignee.email if assignee else None,
         assigned_by_name=None,  # Can be added if needed

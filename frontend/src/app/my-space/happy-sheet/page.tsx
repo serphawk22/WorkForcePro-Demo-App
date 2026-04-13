@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
@@ -52,6 +53,7 @@ const fmtLongDate = (date: string) =>
 
 export default function HappySheetPage() {
   const { user } = useAuth();
+  const router = useRouter();
 
   // ── Form state ──────────────────────────────────────────────
   const [selectedDate, setSelectedDate] = useState(todayStr());
@@ -296,6 +298,39 @@ export default function HappySheetPage() {
     setPendingDeleteEntry(null);
     setIsDeletingEntry(false);
     showFloatingToast({ type: "delete", message: "Entry deleted." });
+  };
+
+  const handleCreateTaskFromEntry = (entry: HappySheetEntry, sectionText?: string, sectionLabel?: string) => {
+    const titleSeed = sectionText || entry.goals_without_greed_impossible || entry.goals_without_greed || entry.what_made_you_happy;
+    const trimmedSeed = (titleSeed || "Reflection action item").trim();
+    const firstSentence = trimmedSeed.split(/(?<=[.!?])\s+/)[0] || trimmedSeed;
+    const projectTitle = `[Happy Sheet Task] ${firstSentence.slice(0, 72)}`;
+    const projectDescription = [
+      "Generated from Happy Sheet reflection",
+      "Tag: Happy Sheet Task",
+      `Source Section: ${sectionLabel || "General Reflection"}`,
+      `Date: ${entry.date}`,
+      `Happy Moment: ${entry.what_made_you_happy || "-"}`,
+      `Made Others Happy: ${entry.what_made_others_happy || "-"}`,
+      `Dreams for serphawk: ${entry.goals_without_greed || "-"}`,
+      `Dreams with serphawk: ${entry.dreams_supported || "-"}`,
+      `Goals (No Greed): ${entry.goals_without_greed_impossible || "-"}`,
+    ].join("\n");
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dueDate = tomorrow.toISOString().slice(0, 10);
+
+    const params = new URLSearchParams({
+      create: "1",
+      prefillTitle: projectTitle,
+      prefillDescription: projectDescription,
+      prefillDueDate: dueDate,
+      prefillAssignedTo: String(entry.user_id),
+      prefillAssignedBy: String(user?.id || entry.user_id),
+    });
+
+    router.push(`/project-management/projects?${params.toString()}`);
   };
 
   const refreshEntryInteractions = async (entryId: number) => {
@@ -741,21 +776,32 @@ export default function HappySheetPage() {
                         )}
                       </div>
                     </div>
-                    {entry.user_id === user.id && (
+                    {(entry.user_id === user.id || user.role === "admin") && (
                       <div className="flex items-center gap-2">
+                        {entry.user_id === user.id && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleEditEntry(entry)}
+                              className="h-8 px-2.5 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                            >
+                              <Pencil size={12} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEntry(entry)}
+                              className="h-8 px-2.5 rounded-lg border border-red-300/70 dark:border-red-400/30 text-xs text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          </>
+                        )}
                         <button
                           type="button"
-                          onClick={() => handleEditEntry(entry)}
-                          className="h-8 px-2.5 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1"
+                          onClick={() => handleCreateTaskFromEntry(entry)}
+                          className="h-8 px-2.5 rounded-lg border border-emerald-300/70 dark:border-emerald-400/30 text-xs text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/70 dark:hover:bg-emerald-500/10 inline-flex items-center gap-1"
                         >
-                          <Pencil size={12} /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEntry(entry)}
-                          className="h-8 px-2.5 rounded-lg border border-red-300/70 dark:border-red-400/30 text-xs text-red-700 dark:text-red-300 hover:bg-red-100/70 dark:hover:bg-red-500/10 inline-flex items-center gap-1"
-                        >
-                          <Trash2 size={12} /> Delete
+                          <Plus size={12} /> Create Task
                         </button>
                       </div>
                     )}
@@ -765,22 +811,67 @@ export default function HappySheetPage() {
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Happy Moment</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_you_happy}</p>
+                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.what_made_you_happy?.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskFromEntry(entry, entry.what_made_you_happy, "Happy Moment")}
+                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
+                        >
+                          <Plus size={11} /> Create Task
+                        </button>
+                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Made Others Happy</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_others_happy}</p>
+                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.what_made_others_happy?.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskFromEntry(entry, entry.what_made_others_happy, "Made Others Happy")}
+                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
+                        >
+                          <Plus size={11} /> Create Task
+                        </button>
+                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams for serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed}</p>
+                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.goals_without_greed?.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskFromEntry(entry, entry.goals_without_greed, "My Dreams for serphawk")}
+                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
+                        >
+                          <Plus size={11} /> Create Task
+                        </button>
+                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams with serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.dreams_supported}</p>
+                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.dreams_supported?.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskFromEntry(entry, entry.dreams_supported, "My Dreams with serphawk")}
+                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
+                        >
+                          <Plus size={11} /> Create Task
+                        </button>
+                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card lg:col-span-2">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals (No Greed)</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed_impossible || "—"}</p>
+                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.goals_without_greed_impossible?.trim()) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskFromEntry(entry, entry.goals_without_greed_impossible || "", "Goals (No Greed)")}
+                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
+                        >
+                          <Plus size={11} /> Create Task
+                        </button>
+                      )}
                     </div>
                   </div>
 
