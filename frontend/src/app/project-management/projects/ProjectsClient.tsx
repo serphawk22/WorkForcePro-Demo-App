@@ -1030,9 +1030,10 @@ export default function ProjectsPage({
   };
 
   const handleReporterChange = async (taskId: number, userId: number) => {
-    const result = taskId < 0
-      ? await updateSubtask(Math.abs(taskId), { assigned_by: userId })
-      : await updateTask(taskId, { assigned_by: userId });
+    // Subtasks don't have assigned_by field, skip for them
+    if (taskId < 0) return;
+    
+    const result = await updateTask(taskId, { assigned_by: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Reporter updated!"); loadData(); }
   };
