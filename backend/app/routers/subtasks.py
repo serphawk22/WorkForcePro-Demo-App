@@ -322,16 +322,11 @@ async def update_subtask_status(
     ensure_same_organization(current_user, subtask.organization_id, "subtask")
     
     # Role-based status validation
-    admin_statuses = {SubtaskStatus.reviewing, SubtaskStatus.approved, SubtaskStatus.rejected}
     employee_statuses = {SubtaskStatus.todo, SubtaskStatus.in_progress, SubtaskStatus.completed}
 
     if is_admin_user(current_user):
-        # Admin can only set reviewing, approved, rejected
-        if new_status not in admin_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin can only set status to: reviewing, approved, rejected"
-            )
+        # Admins can move subtasks to any status.
+        pass
     else:
         # Employee must be the assignee
         if subtask.assigned_to != current_user.id:
@@ -423,6 +418,21 @@ async def update_subtask(
                 detail="Assigned user not found"
             )
         ensure_same_organization(current_user, assignee.organization_id, "assignee")
+
+    if "assigned_by" in update_data and update_data["assigned_by"] is not None:
+        if not is_admin_user(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can change the reporter"
+            )
+        reporter_stmt = select(User).where(User.id == update_data["assigned_by"])
+        reporter = session.exec(reporter_stmt).first()
+        if not reporter:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reporter not found"
+            )
+        ensure_same_organization(current_user, reporter.organization_id, "reporter")
 
     assignment_alert_message = None
     requested_assignee_id = update_data.get("assigned_to", subtask.assigned_to)

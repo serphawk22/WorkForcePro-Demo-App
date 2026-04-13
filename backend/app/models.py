@@ -539,6 +539,7 @@ class SubtaskUpdate(SQLModel):
     priority: Optional[TaskPriority] = None
     due_date: Optional[DateType] = None
     assigned_to: Optional[int] = None
+    assigned_by: Optional[int] = None
 
 
 class SubtaskRead(SQLModel):

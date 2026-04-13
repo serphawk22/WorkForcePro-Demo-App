@@ -707,12 +707,12 @@ async def update_task_status(
     
     # Role-based status restrictions
     if current_user.role == UserRole.employee:
-        # Employees can only set to todo, in_progress, or submitted (when marking done)
-        allowed_statuses = [TaskStatus.todo, TaskStatus.in_progress, TaskStatus.submitted]
+        # Employees can only set to todo, in_progress, submitted, or explicitly ignore a task.
+        allowed_statuses = [TaskStatus.todo, TaskStatus.in_progress, TaskStatus.submitted, TaskStatus.rejected]
         if new_status not in allowed_statuses:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Employees can only change status to 'To Do', 'In Progress', or 'Done'"
+                detail="Employees can only change status to 'To Do', 'In Progress', 'Done', or 'Ignore'"
             )
 
         # When employee marks task as "Done" (submitted), notify all admins
@@ -734,15 +734,26 @@ async def update_task_status(
                     message=f"Task #{task.id} - {task.title} has been submitted for review by {current_user.name}",
                     task_id=task.id
                 )
+        elif new_status == TaskStatus.rejected:
+            task.done_by_employee = False
+
+            admin_stmt = select(User).where(
+                User.role == UserRole.admin,
+                User.organization_id == current_user.organization_id,
+            )
+            admins = session.exec(admin_stmt).all()
+
+            for admin in admins:
+                create_notification(
+                    session=session,
+                    user_id=admin.id,
+                    type=NotificationType.TASK_REJECTED,
+                    message=f"Task #{task.id} - {task.title} was ignored by {current_user.name}.",
+                    task_id=task.id,
+                )
     
     elif is_admin_user(current_user):
-        # Admin can only set: reviewing, approved, rejected
-        allowed_statuses = [TaskStatus.reviewing, TaskStatus.approved, TaskStatus.rejected]
-        if new_status not in allowed_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admins can only change status to 'Reviewing', 'Approved', or 'Rejected'"
-            )
+        # Admins can move tasks to any status.
         
         # Notify assigned employee when admin changes status
         if task.assigned_to and new_status != task.status:
@@ -1690,6 +1701,9 @@ async def get_task_stats(
         "in_progress": in_progress,
         "overdue": overdue,
         "completion_percent": completion_percent,
+        "todo_count": todo,
+        "in_progress_count": in_progress,
+        "completed_count": completed,
         "tasks_assigned": tasks_assigned,
         "tasks_completed": tasks_completed,
         "on_time_completion": on_time_completion,

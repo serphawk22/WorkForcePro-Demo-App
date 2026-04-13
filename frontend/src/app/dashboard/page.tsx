@@ -68,7 +68,9 @@ export default function AdminDashboard() {
 
   // Task completion rate
   const totalTasks = stats?.total_tasks_count || 0;
-  const completedTasks = taskStats?.approved || 0;
+  const completedTasks = taskStats?.completed_count ?? taskStats?.approved ?? 0;
+  const todoTasks = taskStats?.todo_count ?? taskStats?.todo ?? 0;
+  const inProgressTasks = taskStats?.in_progress_count ?? taskStats?.in_progress ?? 0;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const upcomingTasks = stats?.upcoming_tasks || [];
@@ -79,10 +81,10 @@ export default function AdminDashboard() {
 
   // Department performance derived from real task stats
   const deptPerformance = [
-    { dept: "Approved", completion: taskStats?.approved || 0, color: "from-green-400 to-green-600" },
-    { dept: "In Progress", completion: taskStats?.in_progress || 0, color: "from-blue-400 to-blue-600" },
+    { dept: "Completed", completion: completedTasks, color: "from-green-400 to-green-600" },
+    { dept: "In Progress", completion: inProgressTasks, color: "from-blue-400 to-blue-600" },
     { dept: "Reviewing", completion: taskStats?.reviewing || 0, color: "from-purple-400 to-purple-600" },
-    { dept: "To Do", completion: taskStats?.todo || 0, color: "from-gray-400 to-gray-500" },
+    { dept: "To Do", completion: todoTasks, color: "from-gray-400 to-gray-500" },
     { dept: "Rejected", completion: taskStats?.rejected || 0, color: "from-red-400 to-red-500" },
   ].filter(d => d.completion > 0);
 

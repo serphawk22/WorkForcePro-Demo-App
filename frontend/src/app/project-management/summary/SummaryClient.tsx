@@ -79,7 +79,8 @@ export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
   useEffect(() => { load(); }, [load]);
 
   const total = tasks.length;
-  const active = tasks.filter(t => ["todo", "in_progress", "reviewing"].includes(t.status)).length;
+  const todoCount = tasks.filter(t => t.status === "todo").length;
+  const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
   const completed = tasks.filter(t => t.status === "approved").length;
   const today = new Date();
   const overdue = tasks.filter(t => t.due_date && new Date(t.due_date) < today && !["approved"].includes(t.status)).length;
@@ -107,8 +108,16 @@ export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
       shadowColor: "purple-500/50"
     },
     { 
-      label: "Active", 
-      value: active, 
+      label: "New / To Do", 
+      value: todoCount, 
+      icon: Circle, 
+      accent: "#a78bfa",
+      gradient: "from-purple-500 to-purple-600",
+      shadowColor: "purple-500/50"
+    },
+    { 
+      label: "In Progress", 
+      value: inProgressCount, 
       icon: Clock, 
       accent: "#60a5fa",
       gradient: "from-blue-500 to-blue-600",
@@ -121,14 +130,6 @@ export default function SummaryPage({ workspaceQuery }: SummaryClientProps) {
       accent: "#4ade80",
       gradient: "from-green-500 to-green-600",
       shadowColor: "green-500/50"
-    },
-    { 
-      label: "Overdue", 
-      value: overdue, 
-      icon: AlertCircle, 
-      accent: "#f87171",
-      gradient: "from-red-500 to-red-600",
-      shadowColor: "red-500/50"
     },
   ];
 

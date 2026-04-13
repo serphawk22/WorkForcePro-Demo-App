@@ -360,6 +360,9 @@ export interface TaskStats {
   in_progress: number;
   overdue: number;  // Tasks past due date and not approved
   completion_percent: number;  // Overall completion percentage
+  todo_count?: number;
+  in_progress_count?: number;
+  completed_count?: number;
   tasks_assigned?: number;
   tasks_completed?: number;
   on_time_completion?: number;

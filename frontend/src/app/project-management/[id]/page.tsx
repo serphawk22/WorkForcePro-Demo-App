@@ -93,6 +93,7 @@ export default function ProjectDetailPage() {
     assigned_to: "",
   });
   const [selectedSubtaskAssigneeFilter, setSelectedSubtaskAssigneeFilter] = useState<string>("all");
+  const [selectedSubtaskStatusFilter, setSelectedSubtaskStatusFilter] = useState<string>("all");
 
   // Recurring task instances (only when task.is_recurring is true)
   const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
@@ -631,7 +632,7 @@ export default function ProjectDetailPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   };
 
-  const filterSubtaskTree = (nodes: any[], assigneeFilterValue: string): any[] => {
+  const filterSubtaskTree = (nodes: any[], assigneeFilterValue: string, statusFilterValue: string): any[] => {
     const matchesAssignee = (node: any) => {
       if (assigneeFilterValue === "all") return true;
       if (assigneeFilterValue.startsWith("id:")) {
@@ -643,11 +644,18 @@ export default function ProjectDetailPage() {
       return (node.assignee_name || "").toLowerCase() === selectedName;
     };
 
+    const matchesStatus = (node: any) => {
+      if (statusFilterValue === "all") return true;
+      if (statusFilterValue === "new") return node.status === "todo";
+      if (statusFilterValue === "completed") return ["completed", "approved"].includes(node.status);
+      return node.status === statusFilterValue;
+    };
+
     const walk = (items: any[]): any[] => {
       const result: any[] = [];
       for (const item of items) {
         const filteredChildren = item.children?.length ? walk(item.children) : [];
-        if (matchesAssignee(item) || filteredChildren.length > 0) {
+        if ((matchesAssignee(item) && matchesStatus(item)) || filteredChildren.length > 0) {
           result.push({ ...item, children: filteredChildren });
         }
       }
@@ -662,18 +670,18 @@ export default function ProjectDetailPage() {
   }, [project?.subtasks]);
 
   const taskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
-    { value: "todo", label: "To Do", icon: <Circle size={12} />, disabled: true },
-    { value: "in_progress", label: "In Progress", icon: <Clock size={12} />, disabled: true },
-    { value: "submitted", label: "Completed", icon: <CheckCircle2 size={12} />, disabled: true },
+    { value: "todo", label: "To Do", icon: <Circle size={12} /> },
+    { value: "in_progress", label: "In Progress", icon: <Clock size={12} /> },
+    { value: "submitted", label: "Completed", icon: <CheckCircle2 size={12} /> },
     { value: "reviewing", label: "Reviewing", icon: <AlertCircle size={12} /> },
     { value: "approved", label: "Approved", icon: <CheckCircle2 size={12} /> },
     { value: "rejected", label: "Rejected", icon: <X size={12} /> },
   ]), []);
 
   const subtaskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
-    { value: "todo", label: "To Do", icon: <Circle size={12} />, disabled: true },
-    { value: "in_progress", label: "In Progress", icon: <Clock size={12} />, disabled: true },
-    { value: "completed", label: "Completed", icon: <CheckCircle2 size={12} />, disabled: true },
+    { value: "todo", label: "To Do", icon: <Circle size={12} /> },
+    { value: "in_progress", label: "In Progress", icon: <Clock size={12} /> },
+    { value: "completed", label: "Completed", icon: <CheckCircle2 size={12} /> },
     { value: "reviewing", label: "Reviewing", icon: <AlertCircle size={12} /> },
     { value: "approved", label: "Approved", icon: <CheckCircle2 size={12} /> },
     { value: "rejected", label: "Rejected", icon: <X size={12} /> },
@@ -687,6 +695,13 @@ export default function ProjectDetailPage() {
       icon: <User size={12} />,
     })),
   ]), [subtaskAssigneeOptions]);
+
+  const subtaskStatusFilterOptions: DropdownOption[] = useMemo(() => ([
+    { value: "all", label: "All Status", icon: <span className="text-muted-foreground">●</span> },
+    { value: "new", label: "New / To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+  ]), []);
 
   const priorityOrder: Record<string, number> = {
     high: 0,
@@ -742,10 +757,10 @@ export default function ProjectDetailPage() {
 
   const filteredSubtasks = useMemo(() => {
     const filtered = project?.subtasks
-      ? filterSubtaskTree(project.subtasks, selectedSubtaskAssigneeFilter)
+      ? filterSubtaskTree(project.subtasks, selectedSubtaskAssigneeFilter, selectedSubtaskStatusFilter)
       : [];
     return sortSubtaskNodes(filtered);
-  }, [project?.subtasks, selectedSubtaskAssigneeFilter, sortSubtaskNodes]);
+  }, [project?.subtasks, selectedSubtaskAssigneeFilter, selectedSubtaskStatusFilter, sortSubtaskNodes]);
 
   const inProgressSubtasks = useMemo(() => {
     return collectInProgressSubtasks(filteredSubtasks);
@@ -826,7 +841,6 @@ export default function ProjectDetailPage() {
                   value={subtask.status}
                   onValueChange={(value) => handleSubtaskStatusChange(subtask.id, value)}
                   options={subtaskAdminStatusOptions}
-                  disabled={!['completed', 'reviewing', 'approved', 'rejected'].includes(subtask.status)}
                   triggerClassName={`w-[145px] rounded-lg px-3 py-1.5 text-xs font-medium ${
                     subtask.status === 'approved' ? 'text-green-500' :
                     subtask.status === 'rejected' ? 'text-red-500' :
@@ -922,10 +936,40 @@ export default function ProjectDetailPage() {
 
   const { task, subtasks, comments } = project;
   const latestCommentAt = comments.length > 0 ? comments[comments.length - 1].created_at : task.latest_comment_at || null;
+  const latestSubtaskActivityAt = (() => {
+    const walk = (nodes: typeof subtasks): number => {
+      return nodes.reduce((latest, node) => {
+        const nodeTs = Date.parse(node.updated_at || node.created_at || "");
+        const childTs = node.children?.length ? walk(node.children) : 0;
+        return Math.max(latest, Number.isNaN(nodeTs) ? 0 : nodeTs, childTs);
+      }, 0);
+    };
+    const ts = walk(subtasks);
+    return ts ? new Date(ts).toISOString() : null;
+  })();
   const warningState = getTaskWarningState(
-    { ...task, latest_comment_at: latestCommentAt },
-    taskWarningSettings
+    { ...task, latest_comment_at: latestCommentAt || latestSubtaskActivityAt },
+    taskWarningSettings,
+    new Date(),
+    latestSubtaskActivityAt
   );
+
+  const collectProjectTaskStats = (nodes: typeof subtasks) => {
+    const stats = { total: 0, todo: 0, inProgress: 0, completed: 0 };
+    const walk = (items: typeof subtasks) => {
+      items.forEach((item) => {
+        stats.total += 1;
+        if (item.status === "todo") stats.todo += 1;
+        else if (item.status === "in_progress") stats.inProgress += 1;
+        else if (item.status === "completed" || item.status === "approved") stats.completed += 1;
+        if (item.children?.length) walk(item.children);
+      });
+    };
+    walk(nodes);
+    return stats;
+  };
+
+  const projectTaskStats = collectProjectTaskStats(subtasks);
 
   const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -1206,7 +1250,6 @@ export default function ProjectDetailPage() {
                     value={task.status}
                     onValueChange={(value) => handleStatusChange(value)}
                     options={taskAdminStatusOptions}
-                    disabled={!['submitted', 'reviewing', 'approved', 'rejected'].includes(task.status)}
                     triggerClassName={`w-[170px] rounded-full px-3 py-1.5 text-xs font-semibold ${statusColors[task.status]}`}
                   />
                 ) : (
@@ -1229,9 +1272,7 @@ export default function ProjectDetailPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-semibold">Task warning</p>
-                    <p className="text-sm leading-relaxed">
-                      {warningState.reason}
-                    </p>
+                    <p className="text-sm leading-relaxed">{warningState.reason}</p>
                     <p className="text-xs text-red-600/80 dark:text-red-300/80">
                       Thresholds: stage update after {taskWarningSettings.task_warning_stage_days} day(s), comment/activity after {taskWarningSettings.task_warning_comment_days} day(s).
                     </p>
@@ -1240,8 +1281,21 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+              {[
+                { label: "Tasks", value: projectTaskStats.total, tone: "text-foreground" },
+                { label: "New / To Do", value: projectTaskStats.todo, tone: "text-purple-500" },
+                { label: "In Progress", value: projectTaskStats.inProgress, tone: "text-blue-500" },
+                { label: "Completed", value: projectTaskStats.completed, tone: "text-green-500" },
+              ].map((card) => (
+                <div key={card.label} className="rounded-2xl border border-border/60 bg-secondary/30 px-4 py-3">
+                  <div className={`text-2xl font-extrabold ${card.tone}`}>{card.value}</div>
+                  <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{card.label}</div>
+                </div>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              {/* Assignee */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 text-sm font-bold">
                   {task.assignee_name?.split(" ").map(n => n[0]).join("") || "?"}
@@ -1252,7 +1306,6 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
 
-              {/* Start Date */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
                 <Calendar size={20} className="text-blue-500" />
                 <div>
@@ -1263,7 +1316,6 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
 
-              {/* Due Date */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
                 <Clock size={20} className="text-orange-500" />
                 <div>
@@ -1294,7 +1346,6 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
-            {/* Progress Bar */}
             {typeof task.progress === 'number' && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
@@ -1302,7 +1353,7 @@ export default function ProjectDetailPage() {
                   <span className="text-sm font-bold text-purple-600">{task.progress}%</span>
                 </div>
                 <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-purple-600 transition-all duration-300"
                     style={{ width: `${task.progress}%` }}
                   />
@@ -1710,6 +1761,13 @@ export default function ProjectDetailPage() {
                     triggerClassName="w-[170px] rounded-lg px-2.5 py-2 text-xs font-medium"
                   />
 
+                  <DropdownMenu
+                    value={selectedSubtaskStatusFilter}
+                    onValueChange={setSelectedSubtaskStatusFilter}
+                    options={subtaskStatusFilterOptions}
+                    triggerClassName="w-[170px] rounded-lg px-2.5 py-2 text-xs font-medium"
+                  />
+
                   <button
                     onClick={() => openAddSubtaskModal(null)}
                     className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white transition-colors"
@@ -1721,6 +1779,20 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: "Total", value: filteredSubtasks.length, tone: "text-foreground" },
+                    { label: "New / To Do", value: filteredSubtasks.filter((item) => item.status === "todo").length, tone: "text-purple-500" },
+                    { label: "In Progress", value: filteredSubtasks.filter((item) => item.status === "in_progress").length, tone: "text-blue-500" },
+                    { label: "Completed", value: filteredSubtasks.filter((item) => ["completed", "approved"].includes(item.status)).length, tone: "text-green-500" },
+                  ].map((card) => (
+                    <div key={card.label} className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5">
+                      <div className={`text-xl font-extrabold ${card.tone}`}>{card.value}</div>
+                      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{card.label}</div>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">Priority sequence</p>

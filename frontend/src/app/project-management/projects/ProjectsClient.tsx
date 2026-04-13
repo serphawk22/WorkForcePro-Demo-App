@@ -16,6 +16,7 @@ import {
   searchByPublicId, Task, TaskCreate, User, Workspace, getWorkspaces,
   uploadTaskVoiceNote, TaskVoiceNoteUploadResponse,
   TaskComment, getTaskComments, createTaskComment, deleteTaskComment, createSubtask,
+  updateSubtask, updateSubtaskStatus, deleteSubtask,
 } from "@/lib/api";
 import { getTaskWarningState, type TaskWarningSettings } from "@/lib/taskWarnings";
 import { toast } from "sonner";
@@ -91,6 +92,13 @@ type TaskEditForm = TaskCreate & {
 
 type SubtaskDraftStatus = Task["status"] | "done";
 
+function normalizeStatusFilterValue(value?: string | null): string {
+  if (!value) return "";
+  if (value === "todo") return "new";
+  if (value === "approved") return "completed";
+  return value;
+}
+
 type SubtaskDetailDraft = {
   title: string;
   description: string;
@@ -154,7 +162,7 @@ export default function ProjectsPage({
   const [employees, setEmployees] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>(statusQuery || "");
+  const [statusFilter, setStatusFilter] = useState<string>(normalizeStatusFilterValue(statusQuery));
   const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
   const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined);
   const [assigneeFilter, setAssigneeFilter] = useState<number | undefined>(undefined);
@@ -253,10 +261,11 @@ export default function ProjectsPage({
 
   const statusFilterOptions: DropdownOption[] = useMemo(() => [
     { value: "__all", label: "All Status", icon: <Circle className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "new", label: "New / To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
     { value: "overdue", label: "Overdue", icon: <AlertCircle className="h-3.5 w-3.5 text-red-400" /> },
     { value: "warning", label: "Warning", icon: <AlertCircle className="h-3.5 w-3.5 text-red-500" /> },
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
     ...(isAdmin ? [
       { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
       { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
@@ -308,18 +317,9 @@ export default function ProjectsPage({
   ];
 
   const taskAdminStatusOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span>, disabled: true },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span>, disabled: true },
-    { value: "submitted", label: "Completed", icon: <span className="text-green-400">●</span>, disabled: true },
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
-  ];
-
-  const subtaskAdminStatusOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span>, disabled: true },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span>, disabled: true },
-    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span>, disabled: true },
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
+    { value: "submitted", label: "Completed", icon: <span className="text-green-400">●</span> },
     { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
     { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
     { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
@@ -329,6 +329,7 @@ export default function ProjectsPage({
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
     { value: "done", label: "Completed", icon: <span className="text-green-400">●</span> },
+    { value: "rejected", label: "Ignore", icon: <span className="text-red-400">●</span> },
   ];
 
   const employeeOptions: DropdownOption[] = useMemo(() => employees.map((emp) => ({
@@ -726,7 +727,13 @@ export default function ProjectsPage({
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
-    const apiStatusFilter = statusFilter === "overdue" || statusFilter === "warning" ? undefined : (statusFilter || undefined);
+    const apiStatusFilter = statusFilter === "overdue" || statusFilter === "warning"
+      ? undefined
+      : statusFilter === "new" || statusFilter === "todo"
+        ? "todo"
+        : statusFilter === "completed"
+          ? "approved"
+          : (statusFilter || undefined);
     const [tasksResult, empResult, workspaceResult, settingsResult] = await Promise.all([
       getAllTasks(apiStatusFilter, assigneeFilter, workspaceFilter, { rootsOnly: true }),
       getAssignableUsers(),
@@ -777,7 +784,7 @@ export default function ProjectsPage({
   }, [assigneeFilter, router, statusFilter, workspaceFilter, workspaceQuery]);
 
   useEffect(() => {
-    setStatusFilter(statusQuery || "");
+    setStatusFilter(normalizeStatusFilterValue(statusQuery));
   }, [statusQuery]);
 
   useEffect(() => {
@@ -963,21 +970,39 @@ export default function ProjectsPage({
 
   const handlePriorityChange = async (taskId: number, priority: "low" | "medium" | "high") => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
-    const result = await updateTask(taskId, { priority });
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { priority })
+      : await updateTask(taskId, { priority });
     if (result.error) { toast.error(result.error); loadData(); }
     else toast.success("Priority updated!");
   };
 
   const handleStatusChange = async (taskId: number, selectedStatus: string) => {
-    const backendStatus = selectedStatus === "done" ? "submitted" : selectedStatus;
+    const isLegacySubtaskRow = taskId < 0;
+    const backendStatus = isLegacySubtaskRow
+      ? (selectedStatus === "done" || selectedStatus === "submitted" ? "completed" : selectedStatus)
+      : (selectedStatus === "done" ? "submitted" : selectedStatus);
     const previousTask = tasks.find((task) => task.id === taskId);
 
     // Optimistic UI update to avoid page-level loading flicker.
     setTasks((prev) => prev.map((task) => (
       task.id === taskId ? { ...task, status: backendStatus as Task["status"] } : task
     )));
+    if (isLegacySubtaskRow) {
+      setTaskChildren((prev) => {
+        const next: Record<number, Task[]> = {};
+        Object.entries(prev).forEach(([rootTaskId, subtasks]) => {
+          next[Number(rootTaskId)] = subtasks.map((subtask) => (
+            subtask.id === taskId ? { ...subtask, status: backendStatus as Task["status"] } : subtask
+          ));
+        });
+        return next;
+      });
+    }
 
-    const result = await updateTaskStatus(taskId, backendStatus as any);
+    const result = isLegacySubtaskRow
+      ? await updateSubtaskStatus(Math.abs(taskId), backendStatus)
+      : await updateTaskStatus(taskId, backendStatus as any);
     if (result.error) {
       toast.error(result.error);
       // Revert only the changed row and sync quietly.
@@ -996,13 +1021,17 @@ export default function ProjectsPage({
   };
 
   const handleAssigneeChange = async (taskId: number, userId?: number) => {
-    const result = await updateTask(taskId, { assigned_to: userId });
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { assigned_to: userId })
+      : await updateTask(taskId, { assigned_to: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Assignee updated!"); loadData(); }
   };
 
   const handleReporterChange = async (taskId: number, userId: number) => {
-    const result = await updateTask(taskId, { assigned_by: userId });
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { assigned_by: userId })
+      : await updateTask(taskId, { assigned_by: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Reporter updated!"); loadData(); }
   };
@@ -1013,7 +1042,9 @@ export default function ProjectsPage({
     value: string
   ) => {
     const payload = { [field]: value || undefined } as Pick<TaskCreate, "start_date" | "due_date">;
-    const result = await updateTask(taskId, payload);
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { due_date: field === "due_date" ? (value || undefined) : undefined })
+      : await updateTask(taskId, payload);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -1195,7 +1226,9 @@ export default function ProjectsPage({
 
   const handleDeleteTask = async (taskId: number) => {
     if (!confirm("Delete this project?")) return;
-    const result = await deleteTask(taskId);
+    const result = taskId < 0
+      ? await deleteSubtask(Math.abs(taskId))
+      : await deleteTask(taskId);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -1355,6 +1388,20 @@ export default function ProjectsPage({
     return roots;
   };
 
+    const getTaskLatestActivityAt = (task: Task) => {
+      const subtasks = taskChildren[task.id] || [];
+      const latestSubtaskTs = subtasks.reduce<number>(
+        (latest, subtask) => {
+          const ts = Date.parse(subtask.updated_at || subtask.created_at || "");
+          return Number.isNaN(ts) ? latest : Math.max(latest, ts);
+        },
+        0
+      );
+      const taskTs = Date.parse(task.updated_at || task.start_date || "");
+      const effectiveTs = Math.max(Number.isNaN(taskTs) ? 0 : taskTs, latestSubtaskTs);
+      return effectiveTs ? new Date(effectiveTs).toISOString() : null;
+    };
+
   const renderSubtaskRows = (nodes: HierarchyTaskNode[], rootTask: Task, depth = 0): React.ReactNode[] => {
     return nodes.flatMap((subtask) => {
       const hasChildren = subtask.children.length > 0;
@@ -1462,9 +1509,8 @@ export default function ProjectsPage({
               <DropdownMenu
                 value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
                 onValueChange={(value) => handleStatusChange(subtask.id, value)}
-                options={isAdmin ? subtaskAdminStatusOptions : employeeStatusOptions}
+                options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
                 placeholder="Status"
-                disabled={isAdmin && !["completed", "reviewing", "approved", "rejected"].includes(subtask.status)}
                 triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
               />
             </div>
@@ -1695,30 +1741,44 @@ export default function ProjectsPage({
     const assignedByValue = parseOptionalNumber(detailDraft.assigned_by);
     const estimatedHoursValue = parseOptionalNumber(detailDraft.estimated_hours);
     const actualHoursValue = parseOptionalNumber(detailDraft.actual_hours);
+    const isLegacySubtaskRow = selectedSubtaskForPanel.id < 0;
 
     setIsDetailSaving(true);
     try {
-      const updateResult = await updateTask(selectedSubtaskForPanel.id, {
-        title,
-        description: detailDraft.description.trim(),
-        priority: detailDraft.priority,
-        assigned_to: assignedToValue,
-        assigned_by: assignedByValue,
-        start_date: detailDraft.start_date || undefined,
-        due_date: detailDraft.due_date || undefined,
-        completed_at: detailDraft.completed_at || undefined,
-        estimated_hours: estimatedHoursValue,
-        actual_hours: actualHoursValue,
-      });
+      const updateResult = isLegacySubtaskRow
+        ? await updateSubtask(Math.abs(selectedSubtaskForPanel.id), {
+            title,
+            description: detailDraft.description.trim(),
+            priority: detailDraft.priority,
+            assigned_to: assignedToValue,
+            assigned_by: assignedByValue,
+            due_date: detailDraft.due_date || undefined,
+          })
+        : await updateTask(selectedSubtaskForPanel.id, {
+            title,
+            description: detailDraft.description.trim(),
+            priority: detailDraft.priority,
+            assigned_to: assignedToValue,
+            assigned_by: assignedByValue,
+            start_date: detailDraft.start_date || undefined,
+            due_date: detailDraft.due_date || undefined,
+            completed_at: detailDraft.completed_at || undefined,
+            estimated_hours: estimatedHoursValue,
+            actual_hours: actualHoursValue,
+          });
 
       if (updateResult.error) {
         toast.error(updateResult.error);
         return;
       }
 
-      const normalizedStatus = detailDraft.status === "done" ? "submitted" : detailDraft.status;
+      const normalizedStatus = isLegacySubtaskRow
+        ? (detailDraft.status === "done" || detailDraft.status === "submitted" ? "completed" : detailDraft.status)
+        : (detailDraft.status === "done" ? "submitted" : detailDraft.status);
       if (normalizedStatus !== selectedSubtaskForPanel.status) {
-        const statusResult = await updateTaskStatus(selectedSubtaskForPanel.id, normalizedStatus as Task["status"]);
+        const statusResult = isLegacySubtaskRow
+          ? await updateSubtaskStatus(Math.abs(selectedSubtaskForPanel.id), normalizedStatus)
+          : await updateTaskStatus(selectedSubtaskForPanel.id, normalizedStatus as Task["status"]);
         if (statusResult.error) {
           toast.error(statusResult.error);
           return;
@@ -1737,11 +1797,11 @@ export default function ProjectsPage({
         assigned_by: assignedByValue ?? selectedSubtaskForPanel.assigned_by,
         assignee_name: assignedToValue != null ? (selectedAssignee?.name || selectedSubtaskForPanel.assignee_name) : undefined,
         assigned_by_name: assignedByValue != null ? (selectedReporter?.name || selectedSubtaskForPanel.assigned_by_name) : undefined,
-        start_date: detailDraft.start_date || selectedSubtaskForPanel.start_date,
+        start_date: isLegacySubtaskRow ? selectedSubtaskForPanel.start_date : (detailDraft.start_date || selectedSubtaskForPanel.start_date),
         due_date: detailDraft.due_date || null,
-        completed_at: detailDraft.completed_at || null,
-        estimated_hours: estimatedHoursValue ?? null,
-        actual_hours: actualHoursValue ?? null,
+        completed_at: isLegacySubtaskRow ? selectedSubtaskForPanel.completed_at : (detailDraft.completed_at || null),
+        estimated_hours: isLegacySubtaskRow ? selectedSubtaskForPanel.estimated_hours : (estimatedHoursValue ?? null),
+        actual_hours: isLegacySubtaskRow ? selectedSubtaskForPanel.actual_hours : (actualHoursValue ?? null),
       };
 
       setSelectedSubtaskForPanel(updatedSubtask);
@@ -1775,7 +1835,15 @@ export default function ProjectsPage({
 
     if (!matchesSearch) return false;
 
-    const warningState = getTaskWarningState(t, taskWarningSettings);
+    if (statusFilter === "new" || statusFilter === "todo") return t.status === "todo";
+    if (statusFilter === "completed") return t.status === "approved";
+    if (statusFilter === "in_progress") return t.status === "in_progress";
+    if (statusFilter === "submitted") return t.status === "submitted";
+    if (statusFilter === "reviewing") return t.status === "reviewing";
+    if (statusFilter === "approved") return t.status === "approved";
+    if (statusFilter === "rejected") return t.status === "rejected";
+
+    const warningState = getTaskWarningState(t, taskWarningSettings, new Date(), getTaskLatestActivityAt(t));
     if (statusFilter === "warning") return warningState.isWarning;
 
     if (statusFilter !== "overdue") return true;
@@ -1973,7 +2041,7 @@ export default function ProjectsPage({
               </thead>
               <tbody className="divide-y" style={{ borderColor: "#DFB6B2" }}>
                 {filteredTasks.map((task) => {
-                  const warningState = getTaskWarningState(task, taskWarningSettings);
+                  const warningState = getTaskWarningState(task, taskWarningSettings, new Date(), getTaskLatestActivityAt(task));
                   return (
                     <React.Fragment key={task.id}>
                       <tr
@@ -2133,7 +2201,6 @@ export default function ProjectsPage({
                               onValueChange={(value) => handleStatusChange(task.id, value)}
                               options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
                               placeholder="Status"
-                              disabled={isAdmin && !["submitted", "reviewing", "approved", "rejected"].includes(task.status)}
                               triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
                             />
                           </div>
