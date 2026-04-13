@@ -1043,10 +1043,11 @@ export default function ProjectsPage({
     field: "start_date" | "due_date",
     value: string
   ) => {
+    // Subtasks don't have date fields, skip for them
+    if (taskId < 0) return;
+    
     const payload = { [field]: value || undefined } as Pick<TaskCreate, "start_date" | "due_date">;
-    const result = taskId < 0
-      ? await updateSubtask(Math.abs(taskId), { due_date: field === "due_date" ? (value || undefined) : undefined })
-      : await updateTask(taskId, payload);
+    const result = await updateTask(taskId, payload);
     if (result.error) {
       toast.error(result.error);
       return;
