@@ -969,10 +969,11 @@ export default function ProjectsPage({
   };
 
   const handlePriorityChange = async (taskId: number, priority: "low" | "medium" | "high") => {
+    // Subtasks don't have priority field, skip for them
+    if (taskId < 0) return;
+    
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
-    const result = taskId < 0
-      ? await updateSubtask(Math.abs(taskId), { priority })
-      : await updateTask(taskId, { priority });
+    const result = await updateTask(taskId, { priority });
     if (result.error) { toast.error(result.error); loadData(); }
     else toast.success("Priority updated!");
   };
