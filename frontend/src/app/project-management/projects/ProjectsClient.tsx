@@ -969,11 +969,10 @@ export default function ProjectsPage({
   };
 
   const handlePriorityChange = async (taskId: number, priority: "low" | "medium" | "high") => {
-    // Subtasks don't have priority field, skip for them
-    if (taskId < 0) return;
-    
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
-    const result = await updateTask(taskId, { priority });
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { priority })
+      : await updateTask(taskId, { priority });
     if (result.error) { toast.error(result.error); loadData(); }
     else toast.success("Priority updated!");
   };
@@ -1030,10 +1029,9 @@ export default function ProjectsPage({
   };
 
   const handleReporterChange = async (taskId: number, userId: number) => {
-    // Subtasks don't have assigned_by field, skip for them
-    if (taskId < 0) return;
-    
-    const result = await updateTask(taskId, { assigned_by: userId });
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { assigned_by: userId })
+      : await updateTask(taskId, { assigned_by: userId });
     if (result.error) toast.error(result.error);
     else { toast.success("Reporter updated!"); loadData(); }
   };
@@ -1043,11 +1041,15 @@ export default function ProjectsPage({
     field: "start_date" | "due_date",
     value: string
   ) => {
-    // Subtasks don't have date fields, skip for them
-    if (taskId < 0) return;
-    
+    if (taskId < 0 && field === "start_date") {
+      toast.info("Start date is only available for main tasks.");
+      return;
+    }
+
     const payload = { [field]: value || undefined } as Pick<TaskCreate, "start_date" | "due_date">;
-    const result = await updateTask(taskId, payload);
+    const result = taskId < 0
+      ? await updateSubtask(Math.abs(taskId), { due_date: value || undefined })
+      : await updateTask(taskId, payload);
     if (result.error) {
       toast.error(result.error);
       return;

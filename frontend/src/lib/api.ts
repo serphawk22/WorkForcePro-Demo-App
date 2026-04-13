@@ -600,7 +600,19 @@ export interface SubtaskCreate {
   title: string;
   description?: string;
   assigned_to: number;
+  priority?: "low" | "medium" | "high";
+  due_date?: string;
   parent_subtask_id?: number;  // For creating nested subtasks
+}
+
+export interface SubtaskUpdate {
+  title?: string;
+  description?: string;
+  status?: Subtask["status"];
+  priority?: "low" | "medium" | "high";
+  due_date?: string;
+  assigned_to?: number;
+  assigned_by?: number;
 }
 
 // ==================== AUTH HELPERS ====================
@@ -1864,7 +1876,7 @@ export async function updateSubtaskStatus(subtaskId: number, status: string): Pr
  */
 export async function updateSubtask(
   subtaskId: number,
-  subtaskData: Partial<SubtaskCreate> & { status?: string }
+  subtaskData: SubtaskUpdate
 ): Promise<ApiResponse<Subtask>> {
   return apiFetch<Subtask>(`/tasks/subtasks/${subtaskId}`, {
     method: "PUT",
