@@ -50,29 +50,34 @@ async def create_comment(
     session.refresh(comment)
     
     # Send notifications based on who commented
-    if current_user.role == UserRole.admin:
-        # Admin commented: notify assigned employee
-        if task.assigned_to:
-            create_notification(
-                session=session,
-                user_id=task.assigned_to,
-                type=NotificationType.TASK_COMMENT,
-                message=f"Admin commented on Task #{task.id} - {task.title}",
-                task_id=task.id
-            )
-    elif current_user.role == UserRole.employee:
-        # Employee commented: notify all admins
-        admin_stmt = select(User).where(User.role == UserRole.admin)
-        admins = session.exec(admin_stmt).all()
-        
-        for admin in admins:
-            create_notification(
-                session=session,
-                user_id=admin.id,
-                type=NotificationType.TASK_COMMENT,
-                message=f"{current_user.name} commented on Task #{task.id} - {task.title}",
-                task_id=task.id
-            )
+    # Wrap notification creation in try-except to prevent endpoint crash
+    try:
+        if current_user.role == UserRole.admin:
+            # Admin commented: notify assigned employee
+            if task.assigned_to:
+                create_notification(
+                    session=session,
+                    user_id=task.assigned_to,
+                    type=NotificationType.TASK_COMMENT,
+                    message=f"Admin commented on Task #{task.id} - {task.title}",
+                    task_id=task.id
+                )
+        elif current_user.role == UserRole.employee:
+            # Employee commented: notify all admins
+            admin_stmt = select(User).where(User.role == UserRole.admin)
+            admins = session.exec(admin_stmt).all()
+            
+            for admin in admins:
+                create_notification(
+                    session=session,
+                    user_id=admin.id,
+                    type=NotificationType.TASK_COMMENT,
+                    message=f"{current_user.name} commented on Task #{task.id} - {task.title}",
+                    task_id=task.id
+                )
+    except Exception as e:
+        # Log the notification error but don't fail the comment creation
+        print(f"[COMMENTS] Notification creation failed: {e}")
     
     return comment
 
@@ -122,7 +127,7 @@ async def get_task_comments(
     return result
 
 
-@router.delete("/{comment_id}")
+@router.delete("/{comment_id}", status_code=status.HTTP_200_OK)
 async def delete_comment(
     comment_id: int,
     request: Request,

@@ -6,10 +6,11 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   ArrowLeft, Calendar, User, Clock, CheckCircle2, Circle, AlertCircle,
   Github, ExternalLink, ListTree, MessageSquare, Send, Edit, Save, X,
-  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent, Plus, Mic, Play, Square, RotateCcw, Trash2
+  ChevronDown, ChevronRight, Loader2, Copy, Repeat2, CalendarDays, SkipForward, Percent, Plus, Mic, Play, Square, RotateCcw, Trash2, Flag
 } from "lucide-react";
 import { 
   getProjectDetails, 
@@ -28,6 +29,8 @@ import {
   getMyOrganizationSettings,
   updateTask,
   uploadTaskVoiceNote,
+  flagProjectForHelp,
+  updateProjectDescription,
 } from "@/lib/api";
 import { getTaskWarningState, type TaskWarningSettings } from "@/lib/taskWarnings";
 import { toast } from "sonner";
@@ -79,6 +82,14 @@ export default function ProjectDetailPage() {
   const [isSavingLinks, setIsSavingLinks] = useState(false);
   const [editedDueDate, setEditedDueDate] = useState("");
   const [isSavingDueDate, setIsSavingDueDate] = useState(false);
+  
+  // Description editing
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editedDescription, setEditedDescription] = useState("");
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [isFlagDialogOpen, setIsFlagDialogOpen] = useState(false);
+  const [flagReasonInput, setFlagReasonInput] = useState("");
+  const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
   
   // Comments
   const [newComment, setNewComment] = useState("");
@@ -411,6 +422,78 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const submitFlagToggle = async (flagReason?: string) => {
+    if (!taskId) return;
+
+    const wasFlagged = Boolean(project?.task.is_flagged);
+    const isFlagging = !wasFlagged;
+
+    setIsSubmittingFlag(true);
+
+    // Optimistic update
+    setProject((prev) => prev ? {
+      ...prev,
+      task: {
+        ...prev.task,
+        is_flagged: !wasFlagged,
+        flag_reason: !wasFlagged ? flagReason || null : null,
+        flagged_by: !wasFlagged ? user?.id : null,
+        flagged_at: !wasFlagged ? new Date().toISOString() : null,
+      },
+    } : prev);
+
+    try {
+      const response = await flagProjectForHelp(taskId, flagReason);
+      if (response.data) {
+        toast.success(isFlagging ? "Project flagged for help!" : "Flagging removed!");
+        void loadProjectDetails(true);
+      } else {
+        setProject((prev) => prev ? {
+          ...prev,
+          task: {
+            ...prev.task,
+            is_flagged: wasFlagged,
+            flag_reason: wasFlagged ? project?.task.flag_reason : null,
+            flagged_by: wasFlagged ? project?.task.flagged_by : null,
+            flagged_at: wasFlagged ? project?.task.flagged_at : null,
+          },
+        } : prev);
+        toast.error(response.error || "Failed to flag project");
+      }
+    } catch (error) {
+      setProject((prev) => prev ? {
+        ...prev,
+        task: {
+          ...prev.task,
+          is_flagged: wasFlagged,
+          flag_reason: wasFlagged ? project?.task.flag_reason : null,
+          flagged_by: wasFlagged ? project?.task.flagged_by : null,
+          flagged_at: wasFlagged ? project?.task.flagged_at : null,
+        },
+      } : prev);
+      console.error("Error flagging project:", error);
+      toast.error("Failed to flag project");
+    } finally {
+      setIsSubmittingFlag(false);
+    }
+  };
+
+  const handleFlagProject = async () => {
+    if (!taskId) return;
+    if (project?.task.is_flagged) {
+      await submitFlagToggle();
+      return;
+    }
+    setFlagReasonInput("");
+    setIsFlagDialogOpen(true);
+  };
+
+  const confirmFlagProject = async () => {
+    const reason = flagReasonInput.trim();
+    setIsFlagDialogOpen(false);
+    await submitFlagToggle(reason || undefined);
+  };
+
   const handleSaveLinks = async () => {
     if (!taskId) return;
     
@@ -459,6 +542,38 @@ export default function ProjectDetailPage() {
     } finally {
       setIsSavingDueDate(false);
     }
+  };
+
+  const handleSaveDescription = async () => {
+    if (!taskId) return;
+
+    setIsSavingDescription(true);
+    try {
+      const response = await updateProjectDescription(taskId, editedDescription);
+
+      if (response.data) {
+        toast.success("Description updated successfully!");
+        setIsEditingDescription(false);
+        loadProjectDetails();
+      } else {
+        toast.error(response.error || "Failed to update description");
+      }
+    } catch (error) {
+      console.error("Error updating description:", error);
+      toast.error("Failed to update description");
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
+
+  const handleCancelEditDescription = () => {
+    setIsEditingDescription(false);
+    setEditedDescription("");
+  };
+
+  const handleStartEditDescription = () => {
+    setEditedDescription(project?.task.description || "");
+    setIsEditingDescription(true);
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -1059,8 +1174,52 @@ export default function ProjectDetailPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <h1 className="text-2xl font-bold text-foreground mb-2">{task.title}</h1>
-                {task.description && (
-                  <p className="text-muted-foreground">{task.description}</p>
+                {isEditingDescription ? (
+                  <div className="mt-2 space-y-2">
+                    <textarea
+                      value={editedDescription}
+                      onChange={(e) => setEditedDescription(e.target.value)}
+                      placeholder="Enter project description..."
+                      maxLength={500}
+                      className="w-full min-h-[100px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">{editedDescription.length}/500</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCancelEditDescription}
+                          disabled={isSavingDescription}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                        >
+                          <X size={14} /> Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveDescription}
+                          disabled={isSavingDescription}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                        >
+                          {isSavingDescription ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-start justify-between gap-3">
+                    {task.description ? (
+                      <p className="text-muted-foreground text-sm">{task.description}</p>
+                    ) : (
+                      <p className="text-muted-foreground text-sm italic">No description yet</p>
+                    )}
+                    <button
+                      onClick={handleStartEditDescription}
+                      className="flex items-center gap-1.5 rounded-md border border-border/50 bg-secondary/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors flex-shrink-0"
+                      title="Edit description"
+                    >
+                      <Edit size={13} />
+                      Edit
+                    </button>
+                  </div>
                 )}
                 <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-3 max-w-xl">
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1261,6 +1420,21 @@ export default function ProjectDetailPage() {
                      task.status === "in_progress" ? "In Progress" : "To Do"}
                   </span>
                 )}
+
+                {/* Flag for Help Button */}
+                <button
+                  onClick={() => handleFlagProject()}
+                  disabled={isSubmittingFlag}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all ${
+                    project?.task?.is_flagged
+                      ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/40 hover:bg-red-500/25"
+                      : "bg-secondary/40 text-muted-foreground border-border/50 hover:bg-secondary/60 hover:text-foreground"
+                  } ${isSubmittingFlag ? "opacity-60 cursor-not-allowed" : ""}`}
+                  title={project?.task?.is_flagged ? "Unflag this project" : "Flag this project for help"}
+                >
+                  {isSubmittingFlag ? <Loader2 size={14} className="animate-spin" /> : <Flag size={14} fill={project?.task?.is_flagged ? "currentColor" : "none"} />}
+                  {project?.task?.is_flagged ? "Flagged" : "Flag for Help"}
+                </button>
               </div>
             </div>
 
@@ -1888,6 +2062,52 @@ export default function ProjectDetailPage() {
             </form>
           </div>
         </div>
+
+        <Dialog open={isFlagDialogOpen} onOpenChange={setIsFlagDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Flag Project For Help</DialogTitle>
+              <DialogDescription>
+                Share an optional reason so admins can quickly understand what support is needed.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <label htmlFor="flag-reason" className="text-xs font-semibold text-foreground">
+                Reason (optional)
+              </label>
+              <textarea
+                id="flag-reason"
+                value={flagReasonInput}
+                onChange={(e) => setFlagReasonInput(e.target.value)}
+                placeholder="Example: Build failing on deployment, needs backend review"
+                maxLength={500}
+                rows={4}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-[11px] text-muted-foreground text-right">{flagReasonInput.length}/500</p>
+            </div>
+
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setIsFlagDialogOpen(false)}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmFlagProject}
+                disabled={isSubmittingFlag}
+                className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {isSubmittingFlag ? <Loader2 size={13} className="animate-spin" /> : <Flag size={13} />}
+                Flag Project
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {showSubtaskModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

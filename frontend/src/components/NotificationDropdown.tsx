@@ -54,9 +54,11 @@ export function NotificationDropdown() {
     setLoading(true);
     const response = await getNotifications();
     if (response.data) {
-      const unreadOnly = response.data.filter((n) => !n.is_read);
-      setNotifications(unreadOnly);
-      setUnreadCount(unreadOnly.length);
+      // Show ALL notifications (both read and unread), sorted by newest first
+      const allNotifications = response.data;
+      setNotifications(allNotifications);
+      const unread = allNotifications.filter((n) => !n.is_read);
+      setUnreadCount(unread.length);
     }
     setLoading(false);
   }
@@ -64,8 +66,12 @@ export function NotificationDropdown() {
   async function handleMarkAsRead(notificationId: number) {
     const response = await markNotificationRead(notificationId);
     if (response.data) {
-      // Remove immediately from visible list.
-      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      // Update the notification's read status locally, keep it visible
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notificationId ? { ...n, is_read: true } : n
+        )
+      );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     }
   }
@@ -173,16 +179,19 @@ export function NotificationDropdown() {
       >
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-semibold text-base">Notifications</h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleMarkAllAsRead}
-              className="h-auto px-2 py-1 text-xs"
-            >
-              Mark all as read
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleMarkAllAsRead}
+                className="h-auto px-2 py-1 text-xs font-medium"
+                title="Mark all notifications as read"
+              >
+                Mark all as read
+              </Button>
+            )}
+          </div>
         </div>
         <div className="max-h-[70vh] overflow-y-auto">
           {loading ? (
@@ -191,30 +200,68 @@ export function NotificationDropdown() {
             </div>
           ) : notifications.length === 0 ? (
             <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-              No notifications
+              All caught up! No notifications
             </div>
           ) : (
-            notifications.map((notification) => (
-              <DropdownMenuItem
-                key={notification.id}
-                className={`flex flex-col items-start px-5 py-4 cursor-pointer ${
-                  !notification.is_read ? "bg-muted/50" : ""
-                }`}
-                onSelect={() => {
-                  void handleNotificationClick(notification);
-                }}
-              >
-                <div className="flex items-start justify-between w-full gap-2">
-                  <p className="text-sm leading-relaxed flex-1">{notification.message}</p>
-                  {!notification.is_read && (
-                    <div className="h-2 w-2 rounded-full bg-blue-600 mt-1 flex-shrink-0" />
+            <div>
+              {/* Unread notifications section */}
+              {notifications.filter((n) => !n.is_read).length > 0 && (
+                <>
+                  <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/40">
+                    New
+                  </div>
+                  {notifications
+                    .filter((n) => !n.is_read)
+                    .map((notification) => (
+                      <DropdownMenuItem
+                        key={notification.id}
+                        className="flex flex-col items-start px-5 py-3 cursor-pointer bg-blue-50/30 dark:bg-blue-950/20 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 border-b border-border/50 transition-colors"
+                        onSelect={() => {
+                          void handleNotificationClick(notification);
+                        }}
+                      >
+                        <div className="flex items-start justify-between w-full gap-2">
+                          <p className="text-sm leading-relaxed flex-1 font-medium text-foreground">{notification.message}</p>
+                          <div className="h-3 w-3 rounded-full bg-blue-600 shadow-lg shadow-blue-600/50 mt-0.5 flex-shrink-0 animate-pulse" />
+                        </div>
+                        <span className="text-xs text-muted-foreground mt-1.5">
+                          {formatTime(notification.created_at)}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
+              
+              {/* Read notifications section */}
+              {notifications.filter((n) => n.is_read).length > 0 && (
+                <>
+                  {notifications.filter((n) => !n.is_read).length > 0 && (
+                    <DropdownMenuSeparator />
                   )}
-                </div>
-                <span className="text-xs text-muted-foreground mt-1.5">
-                  {formatTime(notification.created_at)}
-                </span>
-              </DropdownMenuItem>
-            ))
+                  <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/40">
+                    Earlier
+                  </div>
+                  {notifications
+                    .filter((n) => n.is_read)
+                    .map((notification) => (
+                      <DropdownMenuItem
+                        key={notification.id}
+                        className="flex flex-col items-start px-5 py-3 cursor-pointer hover:bg-secondary/40 border-b border-border/50 transition-colors"
+                        onSelect={() => {
+                          void handleNotificationClick(notification);
+                        }}
+                      >
+                        <div className="flex items-start justify-between w-full gap-2">
+                          <p className="text-sm leading-relaxed flex-1 text-muted-foreground">{notification.message}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground/60 mt-1.5">
+                          {formatTime(notification.created_at)}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
+            </div>
           )}
         </div>
       </DropdownMenuContent>

@@ -184,6 +184,12 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_start_date DATE',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_end_date DATE',
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS monthly_day INTEGER',
+        # Project flagging for help/issues
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flag_reason VARCHAR(500)',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_by INTEGER',
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS flagged_at TIMESTAMP WITH TIME ZONE',
+        'CREATE INDEX IF NOT EXISTS ix_tasks_is_flagged ON tasks(is_flagged)',
         # Task workspace hierarchy
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id INTEGER',
         'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',

@@ -12,6 +12,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, func
+from sqlalchemy.exc import DataError
 from sqlmodel import Session, select
 
 
@@ -834,6 +835,105 @@ async def update_task_links(
     if deployed_link is not None:
         task.deployed_link = deployed_link if deployed_link.strip() else None
     
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    
+    return task
+
+
+@router.patch("/{task_id}/flag", response_model=TaskRead)
+async def flag_project_for_help(
+    task_id: int,
+    flag_reason: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Flag a project for help/issues (admin or project manager).
+    
+    This allows anyone to flag a project that has errors or needs help.
+    Admins/managers get easy access to flagged projects.
+    """
+    statement = select(Task).where(Task.id == task_id)
+    task = session.exec(statement).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+    
+    _ensure_task_access(current_user, task, "task")
+    
+    # Toggle flag status
+    if task.is_flagged:
+        # Unflag
+        task.is_flagged = False
+        task.flag_reason = None
+        task.flagged_by = None
+        task.flagged_at = None
+    else:
+        # Flag
+        task.is_flagged = True
+        task.flag_reason = flag_reason.strip() if flag_reason else None
+        task.flagged_by = current_user.id
+        task.flagged_at = datetime.now(timezone.utc)
+        
+        # Notify admins (and managers when role exists in DB enum).
+        try:
+            admin_stmt = select(User).where(
+                (User.role == UserRole.admin) | (User.role == UserRole.manager)
+            )
+            admins = session.exec(admin_stmt).all()
+        except DataError:
+            # Some deployments still use a DB enum without "manager".
+            session.rollback()
+            admin_stmt = select(User).where(User.role == UserRole.admin)
+            admins = session.exec(admin_stmt).all()
+        
+        for admin in admins:
+            if admin.id != current_user.id:  # Don't notify the person who flagged
+                create_notification(
+                    session=session,
+                    user_id=admin.id,
+                    type=NotificationType.TASK_ASSIGNED,
+                    message=f"Project '{task.title}' has been flagged for help: {task.flag_reason or 'No specific reason provided'}",
+                    task_id=task.id
+                )
+    
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    
+    return task
+
+
+@router.patch("/{task_id}/description", response_model=TaskRead)
+async def update_project_description(
+    task_id: int,
+    description: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Update project description (owner, assigned employee, or admin can edit).
+    
+    Allows anyone who has access to the project to update its description.
+    """
+    statement = select(Task).where(Task.id == task_id)
+    task = session.exec(statement).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    _ensure_task_access(current_user, task, "project")
+    
+    # Update description (allow empty string to clear description)
+    task.description = description.strip() if description else None
     task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()

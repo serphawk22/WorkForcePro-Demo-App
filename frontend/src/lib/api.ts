@@ -211,6 +211,11 @@ export interface Task {
   recurrence_start_date?: string | null;
   recurrence_end_date?: string | null;
   monthly_day?: number | null;
+  /** Project flagging metadata */
+  is_flagged?: boolean;
+  flag_reason?: string | null;
+  flagged_by?: number | null;
+  flagged_at?: string | null;
 }
 
 export interface TaskCreate {
@@ -600,6 +605,7 @@ export interface SubtaskCreate {
   title: string;
   description?: string;
   assigned_to: number;
+  assigned_by?: number;
   priority?: "low" | "medium" | "high";
   due_date?: string;
   parent_subtask_id?: number;  // For creating nested subtasks
@@ -1451,6 +1457,36 @@ export async function updateTaskLinks(
   if (deployed_link !== undefined) params.append("deployed_link", deployed_link || "");
   
   return apiFetch<Task>(`/tasks/${taskId}/links?${params.toString()}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Flag/unflag a project for help or issues.
+ */
+export async function flagProjectForHelp(
+  taskId: number,
+  flagReason?: string
+): Promise<ApiResponse<Task>> {
+  const params = new URLSearchParams();
+  if (flagReason) params.append("flag_reason", flagReason);
+  
+  return apiFetch<Task>(`/tasks/${taskId}/flag?${params.toString()}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Update a project's description (owner, assigned employee, or admin can edit).
+ */
+export async function updateProjectDescription(
+  taskId: number,
+  description: string | null
+): Promise<ApiResponse<Task>> {
+  const params = new URLSearchParams();
+  if (description !== null) params.append("description", description);
+  
+  return apiFetch<Task>(`/tasks/${taskId}/description?${params.toString()}`, {
     method: "PATCH",
   });
 }

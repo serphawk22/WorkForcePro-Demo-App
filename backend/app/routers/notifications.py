@@ -128,7 +128,7 @@ async def mark_notification_read(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Mark a notification as read (and remove it from the feed)."""
+    """Mark a notification as read (keep it in feed with read status)."""
     statement = select(Notification).where(Notification.id == notification_id)
     notification = session.exec(statement).first()
     
@@ -145,10 +145,12 @@ async def mark_notification_read(
             detail="Not authorized to mark this notification"
         )
     
-    session.delete(notification)
+    notification.is_read = True
+    session.add(notification)
     session.commit()
+    session.refresh(notification)
 
-    return {"message": "Notification removed"}
+    return {"message": "Notification marked as read"}
 
 
 @router.patch("/read-all")
@@ -156,7 +158,7 @@ async def mark_all_notifications_read(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Mark all notifications as read for current user (clear feed)."""
+    """Mark all notifications as read for current user."""
     statement = select(Notification).where(
         Notification.user_id == current_user.id,
         Notification.is_read == False
@@ -165,8 +167,9 @@ async def mark_all_notifications_read(
     notifications = session.exec(statement).all()
     
     for notification in notifications:
-        session.delete(notification)
+        notification.is_read = True
+        session.add(notification)
     
     session.commit()
     
-    return {"message": f"Cleared {len(notifications)} notifications"}
+    return {"message": f"Marked {len(notifications)} notifications as read"}

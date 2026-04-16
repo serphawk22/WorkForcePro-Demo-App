@@ -344,6 +344,11 @@ class Task(TaskBase, table=True):
     recurrence_start_date: Optional[DateType] = Field(default=None)
     recurrence_end_date: Optional[DateType] = Field(default=None)
     monthly_day: Optional[int] = Field(default=None, ge=1, le=31)  # for monthly: day-of-month
+    # Project flagging for help/issues
+    is_flagged: bool = Field(default=False, index=True)  # Project needs help or has issues
+    flag_reason: Optional[str] = Field(default=None, max_length=500)  # Why the project is flagged
+    flagged_by: Optional[int] = Field(default=None, foreign_key="users.id")  # Who flagged it
+    flagged_at: Optional[datetime] = None  # When it was flagged
 
 
 class TaskCreate(TaskBase):
@@ -422,6 +427,10 @@ class TaskRead(TaskBase):
     recurrence_start_date: Optional[DateType] = None
     recurrence_end_date: Optional[DateType] = None
     monthly_day: Optional[int] = None
+    is_flagged: bool = False
+    flag_reason: Optional[str] = None
+    flagged_by: Optional[int] = None
+    flagged_at: Optional[datetime] = None
 
 
 class TaskWithAssignee(TaskRead):
@@ -429,6 +438,7 @@ class TaskWithAssignee(TaskRead):
     assignee_name: Optional[str] = None
     assignee_email: Optional[str] = None
     assigned_by_name: Optional[str] = None
+    flagged_by_name: Optional[str] = None  # Who flagged the project
     progress: Optional[int] = None  # Task completion progress (0-100)
     subtask_count: Optional[int] = None
 
@@ -526,8 +536,9 @@ class SubtaskCreate(SQLModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: int
+    assigned_by: int
     priority: TaskPriority = Field(default=TaskPriority.medium)
-    due_date: Optional[DateType] = None
+    due_date: DateType
     parent_subtask_id: Optional[int] = None  # For creating nested subtasks
 
 

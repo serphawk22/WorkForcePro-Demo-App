@@ -314,6 +314,19 @@ export default function EmployeeDashboard() {
     }
   };
 
+  const handleNavigate = useCallback(
+    (url: string, e?: React.MouseEvent) => {
+      if (e && (e.ctrlKey || e.metaKey || e.button === 1)) {
+        // Ctrl+Click or Middle-Click: open in new tab
+        window.open(url, "_blank");
+      } else {
+        // Regular click: open in current tab
+        router.push(url);
+      }
+    },
+    [router]
+  );
+
   // Use stats from dashboard API
   const tasksDueToday = dashboardStats?.tasks_due_today || 0;
   const tasksCompleted = dashboardStats?.tasks_completed || 0;
@@ -853,7 +866,7 @@ export default function EmployeeDashboard() {
                   <tbody className="divide-y divide-border">
                     {activeTasks.slice(0, 5).map((task) => (
                       <React.Fragment key={task.id}>
-                        <tr className="hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/10 transition-all">
+                        <tr className="hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/10 transition-all cursor-pointer" onClick={(e) => handleNavigate(`/project-management/${task.id}`, e as React.MouseEvent)} title="Click to open project details • Ctrl+Click to open in new tab">
                           {/* Expand chevron */}
                           <td className="py-3.5 pl-1">
                             <button
@@ -871,7 +884,7 @@ export default function EmployeeDashboard() {
                               <span className="h-2 w-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50 animate-pulse" />
                               <div>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="font-semibold text-card-foreground">{task.title}</p>
+                                  <p className="font-semibold text-card-foreground hover:text-primary transition-colors duration-200">{task.title}</p>
                                   {/* Subtask count badge */}
                                   {taskSubtasks[task.id]?.length > 0 && (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary border border-primary/20">

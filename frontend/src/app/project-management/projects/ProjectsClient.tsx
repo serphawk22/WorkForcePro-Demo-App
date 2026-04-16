@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
@@ -166,6 +167,7 @@ export default function ProjectsPage({
   const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
   const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined);
   const [assigneeFilter, setAssigneeFilter] = useState<number | undefined>(undefined);
+  const [flaggedFilter, setFlaggedFilter] = useState<boolean | undefined>(undefined);  // Filter for flagged projects
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -237,6 +239,7 @@ export default function ProjectsPage({
   const [isRecordingEditVoice, setIsRecordingEditVoice] = useState(false);
   const [isPlayingEditVoice, setIsPlayingEditVoice] = useState(false);
   const [isUploadingEditVoice, setIsUploadingEditVoice] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
@@ -253,6 +256,10 @@ export default function ProjectsPage({
   const editVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const consumedEditTaskIdRef = useRef<number | null>(null);
   const consumedCreatePrefillRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const WEEKDAY_OPTS = [
     { v: 0, l: "Mon" }, { v: 1, l: "Tue" }, { v: 2, l: "Wed" }, { v: 3, l: "Thu" },
@@ -663,7 +670,7 @@ export default function ProjectsPage({
   }, [voiceNotePreviewUrl]);
 
   const [newSubtask, setNewSubtask] = useState<Partial<TaskCreate>>({
-    title: "", description: "", assigned_to: undefined, priority: "medium",
+    title: "", description: "", assigned_to: undefined, assigned_by: user?.id, due_date: undefined, priority: "medium",
   });
 
   const columnPreferenceKey = useMemo(
@@ -1335,9 +1342,24 @@ export default function ProjectsPage({
       typeof assigneeValue === "number"
         ? assigneeValue
         : undefined;
+    const reporterValue = newSubtask.assigned_by;
+    const parsedReporter = typeof reporterValue === "number" ? reporterValue : undefined;
+    const parsedDueDate = typeof newSubtask.due_date === "string" ? newSubtask.due_date : undefined;
 
     if (!Number.isFinite(parsedAssignee as number)) {
       toast.error("Please assign this subtask to an employee");
+      setIsCreatingSubtask(false);
+      return;
+    }
+
+    if (!Number.isFinite(parsedReporter as number)) {
+      toast.error("Please select a reporter for this subtask");
+      setIsCreatingSubtask(false);
+      return;
+    }
+
+    if (!parsedDueDate) {
+      toast.error("Due date is required for subtask creation");
       setIsCreatingSubtask(false);
       return;
     }
@@ -1346,6 +1368,8 @@ export default function ProjectsPage({
       title: newSubtask.title,
       description: newSubtask.description || "",
       assigned_to: parsedAssignee as number,
+      assigned_by: parsedReporter as number,
+      due_date: parsedDueDate,
       parent_subtask_id: selectedParentSubtaskId ?? undefined,
     });
     if (result.error) {
@@ -1358,7 +1382,7 @@ export default function ProjectsPage({
         return next;
       });
       setShowSubtaskModal(false);
-      setNewSubtask({ title: "", description: "", assigned_to: undefined, priority: "medium" });
+      setNewSubtask({ title: "", description: "", assigned_to: undefined, assigned_by: user?.id, due_date: undefined, priority: "medium" });
       setSelectedTaskForSubtask(null);
       setSelectedParentSubtaskId(null);
       await loadSubtasks(taskId);
@@ -1371,6 +1395,14 @@ export default function ProjectsPage({
   const openSubtaskModal = (taskId: number, parentSubtaskId: number | null = null) => {
     setSelectedTaskForSubtask(taskId);
     setSelectedParentSubtaskId(parentSubtaskId);
+    setNewSubtask({
+      title: "",
+      description: "",
+      assigned_to: undefined,
+      assigned_by: user?.id,
+      due_date: undefined,
+      priority: "medium",
+    });
     setShowSubtaskModal(true);
   };
 
@@ -1670,6 +1702,14 @@ export default function ProjectsPage({
     setLoadingSubtaskComments(false);
   }, []);
 
+  const getSubtaskCommentTaskId = useCallback(
+    (subtask: Task, rootTask?: Task | null) => {
+      if (subtask.id > 0) return subtask.id;
+      return rootTask?.id ?? null;
+    },
+    []
+  );
+
   const openSubtaskPanel = (subtask: Task, rootTask: Task) => {
     setSelectedSubtaskForPanel(subtask);
     setSelectedSubtaskRootTaskForPanel(rootTask);
@@ -1691,15 +1731,26 @@ export default function ProjectsPage({
       actual_hours: subtask.actual_hours != null ? String(subtask.actual_hours) : "",
     });
 
-    loadSubtaskComments(subtask.id);
+    const commentTaskId = getSubtaskCommentTaskId(subtask, rootTask);
+    if (commentTaskId) {
+      loadSubtaskComments(commentTaskId);
+    } else {
+      setSubtaskComments([]);
+    }
   };
 
   const handleAddSubtaskComment = async () => {
     if (!selectedSubtaskForPanel || !newSubtaskComment.trim()) return;
 
+    const commentTaskId = getSubtaskCommentTaskId(selectedSubtaskForPanel, selectedSubtaskRootTaskForPanel);
+    if (!commentTaskId) {
+      toast.error("Unable to determine comment target task");
+      return;
+    }
+
     setIsCommentSaving(true);
     const response = await createTaskComment({
-      task_id: selectedSubtaskForPanel.id,
+      task_id: commentTaskId,
       comment: newSubtaskComment.trim(),
     });
 
@@ -1708,7 +1759,7 @@ export default function ProjectsPage({
     } else {
       setNewSubtaskComment("");
       toast.success("Comment added");
-      await loadSubtaskComments(selectedSubtaskForPanel.id);
+      await loadSubtaskComments(commentTaskId);
     }
     setIsCommentSaving(false);
   };
@@ -1719,7 +1770,10 @@ export default function ProjectsPage({
     if (response.error) {
       toast.error(response.error);
     } else if (selectedSubtaskForPanel) {
-      await loadSubtaskComments(selectedSubtaskForPanel.id);
+      const commentTaskId = getSubtaskCommentTaskId(selectedSubtaskForPanel, selectedSubtaskRootTaskForPanel);
+      if (commentTaskId) {
+        await loadSubtaskComments(commentTaskId);
+      }
       toast.success("Comment deleted");
     }
     setDeletingCommentId(null);
@@ -1748,6 +1802,16 @@ export default function ProjectsPage({
     const actualHoursValue = parseOptionalNumber(detailDraft.actual_hours);
     const isLegacySubtaskRow = selectedSubtaskForPanel.id < 0;
 
+    const fallbackAssigneeId =
+      assignedToValue ??
+      selectedSubtaskForPanel.assigned_to ??
+      selectedSubtaskRootTaskForPanel?.assigned_to ??
+      undefined;
+    if (isLegacySubtaskRow && !fallbackAssigneeId) {
+      toast.error("Please select an assignee for this subtask");
+      return;
+    }
+
     setIsDetailSaving(true);
     try {
       const updateResult = isLegacySubtaskRow
@@ -1755,7 +1819,7 @@ export default function ProjectsPage({
             title,
             description: detailDraft.description.trim(),
             priority: detailDraft.priority,
-            assigned_to: assignedToValue,
+            assigned_to: fallbackAssigneeId,
             assigned_by: assignedByValue,
             due_date: detailDraft.due_date || undefined,
           })
@@ -1902,6 +1966,19 @@ export default function ProjectsPage({
   const handleResolutionEdit = (taskId: number, value: string) => {
     setResolutionEdits((prev) => ({ ...prev, [taskId]: value }));
   };
+
+  const handleNavigate = useCallback(
+    (url: string, e?: React.MouseEvent) => {
+      if (e && (e.ctrlKey || e.metaKey || e.button === 1)) {
+        // Ctrl+Click or Middle-Click: open in new tab
+        window.open(url, "_blank");
+      } else {
+        // Regular click: open in current tab
+        router.push(url);
+      }
+    },
+    [router]
+  );
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((ws) => ws.id === workspaceFilter),
@@ -2051,7 +2128,7 @@ export default function ProjectsPage({
                     <React.Fragment key={task.id}>
                       <tr
                         className="cursor-pointer transition-all duration-200 hover:bg-secondary/40 hover:shadow-[0_0_0_1px_rgba(168,85,247,0.26)] hover:scale-[1.002] active:scale-[0.998]"
-                        onClick={() => router.push(`/project-management/${task.id}`)}
+                        onClick={(e) => handleNavigate(`/project-management/${task.id}`, e as React.MouseEvent)}
                       >
                         <td className="py-3.5 pl-4">
                           <button
@@ -2069,10 +2146,10 @@ export default function ProjectsPage({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  router.push(`/project-management/${task.id}`);
+                                  handleNavigate(`/project-management/${task.id}`, e);
                                 }}
-                                className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors"
-                                title="Open project details"
+                                className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors cursor-pointer"
+                                title="Open project details (Ctrl+Click for new tab)"
                               >
                                 {task.public_id}
                               </button>
@@ -2124,9 +2201,10 @@ export default function ProjectsPage({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  router.push(`/project-management/${task.id}`);
+                                  handleNavigate(`/project-management/${task.id}`, e);
                                 }}
-                                className="text-[10px] font-semibold text-primary hover:text-primary/80"
+                                className="text-[10px] font-semibold text-primary hover:text-primary/80 cursor-pointer"
+                                title="Ctrl+Click to open in new tab"
                               >
                                 Open
                               </button>
@@ -2147,9 +2225,10 @@ export default function ProjectsPage({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    router.push(`/project-management/workspaces/${task.workspace_id}`);
+                                    handleNavigate(`/project-management/workspaces/${task.workspace_id}`, e);
                                   }}
-                                  className="text-[10px] font-semibold text-blue-400 hover:text-blue-300"
+                                  className="text-[10px] font-semibold text-blue-400 hover:text-blue-300 cursor-pointer"
+                                  title="Ctrl+Click to open in new tab"
                                 >
                                   Workspace
                                 </button>
@@ -2174,10 +2253,11 @@ export default function ProjectsPage({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (task.workspace_id) {
-                                  router.push(`/project-management/workspaces/${task.workspace_id}`);
+                                  handleNavigate(`/project-management/workspaces/${task.workspace_id}`, e);
                                 }
                               }}
-                              className="flex items-center gap-2 text-xs text-foreground hover:text-primary transition-colors"
+                              className="flex items-center gap-2 text-xs text-foreground hover:text-primary transition-colors cursor-pointer"
+                              title="Ctrl+Click to open in new tab"
                             >
                               <span
                                 className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
@@ -2628,8 +2708,28 @@ export default function ProjectsPage({
                   triggerClassName="w-full"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-foreground">Reporter *</label>
+                <DropdownMenu
+                  value={newSubtask.assigned_by ? String(newSubtask.assigned_by) : (user?.id ? String(user.id) : "")}
+                  onValueChange={(value) => setNewSubtask({ ...newSubtask, assigned_by: value ? Number(value) : undefined })}
+                  options={employeeOptions}
+                  placeholder="Select reporter"
+                  triggerClassName="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-foreground">Due Date *</label>
+                <input
+                  type="date"
+                  value={newSubtask.due_date || ""}
+                  onChange={(e) => setNewSubtask({ ...newSubtask, due_date: e.target.value || undefined })}
+                  className="w-full rounded-lg py-2 px-3 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  required
+                />
+              </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined }); setSelectedParentSubtaskId(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
+                <button type="button" onClick={() => { setShowSubtaskModal(false); setNewSubtask({ title: "", description: "", assigned_to: undefined, assigned_by: user?.id, due_date: undefined }); setSelectedParentSubtaskId(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors">Cancel</button>
                 <button type="submit" disabled={isCreatingSubtask} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                   {isCreatingSubtask ? <Loader2 className="h-4 w-4 animate-spin" /> : (selectedParentSubtaskId ? "Create Sub-Subtask" : "Create Subtask")}
                 </button>
@@ -2918,6 +3018,210 @@ export default function ProjectsPage({
             </form>
           </div>
         </div>
+      )}
+
+      {isMounted && selectedSubtaskForPanel && selectedSubtaskRootTaskForPanel && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-5xl rounded-2xl border border-border bg-card shadow-2xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Edit Subtask</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Parent task: {selectedSubtaskRootTaskForPanel.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubtaskForPanel(null);
+                  setSelectedSubtaskRootTaskForPanel(null);
+                  setSubtaskComments([]);
+                  setNewSubtaskComment("");
+                }}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Close subtask panel"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+              <div className="lg:col-span-2 border-b lg:border-b-0 lg:border-r border-border p-5 space-y-4 overflow-y-auto max-h-[72vh]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={detailDraft.title}
+                      onChange={(e) => setDetailDraft((prev) => ({ ...prev, title: e.target.value }))}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      placeholder="Subtask title"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Description</label>
+                    <textarea
+                      value={detailDraft.description}
+                      onChange={(e) => setDetailDraft((prev) => ({ ...prev, description: e.target.value }))}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      rows={3}
+                      placeholder="Subtask description"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Priority</label>
+                    <DropdownMenu
+                      value={detailDraft.priority}
+                      onValueChange={(value) => setDetailDraft((prev) => ({ ...prev, priority: value as Task["priority"] }))}
+                      options={priorityOptions}
+                      placeholder="Priority"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Status</label>
+                    <DropdownMenu
+                      value={detailDraft.status}
+                      onValueChange={(value) => setDetailDraft((prev) => ({ ...prev, status: value as SubtaskDraftStatus }))}
+                      options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
+                      placeholder="Status"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Assignee</label>
+                    <DropdownMenu
+                      value={detailDraft.assigned_to}
+                      onValueChange={(value) => setDetailDraft((prev) => ({ ...prev, assigned_to: value }))}
+                      options={[
+                        { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
+                        ...employeeOptions,
+                      ]}
+                      placeholder="Assignee"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Reporter</label>
+                    <DropdownMenu
+                      value={detailDraft.assigned_by}
+                      onValueChange={(value) => setDetailDraft((prev) => ({ ...prev, assigned_by: value }))}
+                      options={employeeOptions}
+                      placeholder="Reporter"
+                      triggerClassName="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Due Date</label>
+                    <input
+                      type="date"
+                      value={detailDraft.due_date}
+                      onChange={(e) => setDetailDraft((prev) => ({ ...prev, due_date: e.target.value }))}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1">Completed At</label>
+                    <input
+                      type="date"
+                      value={detailDraft.completed_at}
+                      onChange={(e) => setDetailDraft((prev) => ({ ...prev, completed_at: e.target.value }))}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSubtaskForPanel(null);
+                      setSelectedSubtaskRootTaskForPanel(null);
+                      setSubtaskComments([]);
+                      setNewSubtaskComment("");
+                    }}
+                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveTaskDetails}
+                    disabled={isDetailSaving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {isDetailSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    {isDetailSaving ? "Saving..." : "Save Subtask"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-3 overflow-y-auto max-h-[72vh]">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground">Comments</h3>
+                  {loadingSubtaskComments && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
+                </div>
+
+                <div className="space-y-2 max-h-[46vh] overflow-y-auto pr-1">
+                  {subtaskComments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No comments yet.</p>
+                  ) : (
+                    subtaskComments.map((comment) => (
+                      <div key={comment.id} className="rounded-lg border border-border bg-background/60 p-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">{comment.user_name || "Unknown"}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {comment.created_at ? new Date(comment.created_at).toLocaleString("en-IN") : ""}
+                            </p>
+                          </div>
+                          {(isAdmin || comment.user_id === user?.id) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSubtaskComment(comment.id)}
+                              disabled={deletingCommentId === comment.id}
+                              className="text-[11px] font-semibold text-red-500 hover:text-red-600 disabled:opacity-60"
+                            >
+                              {deletingCommentId === comment.id ? "Deleting..." : "Delete"}
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-foreground whitespace-pre-wrap">{comment.comment}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <textarea
+                    value={newSubtaskComment}
+                    onChange={(e) => setNewSubtaskComment(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    rows={3}
+                    placeholder="Write a comment..."
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddSubtaskComment}
+                    disabled={isCommentSaving || !newSubtaskComment.trim()}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                  >
+                    {isCommentSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                    {isCommentSaving ? "Adding..." : "Add Comment"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </ProjectShell>
   );

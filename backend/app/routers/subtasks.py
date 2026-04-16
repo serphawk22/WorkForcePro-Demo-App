@@ -68,7 +68,29 @@ async def create_subtask(
             detail="Cannot create subtasks on approved tasks"
         )
 
+    if not subtask_data.due_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Due date is required"
+        )
+
     requested_assignee_id = subtask_data.assigned_to
+    requested_reporter_id = subtask_data.assigned_by
+
+    reporter_stmt = select(User).where(User.id == requested_reporter_id)
+    reporter = session.exec(reporter_stmt).first()
+    if not reporter:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reporter not found"
+        )
+    ensure_same_organization(current_user, reporter.organization_id, "reporter")
+    if not is_admin_user(current_user) and requested_reporter_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can choose a different reporter"
+        )
+
     assignment_alert_message = None
     if task.assigned_to and requested_assignee_id != task.assigned_to:
         requested_assignee_id = task.assigned_to
@@ -112,7 +134,7 @@ async def create_subtask(
         title=subtask_data.title,
         description=subtask_data.description,
         assigned_to=requested_assignee_id,
-        assigned_by=current_user.id,
+        assigned_by=requested_reporter_id,
         priority=subtask_data.priority,
         due_date=subtask_data.due_date,
         public_id=generate_public_id(session, Subtask)
