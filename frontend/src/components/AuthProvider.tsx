@@ -43,12 +43,21 @@ function normalizeUserRole(rawRole: unknown): "admin" | "employee" {
   const normalized = rawRole.trim().toLowerCase();
   if (
     normalized === "admin" ||
+    normalized === "administrator" ||
+    normalized === "super_admin" ||
+    normalized === "superadmin" ||
+    normalized === "org-admin" ||
+    normalized === "org_admin" ||
     normalized === "manager" ||
     normalized.endsWith(".admin") ||
-    normalized.endsWith(".manager") ||
-    normalized.includes("admin")
+    normalized.endsWith(".manager")
   ) return "admin";
-  if (normalized === "employee" || normalized.endsWith(".employee")) return "employee";
+  if (
+    normalized === "employee" ||
+    normalized === "staff" ||
+    normalized === "user" ||
+    normalized.endsWith(".employee")
+  ) return "employee";
   return "employee";
 }
 
