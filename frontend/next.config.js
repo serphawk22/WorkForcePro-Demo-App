@@ -32,6 +32,9 @@ if (isDevServer && process.env.NEXT_DISABLE_DEV_POLL !== "1") {
 
 const nextConfig = {
   reactStrictMode: true,
+  // Avoid .next corruption when `next dev` and `next build` are run around the same time.
+  // Dev writes to .next-dev, build keeps using .next.
+  distDir: isDevServer ? ".next-dev" : ".next",
   /**
    * Local dev: browser calls same-origin `/api/...`; Next proxies to FastAPI.
    * Avoids CORS/IPv6 "localhost" quirks and matches production (Vercel → Railway via NEXT_PUBLIC_API_URL).

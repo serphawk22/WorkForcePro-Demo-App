@@ -165,7 +165,7 @@ export default function ProjectsPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(normalizeStatusFilterValue(statusQuery));
   const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
-  const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined);
+  const [projectFilter, setProjectFilter] = useState<string>("__all");
   const [assigneeFilter, setAssigneeFilter] = useState<number | undefined>(undefined);
   const [flaggedFilter, setFlaggedFilter] = useState<boolean | undefined>(undefined);  // Filter for flagged projects
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -211,6 +211,9 @@ export default function ProjectsPage({
   const [resolutionEdits, setResolutionEdits] = useState<Record<number, string>>({});
   const [visibleColumns, setVisibleColumns] = useState<ListColumnId[]>(DEFAULT_VISIBLE_COLUMNS);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [showProjectLinks, setShowProjectLinks] = useState(false);
+  const [showSubtaskLinks, setShowSubtaskLinks] = useState(false);
+  const [showWarningLinks, setShowWarningLinks] = useState(false);
   const [newTask, setNewTask] = useState<TaskCreate>({
     title: "", description: "", priority: "medium", workspace_id: 0,
     assigned_to: undefined, assigned_by: undefined, due_date: undefined, github_link: undefined, deployed_link: undefined,
@@ -268,22 +271,15 @@ export default function ProjectsPage({
 
   const statusFilterOptions: DropdownOption[] = useMemo(() => [
     { value: "__all", label: "All Status", icon: <Circle className="h-3.5 w-3.5 opacity-40" /> },
-    { value: "new", label: "New / To Do", icon: <span className="text-purple-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
     { value: "overdue", label: "Overdue", icon: <AlertCircle className="h-3.5 w-3.5 text-red-400" /> },
     { value: "warning", label: "Warning", icon: <AlertCircle className="h-3.5 w-3.5 text-red-500" /> },
-    ...(isAdmin ? [
-      { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
-      { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
-      { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
-      { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
-    ] : [
-      { value: "submitted", label: "Done (Pending Review)", icon: <span className="text-yellow-400">●</span> },
-      { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
-      { value: "rejected", label: "Needs Changes", icon: <span className="text-red-400">●</span> },
-    ]),
-  ], [isAdmin]);
+  ], []);
 
   const workspaceFilterOptions: DropdownOption[] = useMemo(() => [
     { value: "__all", label: "All Workspaces", icon: <span className="text-muted-foreground">📁</span> },
@@ -309,13 +305,45 @@ export default function ProjectsPage({
 
   const projectFilterOptions: DropdownOption[] = useMemo(() => [
     { value: "__all", label: "All Projects", icon: <span className="text-muted-foreground">🗂️</span> },
-    ...tasks.map((task) => ({
-      value: String(task.id),
-      label: task.title,
-      description: task.public_id || undefined,
-      icon: <span className="text-primary">#</span>,
-    })),
-  ], [tasks]);
+    { value: "__subtasks__", label: "Subtasks", icon: <ListTree className="h-3.5 w-3.5 text-primary" /> },
+  ], []);
+
+  const projectLinkItems = useMemo(() => {
+    return tasks
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        publicId: task.public_id,
+        workspace: task.workspace_name,
+      }))
+      .sort((left, right) => left.title.localeCompare(right.title));
+  }, [tasks]);
+
+  const subtaskLinkItems = useMemo(() => {
+    const items: Array<{
+      id: number;
+      title: string;
+      publicId: string | null;
+      rootTaskId: number;
+      rootTaskTitle: string;
+      workspace?: string | null;
+    }> = [];
+
+    tasks.forEach((task) => {
+      (taskChildren[task.id] || []).forEach((subtask) => {
+        items.push({
+          id: subtask.id,
+          title: subtask.title,
+          publicId: subtask.public_id || null,
+          rootTaskId: task.id,
+          rootTaskTitle: task.title,
+          workspace: subtask.workspace_name || task.workspace_name || null,
+        });
+      });
+    });
+
+    return items.sort((left, right) => left.title.localeCompare(right.title));
+  }, [tasks, taskChildren]);
 
   const priorityOptions: DropdownOption[] = [
     { value: "low", label: "Low", icon: <span className="text-green-400">🟢</span> },
@@ -326,18 +354,34 @@ export default function ProjectsPage({
   const taskAdminStatusOptions: DropdownOption[] = [
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "submitted", label: "Completed", icon: <span className="text-green-400">●</span> },
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
   ];
 
   const employeeStatusOptions: DropdownOption[] = [
     { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "done", label: "Completed", icon: <span className="text-green-400">●</span> },
-    { value: "rejected", label: "Ignore", icon: <span className="text-red-400">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
   ];
+
+  const canEditTaskStatus = (task: Task) => {
+    return user?.role === "employee" && task.assigned_to === user?.id;
+  };
+
+  const getStatusDisplayLabel = (status: Task["status"]) => {
+    if (status === "todo") return "To Do";
+    if (status === "in_progress") return "In Progress";
+    if (status === "submitted") return "Submitted";
+    if (status === "reviewing") return "Reviewing";
+    if (status === "approved") return "Approved";
+    if (status === "rejected") return "Rejected";
+    return status;
+  };
 
   const employeeOptions: DropdownOption[] = useMemo(() => employees.map((emp) => ({
     value: String(emp.id),
@@ -795,9 +839,10 @@ export default function ProjectsPage({
   }, [statusQuery]);
 
   useEffect(() => {
-    if (!projectFilter) return;
-    if (!tasks.some((task) => task.id === projectFilter)) {
-      setProjectFilter(undefined);
+    if (projectFilter === "__all" || projectFilter === "__subtasks__") return;
+    const parsedProjectFilter = Number(projectFilter);
+    if (Number.isNaN(parsedProjectFilter) || !tasks.some((task) => task.id === parsedProjectFilter)) {
+      setProjectFilter("__all");
     }
   }, [projectFilter, tasks]);
 
@@ -985,10 +1030,16 @@ export default function ProjectsPage({
   };
 
   const handleStatusChange = async (taskId: number, selectedStatus: string) => {
+    const targetTask =
+      tasks.find((task) => task.id === taskId) ||
+      Object.values(taskChildren).flat().find((subtask) => subtask.id === taskId);
+    if (!targetTask || !canEditTaskStatus(targetTask)) {
+      toast.error("Only the assigned employee can change status.");
+      return;
+    }
+
     const isLegacySubtaskRow = taskId < 0;
-    const backendStatus = isLegacySubtaskRow
-      ? (selectedStatus === "done" || selectedStatus === "submitted" ? "completed" : selectedStatus)
-      : (selectedStatus === "done" ? "submitted" : selectedStatus);
+    const backendStatus = selectedStatus;
     const previousTask = tasks.find((task) => task.id === taskId);
 
     // Optimistic UI update to avoid page-level loading flicker.
@@ -1022,7 +1073,7 @@ export default function ProjectsPage({
       return;
     }
 
-    toast.success(selectedStatus === "done" ? "Task moved to testing!" : "Status updated!");
+    toast.success("Status updated!");
     // Quiet refresh keeps the current screen stable while syncing server state.
     void loadData(true);
   };
@@ -1495,12 +1546,14 @@ export default function ProjectsPage({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-card-foreground">{subtask.title}</span>
                 {warningState.isWarning && (
-                  <span
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowWarningLinks(true); }}
                     className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-500/10 border border-red-500/30 text-red-500"
                     title={warningState.reason || "Task warning"}
                   >
                     <AlertCircle size={10} /> Warning
-                  </span>
+                  </button>
                 )}
                 {
                   <button
@@ -1543,13 +1596,19 @@ export default function ProjectsPage({
           </td>
           <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
             <div onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu
-                value={isAdmin ? subtask.status : (subtask.status === "submitted" ? "done" : subtask.status)}
-                onValueChange={(value) => handleStatusChange(subtask.id, value)}
-                options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
-                placeholder="Status"
-                triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
-              />
+              {canEditTaskStatus(subtask) ? (
+                <DropdownMenu
+                  value={subtask.status === "submitted" ? "done" : subtask.status}
+                  onValueChange={(value) => handleStatusChange(subtask.id, value)}
+                  options={employeeStatusOptions}
+                  placeholder="Status"
+                  triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}
+                />
+              ) : (
+                <span className={`inline-flex w-[170px] items-center rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[subtask.status]}`}>
+                  {getStatusDisplayLabel(subtask.status)}
+                </span>
+              )}
             </div>
           </td>
           <td className={`py-3.5 px-4 text-card-foreground text-xs whitespace-nowrap text-center min-w-[140px] ${isColumnVisible("reporter") ? "" : "hidden"}`}>
@@ -1895,7 +1954,12 @@ export default function ProjectsPage({
   };
 
   const filteredTasks = tasks.filter((t) => {
-    if (projectFilter && t.id !== projectFilter) return false;
+    if (projectFilter === "__subtasks__") {
+      if ((taskChildren[t.id] || []).length === 0) return false;
+    } else if (projectFilter !== "__all") {
+      const parsedProjectFilter = Number(projectFilter);
+      if (!Number.isNaN(parsedProjectFilter) && t.id !== parsedProjectFilter) return false;
+    }
 
     const matchesSearch =
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1925,6 +1989,47 @@ export default function ProjectsPage({
     today.setHours(0, 0, 0, 0);
     return dueDate < today;
   });
+
+  const warningLinkItems = useMemo(() => {
+    const items: Array<{
+      kind: "project" | "task";
+      id: number;
+      title: string;
+      reason: string;
+      rootTaskId: number;
+      rootTaskTitle: string;
+    }> = [];
+
+    filteredTasks.forEach((task) => {
+      const taskWarningState = getTaskWarningState(task, taskWarningSettings, new Date(), getTaskLatestActivityAt(task));
+      if (taskWarningState.isWarning) {
+        items.push({
+          kind: "project",
+          id: task.id,
+          title: task.title,
+          reason: taskWarningState.reason || "Task warning",
+          rootTaskId: task.id,
+          rootTaskTitle: task.title,
+        });
+      }
+
+      (taskChildren[task.id] || []).forEach((subtask) => {
+        const subtaskWarningState = getTaskWarningState(subtask, taskWarningSettings);
+        if (subtaskWarningState.isWarning) {
+          items.push({
+            kind: "task",
+            id: subtask.id,
+            title: subtask.title,
+            reason: subtaskWarningState.reason || "Task warning",
+            rootTaskId: task.id,
+            rootTaskTitle: task.title,
+          });
+        }
+      });
+    });
+
+    return items.sort((left, right) => left.title.localeCompare(right.title));
+  }, [filteredTasks, taskChildren, taskWarningSettings]);
 
   const getTaskUpdatedDate = (task: Task) => {
     const subtasks = taskChildren[task.id] || [];
@@ -2039,12 +2144,202 @@ export default function ProjectsPage({
             triggerClassName="w-full lg:w-52"
           />
           <DropdownMenu
-            value={projectFilter ? String(projectFilter) : "__all"}
-            onValueChange={(value) => setProjectFilter(value === "__all" ? undefined : Number(value))}
+            value={projectFilter}
+            onValueChange={(value) => setProjectFilter(value)}
             options={projectFilterOptions}
             placeholder="All Projects"
             triggerClassName="w-full lg:w-56"
           />
+          <div className="relative w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowProjectLinks((prev) => !prev)}
+              className="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <ListTree size={14} />
+              Project Links
+            </button>
+
+            {showProjectLinks && (
+              <div className="absolute left-0 top-full z-20 mt-2 w-80 max-h-96 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Quick Project Links</p>
+                    <p className="text-[11px] text-muted-foreground">Open any project directly</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectLinks(false)}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Close project links"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                  {projectLinkItems.length > 0 ? (
+                    projectLinkItems.map((project) => (
+                      <button
+                        key={project.id}
+                        type="button"
+                        onClick={() => {
+                          setShowProjectLinks(false);
+                          router.push(`/project-management/${project.id}`);
+                        }}
+                        className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-left text-xs hover:bg-primary/10 hover:border-primary/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{project.title}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {project.publicId || `Project #${project.id}`}
+                            {project.workspace ? ` • ${project.workspace}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-primary">Open</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
+                      No projects available
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowSubtaskLinks((prev) => !prev)}
+              className="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-500 hover:bg-blue-500/15 transition-colors"
+            >
+              <ListTree size={14} />
+              Subtask Links
+            </button>
+
+            {showSubtaskLinks && (
+              <div className="absolute left-0 top-full z-20 mt-2 w-96 max-h-96 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Subtasks</p>
+                    <p className="text-[11px] text-muted-foreground">Open any subtask directly</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSubtaskLinks(false)}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Close subtask links"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                  {subtaskLinkItems.length > 0 ? (
+                    subtaskLinkItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setShowSubtaskLinks(false);
+                          const rootTask = tasks.find((task) => task.id === item.rootTaskId);
+                          const subtask = (taskChildren[item.rootTaskId] || []).find((candidate) => candidate.id === item.id);
+                          if (rootTask && subtask) {
+                            setExpandedTasks((prev) => new Set(prev).add(item.rootTaskId));
+                            openSubtaskPanel(subtask, rootTask);
+                          }
+                        }}
+                        className="flex w-full items-start justify-between rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-left text-xs hover:bg-blue-500/10 hover:border-blue-500/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{item.title}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {item.publicId || `Subtask #${item.id}`}
+                            {item.workspace ? ` • ${item.workspace}` : ""}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">{item.rootTaskTitle}</p>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-blue-500">Open</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
+                      No subtasks available
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="relative w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowWarningLinks((prev) => !prev)}
+              className="inline-flex w-full lg:w-auto items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/15 transition-colors"
+            >
+              <AlertCircle size={14} />
+              Warning Links
+            </button>
+
+            {showWarningLinks && (
+              <div className="absolute left-0 top-full z-20 mt-2 w-96 max-h-96 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Warnings</p>
+                    <p className="text-[11px] text-muted-foreground">Jump to projects and tasks that need attention</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowWarningLinks(false)}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Close warning links"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                  {warningLinkItems.length > 0 ? (
+                    warningLinkItems.map((item) => (
+                      <button
+                        key={`${item.kind}-${item.id}`}
+                        type="button"
+                        onClick={() => {
+                          setShowWarningLinks(false);
+                          if (item.kind === "project") {
+                            router.push(`/project-management/${item.id}`);
+                            return;
+                          }
+
+                          const rootTask = tasks.find((task) => task.id === item.rootTaskId);
+                          const subtask = (taskChildren[item.rootTaskId] || []).find((candidate) => candidate.id === item.id);
+                          if (rootTask && subtask) {
+                            setExpandedTasks((prev) => new Set(prev).add(item.rootTaskId));
+                            openSubtaskPanel(subtask, rootTask);
+                          }
+                        }}
+                        className="flex w-full items-start justify-between rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-left text-xs hover:bg-red-500/10 hover:border-red-500/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">
+                            {item.kind === "project" ? "Project" : "Task"}: {item.title}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">{item.rootTaskTitle}</p>
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-red-500/90">{item.reason}</p>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-red-500">Open</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
+                      No warnings right now
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           {workspaceScopedView && selectedWorkspace && (
             <div className="inline-flex w-full lg:w-auto items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
               <span
@@ -2169,12 +2464,14 @@ export default function ProjectsPage({
                                 </span>
                               )}
                               {warningState.isWarning && (
-                                <span
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setShowWarningLinks(true); }}
                                   className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-500/10 border border-red-500/30 text-red-500"
                                   title={warningState.reason || "Task warning"}
                                 >
                                   <AlertCircle size={10} /> Warning
-                                </span>
+                                </button>
                               )}
                               {(isAdmin || task.assigned_to === user?.id) && (
                                 <button
@@ -2282,9 +2579,12 @@ export default function ProjectsPage({
                         <td className={`py-3.5 px-4 ${isColumnVisible("status") ? "" : "hidden"}`}>
                           <div onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu
-                              value={isAdmin ? task.status : (task.status === "submitted" ? "done" : task.status)}
+                              value={task.status === "submitted" ? "done" : task.status}
                               onValueChange={(value) => handleStatusChange(task.id, value)}
-                              options={isAdmin ? taskAdminStatusOptions : employeeStatusOptions}
+                              options={employeeStatusOptions.map(option => ({
+                                ...option,
+                                disabled: user?.role === "employee" && task.assigned_to !== user?.id
+                              }))}
                               placeholder="Status"
                               triggerClassName={`w-[170px] rounded-xl px-2.5 py-1.5 text-xs font-medium ${statusColors[task.status]}`}
                             />
@@ -2329,27 +2629,21 @@ export default function ProjectsPage({
                             <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                               {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
                             </div>
-                            {canManageTasks ? (
-                              <div onClick={(e) => e.stopPropagation()}>
-                                <DropdownMenu
-                                  value={task.assigned_to ? String(task.assigned_to) : "__unassigned"}
-                                  onValueChange={(value) => handleAssigneeChange(task.id, value === "__unassigned" ? undefined : Number(value))}
-                                  options={[
-                                    { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span> },
-                                    ...employeeOptions,
-                                  ]}
-                                  placeholder="Assignee"
-                                  triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
-                                />
-                              </div>
-                            ) : (
-                              <span className="text-sm font-medium text-card-foreground">
-                                {task.assignee_name || "Unassigned"}
-                                {task.assigned_to === user?.id && (
-                                  <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
-                                )}
-                              </span>
-                            )}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu
+                                value={task.assigned_to ? String(task.assigned_to) : "__unassigned"}
+                                onValueChange={(value) => handleAssigneeChange(task.id, value === "__unassigned" ? undefined : Number(value))}
+                                options={[
+                                  { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span>, disabled: user?.role !== "admin" },
+                                  ...employeeOptions.map(option => ({
+                                    ...option,
+                                    disabled: user?.role !== "admin"
+                                  })),
+                                ]}
+                                placeholder="Assignee"
+                                triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                              />
+                            </div>
                           </div>
                         </td>
                         <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>

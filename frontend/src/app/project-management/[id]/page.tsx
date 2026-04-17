@@ -31,6 +31,7 @@ import {
   uploadTaskVoiceNote,
   flagProjectForHelp,
   updateProjectDescription,
+  createSubtaskComment,
 } from "@/lib/api";
 import { getTaskWarningState, type TaskWarningSettings } from "@/lib/taskWarnings";
 import { toast } from "sonner";
@@ -105,6 +106,8 @@ export default function ProjectDetailPage() {
   });
   const [selectedSubtaskAssigneeFilter, setSelectedSubtaskAssigneeFilter] = useState<string>("all");
   const [selectedSubtaskStatusFilter, setSelectedSubtaskStatusFilter] = useState<string>("all");
+  const [subtaskCommentDrafts, setSubtaskCommentDrafts] = useState<Record<number, string>>({});
+  const [subtaskCommentLoadingId, setSubtaskCommentLoadingId] = useState<number | null>(null);
 
   // Recurring task instances (only when task.is_recurring is true)
   const [recurringInstances, setRecurringInstances] = useState<TaskRecurringInstancesResponse | null>(null);
@@ -377,8 +380,15 @@ export default function ProjectDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!taskId) return;
+
+    const canEditTaskStatus = user?.role === "employee" && project?.task.assigned_to === user?.id;
+    if (!canEditTaskStatus) {
+      toast.error("Only the assigned employee can change status.");
+      return;
+    }
     
-    const validStatus = newStatus as "todo" | "in_progress" | "submitted" | "approved" | "rejected";
+    const normalizedStatus = newStatus === "done" ? "submitted" : newStatus;
+    const validStatus = normalizedStatus as "todo" | "in_progress" | "submitted" | "approved" | "rejected";
     const previousStatus = project?.task.status;
 
     // Optimistic update avoids full-page loading spinner.
@@ -618,6 +628,28 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleAddSubtaskComment = async (subtaskId: number) => {
+    const commentText = (subtaskCommentDrafts[subtaskId] || "").trim();
+    if (!commentText) return;
+
+    setSubtaskCommentLoadingId(subtaskId);
+    try {
+      const response = await createSubtaskComment(subtaskId, commentText);
+      if (response.data) {
+        toast.success("Subtask update added");
+        setSubtaskCommentDrafts((prev) => ({ ...prev, [subtaskId]: "" }));
+        void loadProjectDetails(true);
+      } else {
+        toast.error(response.error || "Failed to add subtask update");
+      }
+    } catch (error) {
+      console.error("Error adding subtask update:", error);
+      toast.error("Failed to add subtask update");
+    } finally {
+      setSubtaskCommentLoadingId(null);
+    }
+  };
+
   const handleRecurringInstanceAction = async (
     instanceId: number,
     nextStatus: "completed" | "skipped"
@@ -698,6 +730,15 @@ export default function ProjectDetailPage() {
       toast.error("Please assign this subtask to an employee");
       return;
     }
+    if (!user?.id) {
+      toast.error("Unable to identify current user. Please sign in again.");
+      return;
+    }
+
+    const fallbackDueDate = new Date().toISOString().slice(0, 10);
+    const dueDateForSubtask = project?.task?.due_date
+      ? new Date(project.task.due_date).toISOString().slice(0, 10)
+      : fallbackDueDate;
 
     setIsCreatingSubtask(true);
     try {
@@ -705,6 +746,8 @@ export default function ProjectDetailPage() {
         title: newSubtask.title.trim(),
         description: newSubtask.description.trim() || undefined,
         assigned_to: Number(newSubtask.assigned_to),
+        assigned_by: user.id,
+        due_date: dueDateForSubtask,
         parent_subtask_id: selectedParentSubtaskId ?? undefined,
       });
 
@@ -784,13 +827,11 @@ export default function ProjectDetailPage() {
     return project?.subtasks ? collectAssigneeOptions(project.subtasks) : [];
   }, [project?.subtasks]);
 
-  const taskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
+  const taskEmployeeStatusOptions: DropdownOption[] = useMemo(() => ([
     { value: "todo", label: "To Do", icon: <Circle size={12} /> },
     { value: "in_progress", label: "In Progress", icon: <Clock size={12} /> },
-    { value: "submitted", label: "Completed", icon: <CheckCircle2 size={12} /> },
-    { value: "reviewing", label: "Reviewing", icon: <AlertCircle size={12} /> },
-    { value: "approved", label: "Approved", icon: <CheckCircle2 size={12} /> },
-    { value: "rejected", label: "Rejected", icon: <X size={12} /> },
+    { value: "done", label: "Completed", icon: <CheckCircle2 size={12} /> },
+    { value: "rejected", label: "Ignore", icon: <X size={12} /> },
   ]), []);
 
   const subtaskAdminStatusOptions: DropdownOption[] = useMemo(() => ([
@@ -947,6 +988,47 @@ export default function ProjectDetailPage() {
                   <Plus size={11} />
                   Add Subtask
                 </button>
+              </div>
+
+              <div className="mt-3 ml-8 rounded-lg border border-border/60 bg-background/40 p-2.5 space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Status Updates
+                </p>
+                {subtask.comments && subtask.comments.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {subtask.comments.slice(-2).map((comment: any) => (
+                      <div key={comment.id} className="rounded-md bg-secondary/40 px-2 py-1.5">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                          <span className="font-semibold text-foreground/90">{comment.user_name || "User"}</span>
+                          <span>{new Date(comment.created_at).toLocaleString("en-IN")}</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-foreground/90">{comment.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">No updates yet.</p>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    value={subtaskCommentDrafts[subtask.id] || ""}
+                    onChange={(e) =>
+                      setSubtaskCommentDrafts((prev) => ({ ...prev, [subtask.id]: e.target.value }))
+                    }
+                    placeholder="Add comment or status update..."
+                    className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-[11px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    maxLength={400}
+                  />
+                  <button
+                    onClick={() => handleAddSubtaskComment(subtask.id)}
+                    disabled={subtaskCommentLoadingId === subtask.id || !(subtaskCommentDrafts[subtask.id] || "").trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-purple-600 hover:bg-purple-700 px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {subtaskCommentLoadingId === subtask.id ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                    Post
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -1404,11 +1486,11 @@ export default function ProjectDetailPage() {
                   {task.priority.toUpperCase()}
                 </span>
                 
-                {isAdmin ? (
+                {user?.role === "employee" && task.assigned_to === user?.id ? (
                   <DropdownMenu
-                    value={task.status}
+                    value={task.status === "submitted" ? "done" : task.status}
                     onValueChange={(value) => handleStatusChange(value)}
-                    options={taskAdminStatusOptions}
+                    options={taskEmployeeStatusOptions}
                     triggerClassName={`w-[170px] rounded-full px-3 py-1.5 text-xs font-semibold ${statusColors[task.status]}`}
                   />
                 ) : (

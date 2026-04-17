@@ -1,25 +1,41 @@
-"use client";
+import dynamic from "next/dynamic";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+const ProjectsClient = dynamic(() => import("@/app/project-management/projects/ProjectsClient"), {
+  ssr: false,
+});
 
 /**
- * Redirect page for backward compatibility
- * Redirects /tasks to /project-management
+ * Backward-compatible Tasks route.
+ *
+ * Uses the same list experience as Project List view so users can access
+ * a task list directly from /tasks.
  */
-export default function TasksRedirect() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/project-management");
-  }, [router]);
-
+export default function TasksPage({
+  searchParams,
+}: {
+  searchParams?: {
+    workspace?: string;
+    status?: string;
+    edit?: string;
+    create?: string;
+    prefillTitle?: string;
+    prefillDescription?: string;
+    prefillDueDate?: string;
+    prefillAssignedTo?: string;
+    prefillAssignedBy?: string;
+  };
+}) {
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-        <p className="mt-4 text-muted-foreground">Redirecting to Project Management...</p>
-      </div>
-    </div>
+    <ProjectsClient
+      workspaceQuery={searchParams?.workspace || null}
+      statusQuery={searchParams?.status || null}
+      editQuery={searchParams?.edit || null}
+      createQuery={searchParams?.create || null}
+      prefillTitleQuery={searchParams?.prefillTitle || null}
+      prefillDescriptionQuery={searchParams?.prefillDescription || null}
+      prefillDueDateQuery={searchParams?.prefillDueDate || null}
+      prefillAssignedToQuery={searchParams?.prefillAssignedTo || null}
+      prefillAssignedByQuery={searchParams?.prefillAssignedBy || null}
+    />
   );
 }

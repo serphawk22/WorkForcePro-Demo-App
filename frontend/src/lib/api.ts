@@ -559,6 +559,19 @@ export interface TaskComment {
   user_profile_picture?: string | null;
 }
 
+export interface SubtaskComment {
+  id: number;
+  subtask_id: number;
+  user_id: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  user_email?: string;
+  user_role?: "admin" | "employee";
+  user_profile_picture?: string | null;
+}
+
 export interface TaskCommentCreate {
   task_id: number;
   comment: string;
@@ -599,6 +612,7 @@ export interface Subtask {
   assignee_email?: string;
   assigned_by_name?: string;
   children?: Subtask[];  // For hierarchical structure
+  comments?: SubtaskComment[];
 }
 
 export interface SubtaskCreate {
@@ -687,6 +701,27 @@ export function isAuthenticated(): boolean {
 
 // ==================== BASE FETCH ====================
 
+function toErrorMessage(detail: any, fallback: string): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          return item.msg || item.detail || JSON.stringify(item);
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+    return messages.length ? messages.join(", ") : fallback;
+  }
+  if (typeof detail === "object") {
+    return detail.msg || detail.detail || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 /**
  * Base fetch function with auth headers.
  */
@@ -746,9 +781,9 @@ async function apiFetch<T>(
         return { error: "Session expired. Please login again." };
       }
       if (response.status === 403) {
-        return { error: data.detail || "Access forbidden. Insufficient permissions." };
+        return { error: toErrorMessage(data.detail, "Access forbidden. Insufficient permissions.") };
       }
-      return { error: data.detail || `Request failed (${response.status})` };
+      return { error: toErrorMessage(data.detail, `Request failed (${response.status})`) };
     }
 
     return { data };
@@ -781,7 +816,7 @@ async function apiFetch<T>(
     }
     
     console.error("API Error:", error);
-    return { error: error.message || "Network error. Please try again." };
+    return { error: toErrorMessage(error?.message, "Network error. Please try again.") };
   }
 }
 
@@ -1548,7 +1583,14 @@ export async function createLeaveRequest(
     });
 
     const text = await response.text();
-    const result = text ? JSON.parse(text) : {};
+    let result: any = {};
+    if (text) {
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = { detail: text };
+      }
+    }
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -1556,7 +1598,10 @@ export async function createLeaveRequest(
         if (typeof window !== "undefined") window.location.href = "/login";
         return { error: "Session expired. Please login again." };
       }
-      return { error: result.detail || "Failed to submit leave request" };
+      const detailMessage = Array.isArray(result.detail)
+        ? result.detail.map((item: any) => item?.msg).filter(Boolean).join(", ")
+        : result.detail;
+      return { error: detailMessage || "Failed to submit leave request" };
     }
     return { data: result };
   } catch (err) {
@@ -1930,6 +1975,19 @@ export async function deleteSubtask(subtaskId: number): Promise<ApiResponse<{ me
 }
 
 /**
+ * Create a status update/comment on a subtask.
+ */
+export async function createSubtaskComment(
+  subtaskId: number,
+  comment: string
+): Promise<ApiResponse<SubtaskComment>> {
+  return apiFetch<SubtaskComment>(`/tasks/subtasks/${subtaskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+}
+
+/**
  * Create a comment on a task.
  */
 export async function createComment(
@@ -1956,6 +2014,88 @@ export async function searchByPublicId(query: string): Promise<ApiResponse<Publi
 
 // ==================== PAYROLL ====================
 
+function getDirectApiBaseUrl(): string | null {
+  const explicit = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!explicit) return null;
+  if (explicit.startsWith("http://") || explicit.startsWith("https://")) {
+    return explicit.replace(/\/$/, "");
+  }
+  return `https://${explicit}`.replace(/\/$/, "");
+}
+
+function shouldRetryPayrollViaDirectApi(error?: string): boolean {
+  if (!error) return false;
+  const normalized = error.toLowerCase();
+  return (
+    normalized.includes("cannot connect to server") ||
+    normalized.includes("network error") ||
+    normalized.includes("request timeout")
+  );
+}
+
+async function apiFetchPayrollWithFallback<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const primary = await apiFetch<T>(endpoint, options);
+  if (!primary.error || typeof window === "undefined") {
+    return primary;
+  }
+
+  const directBase = getDirectApiBaseUrl();
+  if (!directBase || !shouldRetryPayrollViaDirectApi(primary.error)) {
+    return primary;
+  }
+
+  const token = getToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+  try {
+    const response = await fetch(`${directBase}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers as Record<string, string>),
+      },
+      credentials: "omit",
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: any = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text };
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearAuth();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        return { error: "Session expired. Please login again." };
+      }
+      const detailMessage = Array.isArray(data.detail)
+        ? data.detail.map((item: any) => item?.msg).filter(Boolean).join(", ")
+        : data.detail;
+      return { error: detailMessage || `Request failed (${response.status})` };
+    }
+
+    return { data };
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      return { error: "Request timeout. Please check your connection." };
+    }
+    return { error: error?.message || primary.error };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Get all employee payroll records for a specific month/year.
  */
@@ -1964,14 +2104,14 @@ export async function getPayroll(month?: number, year?: number): Promise<ApiResp
   if (month !== undefined) params.set("month", String(month));
   if (year !== undefined) params.set("year", String(year));
   const query = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<PayrollRecord[]>(`/payroll/${query}`);
+  return apiFetchPayrollWithFallback<PayrollRecord[]>(`/payroll/${query}`);
 }
 
 /**
  * Mark a payroll record as paid.
  */
 export async function markPayrollPaid(payrollId: number): Promise<ApiResponse<PayrollRecord>> {
-  return apiFetch<PayrollRecord>(`/payroll/${payrollId}/mark-paid`, { method: "PUT" });
+  return apiFetchPayrollWithFallback<PayrollRecord>(`/payroll/${payrollId}/mark-paid`, { method: "PUT" });
 }
 
 /**
@@ -1981,7 +2121,7 @@ export async function updatePayrollStatus(
   payrollId: number,
   status: "Paid" | "Pending"
 ): Promise<ApiResponse<PayrollRecord>> {
-  return apiFetch<PayrollRecord>(`/payroll/${payrollId}/status`, {
+  return apiFetchPayrollWithFallback<PayrollRecord>(`/payroll/${payrollId}/status`, {
     method: "PUT",
     body: JSON.stringify({ status }),
   });
@@ -1991,14 +2131,14 @@ export async function updatePayrollStatus(
  * Get the current employee's own latest payroll record (no admin needed).
  */
 export async function getMyPayroll(): Promise<ApiResponse<PayrollRecord>> {
-  return apiFetch<PayrollRecord>(`/payroll/me?_t=${Date.now()}`);
+  return apiFetchPayrollWithFallback<PayrollRecord>(`/payroll/me?_t=${Date.now()}`);
 }
 
 /**
  * Get the latest payroll record for a specific employee (for profile page).
  */
 export async function getLatestPayroll(employeeId: number): Promise<ApiResponse<PayrollRecord>> {
-  return apiFetch<PayrollRecord>(`/payroll/latest/${employeeId}?_t=${Date.now()}`);
+  return apiFetchPayrollWithFallback<PayrollRecord>(`/payroll/latest/${employeeId}?_t=${Date.now()}`);
 }
 
 /**
@@ -2012,7 +2152,7 @@ export async function updateEmployeeBaseSalary(
   const params = new URLSearchParams();
   params.set("base_salary", String(baseSalary));
   if (department !== undefined) params.set("department", department);
-  return apiFetch<UserProfile>(`/payroll/employee/${employeeId}/base-salary?${params.toString()}`, {
+  return apiFetchPayrollWithFallback<UserProfile>(`/payroll/employee/${employeeId}/base-salary?${params.toString()}`, {
     method: "PATCH",
   });
 }

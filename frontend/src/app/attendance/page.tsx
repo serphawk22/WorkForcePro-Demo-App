@@ -82,6 +82,13 @@ function formatDate(dateString: string): string {
   });
 }
 
+function formatTotalHoursMinutes(totalMinutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(Math.abs(totalMinutes)));
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+  return `${hours}hr${minutes}min`;
+}
+
 function getProfilePictureUrl(profilePicture?: string): string | null {
   if (!profilePicture) return null;
   if (profilePicture.startsWith("data:")) return profilePicture;
@@ -677,7 +684,9 @@ export default function AttendancePage() {
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_in)}</td>
                         <td className="py-3.5 text-muted-foreground">{formatDateTime(record.punch_out)}</td>
                         <td className="py-3.5 text-card-foreground font-medium">
-                          {record.total_hours ? `${(Math.abs(record.total_hours) / 60).toFixed(2)}h` : "--"}
+                          {record.total_hours !== null && record.total_hours !== undefined
+                            ? formatTotalHoursMinutes(record.total_hours)
+                            : "--"}
                         </td>
                       </tr>
                     ))}

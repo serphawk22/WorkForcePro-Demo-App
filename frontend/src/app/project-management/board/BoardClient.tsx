@@ -65,6 +65,10 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [draggingOver, setDraggingOver] = useState<string | null>(null);
 
+  const canEditTaskStatus = (task: Task) => {
+    return user?.role === "employee" && task.assigned_to === user?.id;
+  };
+
   const load = useCallback(async () => {
     setIsLoading(true);
     const r = isAdmin
@@ -86,6 +90,11 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
   };
 
   const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task || !canEditTaskStatus(task)) {
+      e.preventDefault();
+      return;
+    }
     setDraggedId(taskId);
     e.dataTransfer.effectAllowed = "move";
   };
@@ -102,6 +111,10 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
     if (!draggedId) return;
 
     const task = tasks.find(t => t.id === draggedId);
+    if (!task || !canEditTaskStatus(task)) {
+      setDraggedId(null);
+      return;
+    }
     if (!task || task.status === colKey) { setDraggedId(null); return; }
 
     // Determine correct status to send
@@ -172,7 +185,7 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
                   {colTasks.map(task => (
                     <div
                       key={task.id}
-                      draggable
+                      draggable={canEditTaskStatus(task)}
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
                       onClick={() => {
