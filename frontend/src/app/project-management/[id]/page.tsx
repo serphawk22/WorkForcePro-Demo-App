@@ -1086,7 +1086,7 @@ export default function ProjectDetailPage() {
   if (isLoading) {
     return (
       <ProtectedRoute>
-        <DashboardLayout>
+        <DashboardLayout role={user?.role === "admin" ? "admin" : "employee"}>
           <div className="flex items-center justify-center min-h-screen">
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
           </div>
@@ -1098,7 +1098,7 @@ export default function ProjectDetailPage() {
   if (!project) {
     return (
       <ProtectedRoute>
-        <DashboardLayout>
+        <DashboardLayout role={user?.role === "admin" ? "admin" : "employee"}>
           <div className="min-h-screen flex items-center justify-center px-6 py-12">
             <div className="w-full max-w-md rounded-2xl border border-white/20 bg-white/20 dark:bg-white/5 backdrop-blur-xl p-8 text-center shadow-lg">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-500">
@@ -1223,7 +1223,7 @@ export default function ProjectDetailPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout>
+      <DashboardLayout role={user?.role === "admin" ? "admin" : "employee"}>
         <div className="space-y-6 pb-8">
           {/* Header with Back Button */}
           <div className="flex items-center gap-4">
