@@ -24,12 +24,83 @@ def generate_public_id(session: Session, model_class, prefix: str = "", length: 
 from app.database import get_session
 from app.models import (
     User, Task, Subtask, SubtaskCreate, SubtaskUpdate, SubtaskRead, SubtaskWithAssignee,
-    SubtaskStatus, UserRole, NotificationType, TaskStatus
+    SubtaskStatus, UserRole, NotificationType, TaskStatus,
+    SubtaskComment, SubtaskCommentCreate, SubtaskCommentRead, SubtaskCommentWithUser,
 )
 from app.auth import get_current_user, get_current_admin_user, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["Subtasks"])
+
+
+@router.post("/subtasks/{subtask_id}/comments", response_model=SubtaskCommentRead, status_code=status.HTTP_201_CREATED)
+async def create_subtask_comment(
+    subtask_id: int,
+    payload: SubtaskCommentCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a status update/comment on a subtask."""
+    subtask = session.exec(select(Subtask).where(Subtask.id == subtask_id)).first()
+    if not subtask:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subtask not found"
+        )
+    ensure_same_organization(current_user, subtask.organization_id, "subtask")
+
+    comment = SubtaskComment(
+        organization_id=subtask.organization_id,
+        subtask_id=subtask_id,
+        user_id=current_user.id,
+        comment=payload.comment.strip(),
+    )
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+    return comment
+
+
+@router.get("/subtasks/{subtask_id}/comments", response_model=List[SubtaskCommentWithUser])
+async def get_subtask_comments(
+    subtask_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all comments/status updates for a subtask."""
+    subtask = session.exec(select(Subtask).where(Subtask.id == subtask_id)).first()
+    if not subtask:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subtask not found"
+        )
+    ensure_same_organization(current_user, subtask.organization_id, "subtask")
+
+    rows = session.exec(
+        select(SubtaskComment, User)
+        .join(User, SubtaskComment.user_id == User.id)
+        .where(SubtaskComment.subtask_id == subtask_id)
+        .order_by(SubtaskComment.created_at.asc())
+    ).all()
+
+    return [
+        SubtaskCommentWithUser(
+            id=comment.id,
+            organization_id=comment.organization_id,
+            subtask_id=comment.subtask_id,
+            user_id=comment.user_id,
+            comment=comment.comment,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+            user_name=user.name,
+            user_email=user.email,
+            user_role=user.role,
+            user_profile_picture=user.profile_picture,
+        )
+        for comment, user in rows
+    ]
 
 
 @router.post("/{task_id}/subtasks", response_model=SubtaskRead, status_code=status.HTTP_201_CREATED)

@@ -72,8 +72,14 @@ async def create_leave_request(
 ):
     """Create a new leave request with optional document attachment."""
     from datetime import date as DateType
-    start = DateType.fromisoformat(start_date)
-    end = DateType.fromisoformat(end_date)
+    try:
+        start = DateType.fromisoformat(start_date)
+        end = DateType.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
 
     if end < start:
         raise HTTPException(

@@ -33,6 +33,7 @@ from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
     SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus, Workspace,
+    SubtaskComment,
 )
 from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
@@ -357,11 +358,17 @@ def calculate_task_progress(task: Task, session: Session) -> int:
     return round((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0
 
 
-def build_subtask_tree(subtasks: List[Subtask], session: Session, parent_id: Optional[int] = None) -> List[dict]:
+def build_subtask_tree(
+    subtasks: List[Subtask],
+    session: Session,
+    parent_id: Optional[int] = None,
+    comments_by_subtask: Optional[dict] = None,
+) -> List[dict]:
     """
     Build hierarchical subtask tree with assignee information.
     """
     result = []
+    comments_lookup = comments_by_subtask or {}
     for subtask in subtasks:
         if subtask.parent_subtask_id == parent_id:
             # Get assignee info
@@ -382,7 +389,8 @@ def build_subtask_tree(subtasks: List[Subtask], session: Session, parent_id: Opt
                 "parent_subtask_id": subtask.parent_subtask_id,
                 "created_at": subtask.created_at,
                 "updated_at": subtask.updated_at,
-                "children": build_subtask_tree(subtasks, session, subtask.id)
+                "comments": comments_lookup.get(subtask.id, []),
+                "children": build_subtask_tree(subtasks, session, subtask.id, comments_lookup)
             }
             result.append(subtask_dict)
     return result
@@ -686,8 +694,7 @@ async def update_task_status(
 ):
     """Update task status with role-based restrictions.
     
-    Employee workflow: To Do → In Progress → Done (submits for review)
-    Admin workflow: Can set any status including Approved/Rejected
+    Only the assigned employee can update task status.
     """
     statement = select(Task).where(Task.id == task_id)
     task = session.exec(statement).first()
@@ -699,11 +706,11 @@ async def update_task_status(
         )
     _ensure_task_access(current_user, task, "task")
     
-    # Check permission: must be assigned to task or be admin
-    if task.assigned_to != current_user.id and not is_admin_user(current_user):
+    # Only the assigned employee can update status.
+    if current_user.role != UserRole.employee or task.assigned_to != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this task"
+            detail="Only the assigned employee can update task status"
         )
     
     # Role-based status restrictions
@@ -751,38 +758,6 @@ async def update_task_status(
                     type=NotificationType.TASK_REJECTED,
                     message=f"Task #{task.id} - {task.title} was ignored by {current_user.name}.",
                     task_id=task.id,
-                )
-    
-    elif is_admin_user(current_user):
-        # Admins can move tasks to any status.
-        
-        # Notify assigned employee when admin changes status
-        if task.assigned_to and new_status != task.status:
-            if new_status == TaskStatus.reviewing:
-                create_notification(
-                    session=session,
-                    user_id=task.assigned_to,
-                    type=NotificationType.TASK_COMMENT,
-                    message=f"Admin is reviewing your task #{task.id} - {task.title}",
-                    task_id=task.id
-                )
-            elif new_status == TaskStatus.approved:
-                create_notification(
-                    session=session,
-                    user_id=task.assigned_to,
-                    type=NotificationType.TASK_APPROVED,
-                    message=f"Your task #{task.id} - {task.title} has been approved!",
-                    task_id=task.id
-                )
-            elif new_status == TaskStatus.rejected:
-                # Reset done_by_employee so employee can resubmit
-                task.done_by_employee = False
-                create_notification(
-                    session=session,
-                    user_id=task.assigned_to,
-                    type=NotificationType.TASK_REJECTED,
-                    message=f"Task #{task.id} - {task.title} needs changes. Please review and resubmit.",
-                    task_id=task.id
                 )
     
     task.status = new_status
@@ -1406,12 +1381,7 @@ async def get_task(
         )
     _ensure_task_access(current_user, task, "task")
     
-    # Check permission
-    if task.assigned_to != current_user.id and not is_admin_user(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this task"
-        )
+    # Removed per-task permission check: all authenticated users can view any project/task
     
     assignee = None
     if task.assigned_to:
@@ -1535,8 +1505,34 @@ async def get_task_details(
     subtasks_stmt = select(Subtask).where(Subtask.parent_task_id == task_id)
     subtasks = session.exec(subtasks_stmt).all()
     
+    subtask_comment_lookup = {}
+    subtask_ids = [subtask.id for subtask in subtasks]
+    if subtask_ids:
+        comment_rows = session.exec(
+            select(SubtaskComment, User)
+            .join(User, SubtaskComment.user_id == User.id)
+            .where(SubtaskComment.subtask_id.in_(subtask_ids))
+            .order_by(SubtaskComment.created_at.asc())
+        ).all()
+
+        for subtask_comment, comment_user in comment_rows:
+            if subtask_comment.subtask_id not in subtask_comment_lookup:
+                subtask_comment_lookup[subtask_comment.subtask_id] = []
+            subtask_comment_lookup[subtask_comment.subtask_id].append({
+                "id": subtask_comment.id,
+                "subtask_id": subtask_comment.subtask_id,
+                "user_id": subtask_comment.user_id,
+                "comment": subtask_comment.comment,
+                "created_at": subtask_comment.created_at,
+                "updated_at": subtask_comment.updated_at,
+                "user_name": comment_user.name,
+                "user_email": comment_user.email,
+                "user_role": comment_user.role,
+                "user_profile_picture": comment_user.profile_picture,
+            })
+
     # Build hierarchical subtask tree
-    subtasks_tree = build_subtask_tree(list(subtasks), session)
+    subtasks_tree = build_subtask_tree(list(subtasks), session, comments_by_subtask=subtask_comment_lookup)
     
     # Get all comments for this task with user info
     comments_stmt = select(TaskComment, User).join(
@@ -1645,6 +1641,13 @@ async def update_task(
                 detail="Workspace not found"
             )
         ensure_same_organization(admin, workspace.organization_id, "workspace")
+
+    if "status" in update_data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Task status can only be updated by the assigned employee"
+        )
+
     if "repeat_days" in update_data and update_data["repeat_days"] is not None:
         rd = update_data["repeat_days"]
         update_data["repeat_days"] = json.dumps(rd) if isinstance(rd, list) else rd

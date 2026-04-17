@@ -579,6 +579,43 @@ class SubtaskWithAssignee(SubtaskRead):
     children: List["SubtaskWithAssignee"] = []  # For hierarchical structure
 
 
+class SubtaskComment(SQLModel, table=True):
+    """Subtask comment database model."""
+    __tablename__ = "subtask_comments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    subtask_id: int = Field(foreign_key="subtasks.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    comment: str = Field(min_length=1, max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SubtaskCommentCreate(SQLModel):
+    """Schema for creating a subtask comment."""
+    comment: str = Field(min_length=1, max_length=2000)
+
+
+class SubtaskCommentRead(SQLModel):
+    """Schema for reading subtask comment data."""
+    id: int
+    organization_id: Optional[int] = None
+    subtask_id: int
+    user_id: int
+    comment: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubtaskCommentWithUser(SubtaskCommentRead):
+    """Subtask comment with user info."""
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_role: Optional[UserRole] = None
+    user_profile_picture: Optional[str] = None
+
+
 # ==================== LEAVE REQUEST MODELS ====================
 
 class LeaveRequestBase(SQLModel):
