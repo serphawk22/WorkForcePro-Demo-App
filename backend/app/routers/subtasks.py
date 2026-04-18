@@ -415,7 +415,7 @@ async def update_subtask_status(
     ensure_same_organization(current_user, subtask.organization_id, "subtask")
     
     # Role-based status validation
-    employee_statuses = {SubtaskStatus.todo, SubtaskStatus.in_progress, SubtaskStatus.completed}
+    employee_statuses = {SubtaskStatus.todo, SubtaskStatus.in_progress, SubtaskStatus.completed, SubtaskStatus.rejected}
 
     if is_admin_user(current_user):
         # Admins can move subtasks to any status.
@@ -427,11 +427,11 @@ async def update_subtask_status(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update subtasks assigned to you"
             )
-        # Employee can only set todo, in_progress, completed
+        # Employee can only set todo, in_progress, completed, or rejected (ignored)
         if new_status not in employee_statuses:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Employee can only set status to: todo, in_progress, completed"
+                detail="Employee can only set status to: todo, in_progress, completed, rejected"
             )
     
     subtask.status = new_status

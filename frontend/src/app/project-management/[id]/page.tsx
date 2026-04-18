@@ -1048,7 +1048,7 @@ export default function ProjectDetailPage() {
                 <DropdownMenu
                   value={subtask.status}
                   onValueChange={(value) => handleSubtaskStatusChange(subtask.id, value)}
-                  options={['reviewing', 'approved', 'rejected'].includes(subtask.status)
+                  options={['reviewing', 'approved'].includes(subtask.status)
                     ? [{
                         value: subtask.status,
                         label: subtask.status.charAt(0).toUpperCase() + subtask.status.slice(1),
@@ -1059,8 +1059,9 @@ export default function ProjectDetailPage() {
                         { value: 'todo', label: 'To Do', icon: <Circle size={12} /> },
                         { value: 'in_progress', label: 'In Progress', icon: <Clock size={12} /> },
                         { value: 'completed', label: 'Completed', icon: <CheckCircle2 size={12} /> },
+                        { value: 'rejected', label: 'Ignore', icon: <X size={12} /> },
                       ]}
-                  disabled={subtask.assigned_to !== user?.id || ['reviewing', 'approved', 'rejected'].includes(subtask.status)}
+                  disabled={subtask.assigned_to !== user?.id || ['reviewing', 'approved'].includes(subtask.status)}
                   triggerClassName={`w-[145px] rounded-lg px-3 py-1.5 text-xs font-medium ${
                     subtask.status === 'completed' ? 'text-green-500' :
                     subtask.status === 'in_progress' ? 'text-blue-500' :
