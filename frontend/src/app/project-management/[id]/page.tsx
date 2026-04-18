@@ -378,6 +378,26 @@ export default function ProjectDetailPage() {
     }
   }, [taskId, loadProjectDetails]);
 
+  useEffect(() => {
+    const scrollToUpdatesSection = () => {
+      if (typeof window === "undefined") return;
+      if (window.location.hash !== "#updates-section") return;
+
+      requestAnimationFrame(() => {
+        const updatesSection = document.getElementById("updates-section");
+        if (updatesSection) {
+          updatesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    };
+
+    scrollToUpdatesSection();
+    window.addEventListener("hashchange", scrollToUpdatesSection);
+    return () => {
+      window.removeEventListener("hashchange", scrollToUpdatesSection);
+    };
+  }, [project?.task?.id]);
+
   const handleStatusChange = async (newStatus: string) => {
     if (!taskId) return;
 
@@ -806,6 +826,7 @@ export default function ProjectDetailPage() {
       if (statusFilterValue === "all") return true;
       if (statusFilterValue === "new") return node.status === "todo";
       if (statusFilterValue === "completed") return ["completed", "approved"].includes(node.status);
+      if (statusFilterValue === "ignored") return node.status === "rejected";
       return node.status === statusFilterValue;
     };
 
@@ -857,6 +878,7 @@ export default function ProjectDetailPage() {
     { value: "new", label: "New / To Do", icon: <span className="text-purple-400">●</span> },
     { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
     { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+    { value: "ignored", label: "Ignored", icon: <span className="text-red-400">●</span> },
   ]), []);
 
   const priorityOrder: Record<string, number> = {
@@ -1133,6 +1155,121 @@ export default function ProjectDetailPage() {
   }
 
   const { task, subtasks, comments } = project;
+  const sevenDaysAgoTs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const subtaskUpdates = (() => {
+    const updates: Array<{
+      id: number;
+      comment: string;
+      user_name?: string | null;
+      user_role?: string | null;
+      created_at?: string | null;
+      source: string;
+    }> = [];
+
+    const walk = (nodes: any[]) => {
+      nodes.forEach((node) => {
+        (node.comments || []).forEach((comment: any) => {
+          updates.push({
+            id: comment.id,
+            comment: comment.comment,
+            user_name: comment.user_name,
+            user_role: comment.user_role,
+            created_at: comment.created_at,
+            source: node.title || "Subtask",
+          });
+        });
+        if (node.children?.length) walk(node.children);
+      });
+    };
+
+    walk(subtasks as any[]);
+    return updates;
+  })();
+
+  const allLast7DayUpdates = [
+    ...comments.map((comment) => ({
+      id: comment.id,
+      comment: comment.comment,
+      user_name: comment.user_name,
+      user_role: comment.user_role,
+      created_at: comment.created_at,
+      source: "Project",
+    })),
+    ...subtaskUpdates,
+  ]
+    .filter((update) => {
+      const ts = Date.parse(update.created_at || "");
+      return !Number.isNaN(ts) && ts >= sevenDaysAgoTs;
+    })
+    .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
+
+  const last7DayEmployeeUpdates = allLast7DayUpdates.filter(
+    (update) => (update.user_role || "").toLowerCase() === "employee"
+  );
+
+  const last7DayEmployeeNames = Array.from(
+    new Set(last7DayEmployeeUpdates.map((update) => update.user_name).filter(Boolean))
+  ) as string[];
+
+  const last7DayEmployeeHighlights = last7DayEmployeeUpdates.slice(0, 3);
+
+  const flatSubtasks = (() => {
+    const items: any[] = [];
+    const walk = (nodes: any[]) => {
+      nodes.forEach((node) => {
+        items.push(node);
+        if (node.children?.length) walk(node.children);
+      });
+    };
+    walk(subtasks as any[]);
+    return items;
+  })();
+
+  const toStatusLabel = (status?: string | null) => {
+    if (status === "todo") return "To Do";
+    if (status === "in_progress") return "In Progress";
+    if (status === "submitted") return "Submitted";
+    if (status === "reviewing") return "Reviewing";
+    if (status === "approved") return "Approved";
+    if (status === "completed") return "Completed";
+    if (status === "rejected") return "Ignored";
+    return status || "Unknown";
+  };
+
+  const last7DayTaskStatusTouched = (() => {
+    const ts = Date.parse(task.updated_at || task.created_at || "");
+    return !Number.isNaN(ts) && ts >= sevenDaysAgoTs;
+  })();
+
+  const last7DaySubtaskStatusTouched = flatSubtasks
+    .filter((subtask) => {
+      const ts = Date.parse(subtask.updated_at || subtask.created_at || "");
+      return !Number.isNaN(ts) && ts >= sevenDaysAgoTs;
+    })
+    .sort((left, right) => Date.parse(right.updated_at || right.created_at || "") - Date.parse(left.updated_at || left.created_at || ""));
+
+  const last7DayStatusBreakdown = last7DaySubtaskStatusTouched.reduce<Record<string, number>>((acc, subtask) => {
+    const key = toStatusLabel(subtask.status);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const last7DayAssignedTaskHighlights = last7DaySubtaskStatusTouched
+    .filter((subtask) => Boolean(subtask.assignee_name))
+    .slice(0, 5)
+    .map((subtask) => ({
+      id: subtask.id,
+      title: subtask.title || "Subtask",
+      assignee: subtask.assignee_name || "Unassigned",
+      statusLabel: toStatusLabel(subtask.status),
+      updatedAt: subtask.updated_at || subtask.created_at,
+    }));
+
+  const last7DayTotalActivities =
+    allLast7DayUpdates.length +
+    last7DaySubtaskStatusTouched.length +
+    (last7DayTaskStatusTouched ? 1 : 0);
+
   const latestCommentAt = comments.length > 0 ? comments[comments.length - 1].created_at : task.latest_comment_at || null;
   const latestSubtaskActivityAt = (() => {
     const walk = (nodes: typeof subtasks): number => {
@@ -2091,12 +2228,51 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
-          {/* Comments Section */}
-          <div className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5">
+          {/* Updates Section */}
+          <div id="updates-section" className="glass-card rounded-2xl border border-white/20 p-6 shadow-lg backdrop-blur-xl bg-white/30 dark:bg-white/5 scroll-mt-24">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <MessageSquare size={20} className="text-purple-500" />
-              Project Chat & Resources ({comments.length})
+              Updates Section ({last7DayTotalActivities} in last 7 days)
             </h2>
+
+            <div className="mb-5 rounded-xl border border-blue-500/25 bg-blue-500/10 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">Project Activity Summary · Last 7 Days</p>
+                <span className="text-[11px] text-blue-400/90">Task status + assignment + updates</span>
+              </div>
+              {last7DayTotalActivities > 0 ? (
+                <div className="mt-2 space-y-1.5 text-sm text-foreground">
+                  <p>
+                    Status moved on <span className="font-semibold text-blue-500">{last7DaySubtaskStatusTouched.length}</span> assigned task{subtasks.length === 1 ? "" : "s"}; employees posted <span className="font-semibold text-blue-500">{last7DayEmployeeUpdates.length}</span> written update{last7DayEmployeeUpdates.length === 1 ? "" : "s"}.
+                  </p>
+                  {Object.keys(last7DayStatusBreakdown).length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Current status mix of touched tasks: {Object.entries(last7DayStatusBreakdown).map(([label, count]) => `${label} (${count})`).join(", ")}
+                    </p>
+                  )}
+                  {last7DayAssignedTaskHighlights.length > 0 && (
+                    <div className="space-y-1">
+                      {last7DayAssignedTaskHighlights.map((item) => (
+                        <p key={`task-${item.id}`} className="text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">{item.assignee}</span> worked on <span className="font-semibold text-blue-500">{item.title}</span> and it is now <span className="font-semibold text-foreground">{item.statusLabel}</span>.
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {last7DayEmployeeHighlights.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      {last7DayEmployeeHighlights.map((update) => (
+                        <p key={`comment-${update.source}-${update.id}`} className="text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">{update.user_name || "Employee"}</span> posted: {update.comment}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">No task movement or updates were recorded in the last 7 days.</p>
+              )}
+            </div>
 
             {/* Comments List */}
             <div className="space-y-4 mb-6">

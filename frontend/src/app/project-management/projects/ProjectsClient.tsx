@@ -51,6 +51,8 @@ type ListColumnId =
   | "createdDate"
   | "startDate"
   | "updatedDate"
+  | "weekProgress"
+  | "weekActivity"
   | "assignee"
   | "dueDate"
   | "actions";
@@ -65,6 +67,8 @@ const DEFAULT_VISIBLE_COLUMNS: ListColumnId[] = [
   "createdDate",
   "startDate",
   "updatedDate",
+  "weekProgress",
+  "weekActivity",
   "assignee",
   "dueDate",
   "actions",
@@ -81,6 +85,8 @@ const LIST_COLUMN_DEFS: Array<{ id: ListColumnId; label: string; adminOnly?: boo
   { id: "createdDate", label: "Created Date" },
   { id: "startDate", label: "Start Date" },
   { id: "updatedDate", label: "Updated Date" },
+  { id: "weekProgress", label: "Last 7D Progress" },
+  { id: "weekActivity", label: "Last 7D Activity" },
   { id: "assignee", label: "Assignee" },
   { id: "dueDate", label: "Due Date" },
   { id: "actions", label: "Actions", adminOnly: true },
@@ -129,6 +135,19 @@ function getProfilePictureUrl(profilePicture?: string | null) {
   if (profilePicture.startsWith("data:")) return profilePicture;
   if (profilePicture.startsWith("http")) return profilePicture;
   return `${getApiBaseUrl()}${profilePicture}`;
+}
+
+function normalizeExternalUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    return new URL(candidate).toString();
+  } catch {
+    return null;
+  }
 }
 
 interface ProjectsClientProps {
@@ -315,7 +334,9 @@ export default function ProjectsPage({
         title: task.title,
         publicId: task.public_id,
         workspace: task.workspace_name,
+        deployedLink: normalizeExternalUrl(task.deployed_link),
       }))
+      .filter((task) => Boolean(task.deployedLink))
       .sort((left, right) => left.title.localeCompare(right.title));
   }, [tasks]);
 
@@ -742,6 +763,24 @@ export default function ProjectsPage({
       && left.getDate() === right.getDate();
   };
 
+  function getResolvedExternalLink(url: string): string {
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname === "::1";
+      if (isLocalHost) {
+        return new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, window.location.origin).toString();
+      }
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  function openProjectPage(projectId: number) {
+    window.open(new URL(`/project-management/${projectId}`, window.location.origin).toString(), "_blank", "noopener,noreferrer");
+  }
+
   const toggleVisibleColumn = (columnId: ListColumnId) => {
     setVisibleColumns((prev) => {
       if (prev.includes(columnId)) {
@@ -765,13 +804,13 @@ export default function ProjectsPage({
       try {
         const result = await searchByPublicId(trimmed);
         if (cancelled) return;
-        if (result.data) router.push(`/project-management/${result.data.task_id}`);
+        if (result.data) openProjectPage(result.data.task_id);
         else toast.error(`No project found with Ref ID "${trimmed}"`);
       } catch { if (!cancelled) toast.error("Search failed"); }
       finally { if (!cancelled) setIsSearchingById(false); }
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [searchQuery, router]);
+  }, [searchQuery]);
 
   // Track which task rows are currently loading their subtasks
   const [loadingSubtasksFor, setLoadingSubtasksFor] = useState<Set<number>>(new Set());
@@ -1571,17 +1610,46 @@ export default function ProjectsPage({
               )}
             </div>
           </td>
-          <td className={`py-3.5 px-4 min-w-[140px] ${isColumnVisible("workspace") ? "" : "hidden"}`}>
-            <div onClick={(e) => e.stopPropagation()}>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-card-foreground opacity-90">
-                <span
-                  className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
-                  style={{ backgroundColor: subtask.workspace_color || rootTask.workspace_color || "#6b7280" }}
-                />
-                <span>{subtask.workspace_icon || rootTask.workspace_icon || "•"}</span>
-                <span>{subtask.workspace_name || rootTask.workspace_name || "Inherited"}</span>
+          <td className={`py-3.5 px-4 min-w-[220px] ${(showWorkspaceColumn || showAssigneeInWorkspaceSlot) ? "" : "hidden"}`}>
+            {showAssigneeInWorkspaceSlot ? (
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
+                  {subtask.assignee_name ? subtask.assignee_name.split(" ").map((n) => n[0]).join("") : "?"}
+                </div>
+                {isAdmin ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu
+                      value={subtask.assigned_to ? String(subtask.assigned_to) : ""}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        handleAssigneeChange(subtask.id, Number(value));
+                      }}
+                      options={employeeOptions}
+                      placeholder="Assignee"
+                      triggerClassName="w-[210px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-sm font-medium text-card-foreground">
+                    {subtask.assignee_name || "Unassigned"}
+                    {subtask.assigned_to === user?.id && (
+                      <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
+                    )}
+                  </span>
+                )}
               </div>
-            </div>
+            ) : (
+              <div onClick={(e) => e.stopPropagation()}>
+                <div className="inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-card-foreground opacity-90">
+                  <span
+                    className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
+                    style={{ backgroundColor: subtask.workspace_color || rootTask.workspace_color || "#6b7280" }}
+                  />
+                  <span>{subtask.workspace_icon || rootTask.workspace_icon || "•"}</span>
+                  <span>{subtask.workspace_name || rootTask.workspace_name || "Inherited"}</span>
+                </div>
+              </div>
+            )}
           </td>
           <td className={`py-3.5 px-4 ${isColumnVisible("priority") ? "" : "hidden"}`}>
             <div onClick={(e) => e.stopPropagation()}>
@@ -1651,7 +1719,48 @@ export default function ProjectsPage({
           <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
             {getTaskUpdatedDate(subtask)}
           </td>
-          <td className={`py-3.5 px-4 min-w-[220px] ${isColumnVisible("assignee") ? "" : "hidden"}`}>
+          <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>
+            {(() => {
+              const nestedItems = flattenNestedSubtasks(subtask.children || []);
+              const weeklyProgress = getLastWeekProgress(subtask, nestedItems);
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openSubtaskPanel(subtask, rootTask);
+                  }}
+                  disabled={weeklyProgress.doneCount === 0}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-default"
+                  title={weeklyProgress.doneCount > 0 ? "Open recent completed updates" : "No completed updates in last 7 days"}
+                >
+                  <span>{weeklyProgress.percent}%</span>
+                  <span className="text-[10px] text-emerald-400/90">({weeklyProgress.doneCount}/{weeklyProgress.totalCount})</span>
+                </button>
+              );
+            })()}
+          </td>
+          <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>
+            {(() => {
+              const nestedItems = flattenNestedSubtasks(subtask.children || []);
+              const weeklyActivity = getLastWeekActivity(subtask, nestedItems);
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/project-management/${rootTask.id}#updates-section`);
+                  }}
+                  disabled={weeklyActivity === 0}
+                  className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-500 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-default"
+                  title={weeklyActivity > 0 ? "Open subtask updates" : "No updates in last 7 days"}
+                >
+                  {weeklyActivity} updates
+                </button>
+              );
+            })()}
+          </td>
+          <td className={`py-3.5 px-4 min-w-[220px] ${showAssigneeDefaultSlot ? "" : "hidden"}`}>
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                 {subtask.assignee_name ? subtask.assignee_name.split(" ").map((n) => n[0]).join("") : "?"}
@@ -2045,6 +2154,64 @@ export default function ProjectsPage({
     return effectiveTs ? new Date(effectiveTs).toLocaleDateString("en-IN") : "--";
   };
 
+  const isLast7Days = (value?: string | null) => {
+    if (!value) return false;
+    const ts = Date.parse(value);
+    if (Number.isNaN(ts)) return false;
+    return Date.now() - ts <= 7 * 24 * 60 * 60 * 1000;
+  };
+
+  const flattenNestedSubtasks = (nodes: any[]): Task[] => {
+    const items: Task[] = [];
+    const walk = (list: any[]) => {
+      list.forEach((node) => {
+        items.push(node as Task);
+        if (node.children?.length) {
+          walk(node.children);
+        }
+      });
+    };
+    walk(nodes);
+    return items;
+  };
+
+  const isDoneStatus = (status?: string | null) => {
+    return status === "approved" || status === "completed" || status === "submitted";
+  };
+
+  const getLastWeekProgress = (task: Task, relatedItems: Task[] = []) => {
+    if (relatedItems.length === 0) {
+      const completed = isDoneStatus(task.status) && isLast7Days(task.completed_at || task.updated_at || task.created_at);
+      return {
+        percent: completed ? 100 : 0,
+        doneCount: completed ? 1 : 0,
+        totalCount: 1,
+      };
+    }
+
+    const doneCount = relatedItems.filter((item) => {
+      if (!isDoneStatus(item.status)) return false;
+      return isLast7Days(item.completed_at || item.updated_at || item.created_at);
+    }).length;
+
+    const totalCount = relatedItems.length;
+    return {
+      percent: totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0,
+      doneCount,
+      totalCount,
+    };
+  };
+
+  const getLastWeekActivity = (task: Task, relatedItems: Task[] = []) => {
+    const rootTouched = isLast7Days(task.updated_at || task.created_at) ? 1 : 0;
+    const relatedTouched = relatedItems.filter((item) => isLast7Days(item.updated_at || item.created_at)).length;
+    return rootTouched + relatedTouched;
+  };
+
+  const openWeeklyUpdates = (task: Task) => {
+    router.push(`/project-management/${task.id}#updates-section`);
+  };
+
   const getReporterName = (task: Task) => {
     if (task.assigned_by_name) return task.assigned_by_name;
     const reporter = employees.find((emp) => emp.id === task.assigned_by);
@@ -2091,6 +2258,9 @@ export default function ProjectsPage({
   );
 
   const workspaceScopedView = Boolean(workspaceFilter);
+  const showWorkspaceColumn = isColumnVisible("workspace") && !workspaceScopedView;
+  const showAssigneeInWorkspaceSlot = workspaceScopedView && isColumnVisible("assignee");
+  const showAssigneeDefaultSlot = !workspaceScopedView && isColumnVisible("assignee");
 
   const newProjectBtn = isAdmin ? (
     <button
@@ -2128,14 +2298,15 @@ export default function ProjectsPage({
             placeholder="All Status"
             triggerClassName="w-full lg:w-52"
           />
-          <DropdownMenu
-            value={workspaceFilter ? String(workspaceFilter) : "__all"}
-            onValueChange={(value) => setWorkspaceFilter(value === "__all" ? undefined : Number(value))}
-            options={workspaceFilterOptions}
-            placeholder="All Workspaces"
-            triggerClassName="w-full lg:w-56"
-            disabled={workspaceScopedView}
-          />
+          {!workspaceScopedView && (
+            <DropdownMenu
+              value={workspaceFilter ? String(workspaceFilter) : "__all"}
+              onValueChange={(value) => setWorkspaceFilter(value === "__all" ? undefined : Number(value))}
+              options={workspaceFilterOptions}
+              placeholder="All Workspaces"
+              triggerClassName="w-full lg:w-56"
+            />
+          )}
           <DropdownMenu
             value={assigneeFilter ? String(assigneeFilter) : "__all"}
             onValueChange={(value) => setAssigneeFilter(value === "__all" ? undefined : Number(value))}
@@ -2165,7 +2336,7 @@ export default function ProjectsPage({
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-foreground">Quick Project Links</p>
-                    <p className="text-[11px] text-muted-foreground">Open any project directly</p>
+                    <p className="text-[11px] text-muted-foreground">Only projects with deployed links</p>
                   </div>
                   <button
                     type="button"
@@ -2185,23 +2356,27 @@ export default function ProjectsPage({
                         type="button"
                         onClick={() => {
                           setShowProjectLinks(false);
-                          router.push(`/project-management/${project.id}`);
+                          window.open(getResolvedExternalLink(project.deployedLink!), "_blank", "noopener,noreferrer");
                         }}
                         className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-left text-xs hover:bg-primary/10 hover:border-primary/30 transition-colors"
                       >
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">{project.title}</p>
                           <p className="truncate text-[11px] text-muted-foreground">
-                            {project.publicId || `Project #${project.id}`}
-                            {project.workspace ? ` • ${project.workspace}` : ""}
+                            {project.deployedLink
+                              ? project.deployedLink
+                              : `${project.publicId || `Project #${project.id}`}${project.workspace ? ` • ${project.workspace}` : ""}`}
                           </p>
                         </div>
-                        <span className="shrink-0 text-[10px] font-semibold text-primary">Open</span>
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
+                          Open
+                          {project.deployedLink ? <ExternalLink size={10} /> : null}
+                        </span>
                       </button>
                     ))
                   ) : (
                     <div className="rounded-lg border border-dashed border-border/60 px-3 py-4 text-center text-xs text-muted-foreground">
-                      No projects available
+                      No projects with deployed links
                     </div>
                   )}
                 </div>
@@ -2308,7 +2483,7 @@ export default function ProjectsPage({
                         onClick={() => {
                           setShowWarningLinks(false);
                           if (item.kind === "project") {
-                            router.push(`/project-management/${item.id}`);
+                            openProjectPage(item.id);
                             return;
                           }
 
@@ -2403,7 +2578,9 @@ export default function ProjectsPage({
                   <th className="py-3 px-4 text-center font-semibold"></th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("refId") ? "" : "hidden"}`}>Ref ID</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("task") ? "" : "hidden"}`}>Task</th>
-                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("workspace") ? "" : "hidden"}`}>Workspace</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${(showWorkspaceColumn || showAssigneeInWorkspaceSlot) ? "" : "hidden"}`}>
+                    {showAssigneeInWorkspaceSlot ? "Assignee" : "Workspace"}
+                  </th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("priority") ? "" : "hidden"}`}>Priority</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("status") ? "" : "hidden"}`}>Status</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("reporter") ? "" : "hidden"}`}>Reporter</th>
@@ -2411,7 +2588,9 @@ export default function ProjectsPage({
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("createdDate") ? "" : "hidden"}`}>Created Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("startDate") ? "" : "hidden"}`}>Start Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>Updated Date</th>
-                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("assignee") ? "" : "hidden"}`}>Assignee</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>Last 7D Progress</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>Last 7D Activity</th>
+                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${showAssigneeDefaultSlot ? "" : "hidden"}`}>Assignee</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>Due Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${canManageTasks && isColumnVisible("actions") ? "" : "hidden"}`}>Actions</th>
                 </tr>
@@ -2419,11 +2598,13 @@ export default function ProjectsPage({
               <tbody className="divide-y" style={{ borderColor: "#DFB6B2" }}>
                 {filteredTasks.map((task) => {
                   const warningState = getTaskWarningState(task, taskWarningSettings, new Date(), getTaskLatestActivityAt(task));
+                  const weeklyProgress = getLastWeekProgress(task, taskChildren[task.id] || []);
+                  const weeklyActivity = getLastWeekActivity(task, taskChildren[task.id] || []);
                   return (
                     <React.Fragment key={task.id}>
                       <tr
                         className="cursor-pointer transition-all duration-200 hover:bg-secondary/40 hover:shadow-[0_0_0_1px_rgba(168,85,247,0.26)] hover:scale-[1.002] active:scale-[0.998]"
-                        onClick={(e) => handleNavigate(`/project-management/${task.id}`, e as React.MouseEvent)}
+                        onClick={() => openProjectPage(task.id)}
                       >
                         <td className="py-3.5 pl-4">
                           <button
@@ -2441,10 +2622,10 @@ export default function ProjectsPage({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleNavigate(`/project-management/${task.id}`, e);
+                                  openProjectPage(task.id);
                                 }}
                                 className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors cursor-pointer"
-                                title="Open project details (Ctrl+Click for new tab)"
+                                title="Open project details"
                               >
                                 {task.public_id}
                               </button>
@@ -2498,10 +2679,10 @@ export default function ProjectsPage({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleNavigate(`/project-management/${task.id}`, e);
+                                  openProjectPage(task.id);
                                 }}
                                 className="text-[10px] font-semibold text-primary hover:text-primary/80 cursor-pointer"
-                                title="Ctrl+Click to open in new tab"
+                                title="Open project in new tab"
                               >
                                 Open
                               </button>
@@ -2533,36 +2714,61 @@ export default function ProjectsPage({
                             </div>
                           </div>
                         </td>
-                        <td className={`py-3.5 px-4 min-w-[140px] ${isColumnVisible("workspace") ? "" : "hidden"}`}>
-                          {isAdmin ? (
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <DropdownMenu
-                                value={String(task.workspace_id || "")}
-                                onValueChange={(value) => handleWorkspaceChange(task.id, Number(value))}
-                                options={workspaceSelectOptions}
-                                placeholder="Select workspace"
-                                triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-xs"
-                              />
+                        <td className={`py-3.5 px-4 min-w-[220px] ${(showWorkspaceColumn || showAssigneeInWorkspaceSlot) ? "" : "hidden"}`}>
+                          {showAssigneeInWorkspaceSlot ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
+                                {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
+                              </div>
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenu
+                                  value={task.assigned_to ? String(task.assigned_to) : "__unassigned"}
+                                  onValueChange={(value) => handleAssigneeChange(task.id, value === "__unassigned" ? undefined : Number(value))}
+                                  options={[
+                                    { value: "__unassigned", label: "Unassigned", icon: <span className="text-muted-foreground">◌</span>, disabled: user?.role !== "admin" },
+                                    ...employeeOptions.map(option => ({
+                                      ...option,
+                                      disabled: user?.role !== "admin"
+                                    })),
+                                  ]}
+                                  placeholder="Assignee"
+                                  triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-sm font-medium text-card-foreground"
+                                />
+                              </div>
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (task.workspace_id) {
-                                  handleNavigate(`/project-management/workspaces/${task.workspace_id}`, e);
-                                }
-                              }}
-                              className="flex items-center gap-2 text-xs text-foreground hover:text-primary transition-colors cursor-pointer"
-                              title="Ctrl+Click to open in new tab"
-                            >
-                              <span
-                                className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
-                                style={{ backgroundColor: task.workspace_color || "#6b7280" }}
-                              />
-                              <span>{task.workspace_icon || "•"}</span>
-                              <span>{task.workspace_name || "Unassigned"}</span>
-                            </button>
+                            <>
+                              {isAdmin ? (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <DropdownMenu
+                                    value={String(task.workspace_id || "")}
+                                    onValueChange={(value) => handleWorkspaceChange(task.id, Number(value))}
+                                    options={workspaceSelectOptions}
+                                    placeholder="Select workspace"
+                                    triggerClassName="w-[180px] rounded-xl px-2.5 py-1.5 text-xs"
+                                  />
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (task.workspace_id) {
+                                      handleNavigate(`/project-management/workspaces/${task.workspace_id}`, e);
+                                    }
+                                  }}
+                                  className="flex items-center gap-2 text-xs text-foreground hover:text-primary transition-colors cursor-pointer"
+                                  title="Ctrl+Click to open in new tab"
+                                >
+                                  <span
+                                    className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
+                                    style={{ backgroundColor: task.workspace_color || "#6b7280" }}
+                                  />
+                                  <span>{task.workspace_icon || "•"}</span>
+                                  <span>{task.workspace_name || "Unassigned"}</span>
+                                </button>
+                              )}
+                            </>
                           )}
                         </td>
                         <td className={`py-3.5 px-4 ${isColumnVisible("priority") ? "" : "hidden"}`}>
@@ -2624,7 +2830,36 @@ export default function ProjectsPage({
                         <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
                           {getTaskUpdatedDate(task)}
                         </td>
-                        <td className={`py-3.5 px-4 min-w-[220px] ${isColumnVisible("assignee") ? "" : "hidden"}`}>
+                        <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openWeeklyUpdates(task);
+                            }}
+                            disabled={weeklyProgress.doneCount === 0}
+                            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-default"
+                            title={weeklyProgress.doneCount > 0 ? "Open recent completed updates" : "No completed updates in last 7 days"}
+                          >
+                            <span>{weeklyProgress.percent}%</span>
+                            <span className="text-[10px] text-emerald-400/90">({weeklyProgress.doneCount}/{weeklyProgress.totalCount})</span>
+                          </button>
+                        </td>
+                        <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openWeeklyUpdates(task);
+                            }}
+                            disabled={weeklyActivity === 0}
+                            className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-500 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-default"
+                            title={weeklyActivity > 0 ? "Open latest updates" : "No updates in last 7 days"}
+                          >
+                            {weeklyActivity} updates
+                          </button>
+                        </td>
+                        <td className={`py-3.5 px-4 min-w-[220px] ${showAssigneeDefaultSlot ? "" : "hidden"}`}>
                           <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
                               {task.assignee_name ? task.assignee_name.split(" ").map(n => n[0]).join("") : "?"}
