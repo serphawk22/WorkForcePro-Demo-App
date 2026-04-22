@@ -527,15 +527,6 @@ async def update_subtask(
             )
         ensure_same_organization(current_user, reporter.organization_id, "reporter")
 
-    assignment_alert_message = None
-    requested_assignee_id = update_data.get("assigned_to", subtask.assigned_to)
-    if parent_task.assigned_to and requested_assignee_id != parent_task.assigned_to:
-        update_data["assigned_to"] = parent_task.assigned_to
-        assignment_alert_message = (
-            f"Assignment corrected automatically for subtask '{subtask.title}'. "
-            f"Because it belongs to task #{parent_task.id}, it was assigned to that task's assignee."
-        )
-
     # Update fields
     for key, value in update_data.items():
         setattr(subtask, key, value)
@@ -555,15 +546,6 @@ async def update_subtask(
             task_id=subtask.parent_task_id
         )
 
-    if assignment_alert_message:
-        create_notification(
-            session=session,
-            user_id=current_user.id,
-            type=NotificationType.TASK_COMMENT,
-            message=assignment_alert_message,
-            task_id=parent_task.id,
-        )
-    
     # Reload and refresh to ensure all fields are correctly populated for response
     session.refresh(subtask)
     return subtask

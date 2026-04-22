@@ -2001,6 +2001,9 @@ body {
 .w-8 {
   width: 2rem;
 }
+.w-80 {
+  width: 20rem;
+}
 .w-9 {
   width: 2.25rem;
 }
@@ -2097,9 +2100,6 @@ body {
 }
 .w-px {
   width: 1px;
-}
-.w-80 {
-  width: 20rem;
 }
 .min-w-0 {
   min-width: 0px;
@@ -2458,6 +2458,9 @@ body {
 }
 .resize {
   resize: both;
+}
+.scroll-mt-24 {
+  scroll-margin-top: 6rem;
 }
 .list-none {
   list-style-type: none;
@@ -4988,6 +4991,12 @@ body {
   --tw-text-opacity: 1;
   color: rgb(202 138 4 / var(--tw-text-opacity, 1));
 }
+.text-emerald-400\/90 {
+  color: rgb(52 211 153 / 0.9);
+}
+.text-blue-400\/90 {
+  color: rgb(96 165 250 / 0.9);
+}
 .underline {
   text-decoration-line: underline;
 }
@@ -6566,6 +6575,10 @@ html:not(.dark) .icon-halo-pink {
   border-color: hsl(var(--accent) / 0.6);
 }
 
+.hover\:border-blue-500\/30:hover {
+  border-color: rgb(59 130 246 / 0.3);
+}
+
 .hover\:border-border:hover {
   --tw-border-opacity: 1;
   border-color: hsl(var(--border) / var(--tw-border-opacity, 1));
@@ -6613,16 +6626,12 @@ html:not(.dark) .icon-halo-pink {
   border-color: rgb(168 85 247 / 0.5);
 }
 
-.hover\:border-violet-300\/80:hover {
-  border-color: rgb(196 181 253 / 0.8);
-}
-
 .hover\:border-red-500\/30:hover {
   border-color: rgb(239 68 68 / 0.3);
 }
 
-.hover\:border-blue-500\/30:hover {
-  border-color: rgb(59 130 246 / 0.3);
+.hover\:border-violet-300\/80:hover {
+  border-color: rgb(196 181 253 / 0.8);
 }
 
 .hover\:\!bg-destructive\/10:hover {
@@ -6663,6 +6672,14 @@ html:not(.dark) .icon-halo-pink {
 .hover\:bg-blue-500:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(59 130 246 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-blue-500\/10:hover {
+  background-color: rgb(59 130 246 / 0.1);
+}
+
+.hover\:bg-blue-500\/15:hover {
+  background-color: rgb(59 130 246 / 0.15);
 }
 
 .hover\:bg-blue-500\/20:hover {
@@ -6891,14 +6908,6 @@ html:not(.dark) .icon-halo-pink {
 
 .hover\:bg-white\/90:hover {
   background-color: rgb(255 255 255 / 0.9);
-}
-
-.hover\:bg-blue-500\/10:hover {
-  background-color: rgb(59 130 246 / 0.1);
-}
-
-.hover\:bg-blue-500\/15:hover {
-  background-color: rgb(59 130 246 / 0.15);
 }
 
 .hover\:bg-gradient-to-r:hover {
@@ -7604,6 +7613,10 @@ html:not(.dark) .glass-sidebar .active\:bg-sidebar-accent:activea .sidebar-activ
 
 .disabled\:cursor-not-allowed:disabled {
   cursor: not-allowed;
+}
+
+.disabled\:cursor-default:disabled {
+  cursor: default;
 }
 
 .disabled\:bg-gray-300:disabled {

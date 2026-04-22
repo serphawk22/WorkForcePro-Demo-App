@@ -19,6 +19,7 @@ import {
   createComment,
   createSubtask,
   getAssignableUsers,
+  updateSubtask,
   updateSubtaskStatus,
   getTaskRecurringInstances,
   updateTaskInstanceStatus,
@@ -648,6 +649,21 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleSubtaskAssigneeChange = async (subtaskId: number, assigneeId: number) => {
+    try {
+      const response = await updateSubtask(subtaskId, { assigned_to: assigneeId });
+      if (response.data) {
+        toast.success("Subtask assignee updated!");
+        await loadProjectDetails(true);
+      } else {
+        toast.error(response.error || "Failed to update subtask assignee");
+      }
+    } catch (error) {
+      console.error("Error updating subtask assignee:", error);
+      toast.error("Failed to update subtask assignee");
+    }
+  };
+
   const handleAddSubtaskComment = async (subtaskId: number) => {
     const commentText = (subtaskCommentDrafts[subtaskId] || "").trim();
     if (!commentText) return;
@@ -873,6 +889,23 @@ export default function ProjectDetailPage() {
     })),
   ]), [subtaskAssigneeOptions]);
 
+  const subtaskAssigneeEditOptions: DropdownOption[] = useMemo(() => (
+    assignableUsers.map((employee) => ({
+      value: String(employee.id),
+      label: employee.name,
+      icon: <User size={12} />,
+      description: employee.email,
+      avatarSrc: employee.profile_picture || undefined,
+      avatarFallback: employee.name
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    }))
+  ), [assignableUsers]);
+
   const subtaskStatusFilterOptions: DropdownOption[] = useMemo(() => ([
     { value: "all", label: "All Status", icon: <span className="text-muted-foreground">●</span> },
     { value: "new", label: "New / To Do", icon: <span className="text-purple-400">●</span> },
@@ -999,6 +1032,24 @@ export default function ProjectDetailPage() {
                     {subtask.assignee_name.split(" ").map((n: string) => n[0]).join("")}
                   </div>
                   <span className="text-xs font-medium text-muted-foreground">{subtask.assignee_name}</span>
+                </div>
+              )}
+
+              {(isAdmin || project?.task.assigned_to === user?.id) && subtaskAssigneeEditOptions.length > 0 && (
+                <div className="mt-2 ml-8 max-w-[280px]" onClick={(e) => e.stopPropagation()}>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Assignee
+                  </label>
+                  <DropdownMenu
+                    value={subtask.assigned_to ? String(subtask.assigned_to) : ""}
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      void handleSubtaskAssigneeChange(subtask.id, Number(value));
+                    }}
+                    options={subtaskAssigneeEditOptions}
+                    placeholder="Select assignee"
+                    triggerClassName="w-full rounded-lg px-3 py-2 text-xs font-medium"
+                  />
                 </div>
               )}
 

@@ -14,6 +14,12 @@ import {
   type WeeklyProgressEntry,
   type WeeklyProgressReportRow,
 } from "@/lib/api";
+import {
+  htmlToPlainText,
+  parseWeeklyDescription,
+  resolveExternalUrl,
+  sanitizeRichTextHtml,
+} from "@/lib/weeklyProgress";
 
 function mondayOfDate(d: Date): Date {
   const x = new Date(d);
@@ -230,9 +236,10 @@ export default function WeeklyProgressAdminSection() {
     sctx.font = "15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
 
     const computedRows = rows.map((row) => {
+      const plainDescription = htmlToPlainText(row.description || "-") || "-";
       const wrapped = [
         getWrappedLines(sctx, String(row.user_name || row.user_email || `User #${row.user_id}`), colWidths[0] - 20),
-        getWrappedLines(sctx, String(row.description || "-"), colWidths[1] - 20),
+        getWrappedLines(sctx, String(plainDescription), colWidths[1] - 20),
       ];
       const maxLines = Math.max(...wrapped.map((w) => w.length));
       const height = rowPaddingY * 2 + maxLines * lineHeight;
@@ -341,7 +348,7 @@ export default function WeeklyProgressAdminSection() {
         return {
           ...row,
           user_name: row.user_name || fallback?.employee_name || `User #${row.user_id}`,
-          description: row.description || fallback?.description || "-",
+          description: htmlToPlainText(row.description || fallback?.description || "-"),
         };
       });
 
@@ -577,7 +584,10 @@ export default function WeeklyProgressAdminSection() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(row.deployed_link || row.github_link || "", "_blank", "noopener,noreferrer");
+                              const resolvedLink = resolveExternalUrl(row.deployed_link || row.github_link || "");
+                              if (resolvedLink) {
+                                window.open(resolvedLink, "_blank", "noopener,noreferrer");
+                              }
                             }}
                             className="w-full rounded-lg border border-border/80 bg-background/60 px-2.5 py-2 text-left hover:bg-muted/40 transition-colors"
                             title="Open submission link"
@@ -663,7 +673,43 @@ export default function WeeklyProgressAdminSection() {
                 detailEntries.map((e) => (
                   <div key={e.id} className="rounded-xl border border-border p-3 space-y-2">
                     <p className="text-xs font-bold text-primary">{formatWeek(e.week_start_date)}</p>
-                    <p className="text-xs text-card-foreground whitespace-pre-wrap">{e.description}</p>
+                    {(() => {
+                      const parsed = parseWeeklyDescription(e.description);
+                      const highlightPointers = parsed.highlights ? parsed.highlights.split("\n").filter(Boolean) : [];
+                      const difficultyPointers = parsed.difficulties ? parsed.difficulties.split("\n").filter(Boolean) : [];
+                      const weeklyEntryHtml = sanitizeRichTextHtml(parsed.weeklyEntry || e.description || "");
+                      return (
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weekly Entry</p>
+                            <div
+                              className="text-xs text-card-foreground [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ml-4 [&_ol]:ml-4"
+                              dangerouslySetInnerHTML={{ __html: weeklyEntryHtml }}
+                            />
+                          </div>
+                          {highlightPointers.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Highlights</p>
+                              <ul className="mt-1 space-y-1">
+                                {highlightPointers.map((item, idx) => (
+                                  <li key={`${e.id}-h-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {difficultyPointers.length > 0 && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Difficulties / Abnormalities</p>
+                              <ul className="mt-1 space-y-1">
+                                {difficultyPointers.map((item, idx) => (
+                                  <li key={`${e.id}-d-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {e.comments.map((c) => (
                       <div key={c.id} className="text-xs rounded-lg bg-secondary/40 px-2 py-1.5 border border-border/50">
                         <span className="font-semibold">{c.admin_name}</span>
@@ -693,7 +739,43 @@ export default function WeeklyProgressAdminSection() {
             </div>
             <div className="p-4 overflow-y-auto">
               <p className="text-xs font-bold text-primary mb-2">{summaryPreviewEntry.employee_name || `User #${summaryPreviewEntry.user_id}`} • {formatWeek(summaryPreviewEntry.week_start_date)}</p>
-              <p className="text-sm text-card-foreground whitespace-pre-wrap leading-relaxed">{summaryPreviewEntry.description}</p>
+              {(() => {
+                const parsed = parseWeeklyDescription(summaryPreviewEntry.description);
+                const highlightPointers = parsed.highlights ? parsed.highlights.split("\n").filter(Boolean) : [];
+                const difficultyPointers = parsed.difficulties ? parsed.difficulties.split("\n").filter(Boolean) : [];
+                const weeklyEntryHtml = sanitizeRichTextHtml(parsed.weeklyEntry || summaryPreviewEntry.description || "");
+                return (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weekly Entry</p>
+                      <div
+                        className="mt-1 text-sm text-card-foreground leading-relaxed [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ml-4 [&_ol]:ml-4"
+                        dangerouslySetInnerHTML={{ __html: weeklyEntryHtml }}
+                      />
+                    </div>
+                    {highlightPointers.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Highlights</p>
+                        <ul className="mt-1 space-y-1">
+                          {highlightPointers.map((item, idx) => (
+                            <li key={`preview-h-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {difficultyPointers.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Difficulties / Abnormalities</p>
+                        <ul className="mt-1 space-y-1">
+                          {difficultyPointers.map((item, idx) => (
+                            <li key={`preview-d-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
