@@ -323,66 +323,68 @@ export default function WeeklyProgressEmployeeSection() {
                         </button>
                       </div>
                       {(() => {
+                        const githubHref = resolveExternalUrl(entry.github_link);
+                        const deployedHref = resolveExternalUrl(entry.deployed_link);
                         const parsed = parseWeeklyDescription(entry.description);
                         const highlightPointers = normalizePointerLines(parsed.highlights);
                         const difficultyPointers = normalizePointerLines(parsed.difficulties);
-                        const githubHref = resolveExternalUrl(entry.github_link);
-                        const deployedHref = resolveExternalUrl(entry.deployed_link);
                         const weeklyEntryHtml = sanitizeRichTextHtml(parsed.weeklyEntry || entry.description || "");
                         return (
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weekly Entry</p>
-                              <div
-                                className="text-xs text-card-foreground line-clamp-4 overflow-hidden [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ml-4 [&_ol]:ml-4"
-                                dangerouslySetInnerHTML={{ __html: weeklyEntryHtml }}
-                              />
+                          <>
+                            <div className="space-y-2">
+                              <div>
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Weekly Entry</p>
+                                <div
+                                  className="text-xs text-card-foreground line-clamp-4 overflow-hidden [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ml-4 [&_ol]:ml-4"
+                                  dangerouslySetInnerHTML={{ __html: weeklyEntryHtml }}
+                                />
+                              </div>
+                              {highlightPointers.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Highlights</p>
+                                  <ul className="mt-1 space-y-1">
+                                    {highlightPointers.slice(0, 3).map((item, idx) => (
+                                      <li key={`${entry.id}-h-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {difficultyPointers.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Difficulties / Abnormalities</p>
+                                  <ul className="mt-1 space-y-1">
+                                    {difficultyPointers.slice(0, 3).map((item, idx) => (
+                                      <li key={`${entry.id}-d-${idx}`} className="text-xs text-card-foreground">• {item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
-                            {highlightPointers.length > 0 && (
-                              <div>
-                                <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Highlights</p>
-                                <ul className="mt-1 space-y-1">
-                                  {highlightPointers.slice(0, 3).map((item, idx) => (
-                                    <li key={`${entry.id}-h-${idx}`} className="text-xs text-card-foreground">• {item}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {difficultyPointers.length > 0 && (
-                              <div>
-                                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Difficulties / Abnormalities</p>
-                                <ul className="mt-1 space-y-1">
-                                  {difficultyPointers.slice(0, 3).map((item, idx) => (
-                                    <li key={`${entry.id}-d-${idx}`} className="text-xs text-card-foreground">• {item}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {githubHref && (
+                                <a
+                                  href={githubHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-medium text-blue-600 dark:text-blue-400 inline-flex items-center gap-0.5 hover:underline"
+                                >
+                                  GitHub <ExternalLink size={10} />
+                                </a>
+                              )}
+                              {deployedHref && (
+                                <a
+                                  href={deployedHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-medium text-violet-600 dark:text-violet-400 inline-flex items-center gap-0.5 hover:underline"
+                                >
+                                  Deployed <ExternalLink size={10} />
+                                </a>
+                              )}
+                            </div>
+                          </>
                         );
                       })()}
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {githubHref && (
-                          <a
-                            href={githubHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] font-medium text-blue-600 dark:text-blue-400 inline-flex items-center gap-0.5 hover:underline"
-                          >
-                            GitHub <ExternalLink size={10} />
-                          </a>
-                        )}
-                        {deployedHref && (
-                          <a
-                            href={deployedHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] font-medium text-violet-600 dark:text-violet-400 inline-flex items-center gap-0.5 hover:underline"
-                          >
-                            Deployed <ExternalLink size={10} />
-                          </a>
-                        )}
-                      </div>
                       <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
                         <button
                           type="button"
