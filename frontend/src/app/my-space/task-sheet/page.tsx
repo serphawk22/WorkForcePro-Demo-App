@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
+import AiAssistantBlock from "@/components/my-space/AiAssistantBlock";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
@@ -58,6 +59,7 @@ export default function TaskSheetPage() {
   const [logFilterDate, setLogFilterDate] = useState(todayStr());
   const [achievements, setAchievements] = useState("");
   const [repoLink, setRepoLink] = useState("");
+  const [aiExplanation, setAiExplanation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -97,6 +99,7 @@ export default function TaskSheetPage() {
     if (!myEntries.length) {
       setAchievements("");
       setRepoLink("");
+      setAiExplanation("");
       setIsUpdate(false);
       setEditingEntryId(null);
       return;
@@ -105,11 +108,13 @@ export default function TaskSheetPage() {
     if (selectedEntry) {
       setAchievements(selectedEntry.achievements);
       setRepoLink(selectedEntry.repo_link || "");
+      setAiExplanation("");
       setIsUpdate(true);
       setEditingEntryId(selectedEntry.id);
     } else {
       setAchievements("");
       setRepoLink("");
+      setAiExplanation("");
       setIsUpdate(false);
       setEditingEntryId(null);
     }
@@ -117,13 +122,18 @@ export default function TaskSheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!achievements.trim()) {
-      showFloatingToast({ type: "error", message: "Please describe your achievements for the selected date." });
+    if (!achievements.trim() && !aiExplanation.trim()) {
+      showFloatingToast({ type: "error", message: "Please add achievements or talk to the AI Assistant." });
       return;
     }
     setIsSubmitting(true);
     try {
-      const payload = { achievements, repo_link: repoLink || undefined, date: selectedDate };
+      const payload = {
+        achievements,
+        repo_link: repoLink || undefined,
+        ai_explanation: aiExplanation.trim() || undefined,
+        date: selectedDate,
+      };
       const res = editingEntryId
         ? await updateTaskSheetEntry(editingEntryId, payload)
         : await submitTaskSheet(payload);
@@ -131,6 +141,7 @@ export default function TaskSheetPage() {
         showFloatingToast({ type: "error", message: res.error });
       } else {
         setIsUpdate(true);
+        setAiExplanation("");
         await loadTaskSheets();
         showFloatingToast({
           type: "success",
@@ -148,6 +159,7 @@ export default function TaskSheetPage() {
     setSelectedDate(entry.date);
     setAchievements(entry.achievements);
     setRepoLink(entry.repo_link || "");
+    setAiExplanation("");
     setIsUpdate(true);
     setEditingEntryId(entry.id);
     showFloatingToast({ type: "success", message: "Entry loaded for editing." });
@@ -171,6 +183,7 @@ export default function TaskSheetPage() {
       setEditingEntryId(null);
       setAchievements("");
       setRepoLink("");
+      setAiExplanation("");
       setIsUpdate(false);
     }
     await loadTaskSheets();
@@ -379,6 +392,7 @@ export default function TaskSheetPage() {
               <textarea value={achievements} onChange={(e) => setAchievements(e.target.value)} placeholder="Describe your achievements, learnings, and progress today..." className="w-full min-h-[140px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input" maxLength={1000} />
               <div className="mt-1 text-right text-xs font-medium text-[#854F6C] dark:text-purple-400">{achievements.length} / 1000 characters</div>
             </div>
+            <AiAssistantBlock value={aiExplanation} onChange={setAiExplanation} />
             <div>
               <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Direct Repository Link</label>
               <input type="url" value={repoLink} onChange={(e) => setRepoLink(e.target.value)} placeholder="https://github.com/..." className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input" />

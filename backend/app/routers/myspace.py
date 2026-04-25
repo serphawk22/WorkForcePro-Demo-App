@@ -1,4 +1,7 @@
-from typing import List
+import json
+import os
+import re
+from typing import List, Optional
 from datetime import date as DateType, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlmodel import Session, select
@@ -46,6 +49,121 @@ from app.models import (
 from app.auth import get_current_user, get_current_admin_user
 
 router = APIRouter(prefix="/my-space", tags=["My Space"])
+
+
+def _strip_text(value: Optional[str]) -> str:
+    return (value or "").strip()
+
+
+def _extract_first_repo_link(text: str) -> Optional[str]:
+    match = re.search(r"https?://[^\s]+", text)
+    if not match:
+        return None
+    return match.group(0).rstrip(").,;]")
+
+
+def _strip_markdown_fences(content: str) -> str:
+    cleaned = (content or "").strip()
+    if not cleaned.startswith("```"):
+        return cleaned
+    lines = cleaned.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+async def _ai_fill_task_sheet(explanation: str) -> dict:
+    text = _strip_text(explanation)
+    if not text:
+        return {}
+
+    fallback = {
+        "achievements": text,
+        "repo_link": _extract_first_repo_link(text),
+    }
+
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        return fallback
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You convert a user's explanation into a task sheet JSON object. "
+                        "Return only JSON: {\"achievements\": string, \"repo_link\": string|null}. "
+                        "Keep achievements concise and factual."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            temperature=0.2,
+            max_tokens=300,
+        )
+        content = _strip_markdown_fences(response.choices[0].message.content or "")
+        parsed = json.loads(content)
+        achievements = _strip_text(parsed.get("achievements")) or fallback["achievements"]
+        repo_link = _strip_text(parsed.get("repo_link")) or fallback["repo_link"]
+        return {"achievements": achievements, "repo_link": repo_link}
+    except Exception:
+        return fallback
+
+
+async def _ai_fill_happy_sheet(explanation: str) -> dict:
+    text = _strip_text(explanation)
+    if not text:
+        return {}
+
+    fallback = {
+        "what_made_you_happy": text,
+        "what_made_others_happy": text,
+        "goals_without_greed": text,
+        "dreams_supported": text,
+        "goals_without_greed_impossible": text,
+    }
+
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
+        return fallback
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You convert a user's explanation into a happy sheet JSON object. "
+                        "Return only JSON with keys: what_made_you_happy, what_made_others_happy, "
+                        "goals_without_greed, dreams_supported, goals_without_greed_impossible. "
+                        "All values must be strings and non-empty."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            temperature=0.2,
+            max_tokens=700,
+        )
+        content = _strip_markdown_fences(response.choices[0].message.content or "")
+        parsed = json.loads(content)
+        return {
+            "what_made_you_happy": _strip_text(parsed.get("what_made_you_happy")) or fallback["what_made_you_happy"],
+            "what_made_others_happy": _strip_text(parsed.get("what_made_others_happy")) or fallback["what_made_others_happy"],
+            "goals_without_greed": _strip_text(parsed.get("goals_without_greed")) or fallback["goals_without_greed"],
+            "dreams_supported": _strip_text(parsed.get("dreams_supported")) or fallback["dreams_supported"],
+            "goals_without_greed_impossible": _strip_text(parsed.get("goals_without_greed_impossible")) or fallback["goals_without_greed_impossible"],
+        }
+    except Exception:
+        return fallback
 
 
 def _recompute_user_streak(session: Session, user_id: int) -> HappySheetStreak:
@@ -103,13 +221,27 @@ async def create_task_sheet(
     current_user: User = Depends(get_current_user),
 ):
     """Submit or update a task sheet for the given date (upsert). Defaults to today."""
+    achievements = _strip_text(sheet_data.achievements)
+    repo_link = _strip_text(sheet_data.repo_link)
+    ai_explanation = _strip_text(sheet_data.ai_explanation)
+
+    if ai_explanation and (not achievements or not repo_link):
+        ai_data = await _ai_fill_task_sheet(ai_explanation)
+        if not achievements:
+            achievements = _strip_text(ai_data.get("achievements"))
+        if not repo_link:
+            repo_link = _strip_text(ai_data.get("repo_link"))
+
+    if not achievements:
+        raise HTTPException(status_code=400, detail="Please provide achievements or an AI explanation.")
+
     target_date = sheet_data.date if sheet_data.date else DateType.today()
     existing = session.exec(
         select(TaskSheet).where(TaskSheet.user_id == current_user.id, TaskSheet.date == target_date)
     ).first()
     if existing:
-        existing.achievements = sheet_data.achievements
-        existing.repo_link = sheet_data.repo_link
+        existing.achievements = achievements
+        existing.repo_link = repo_link or None
         session.add(existing)
         session.commit()
         session.refresh(existing)
@@ -124,8 +256,8 @@ async def create_task_sheet(
     task_sheet = TaskSheet(
         user_id=current_user.id,
         date=target_date,
-        achievements=sheet_data.achievements,
-        repo_link=sheet_data.repo_link,
+        achievements=achievements,
+        repo_link=repo_link or None,
     )
     session.add(task_sheet)
     session.commit()
@@ -179,6 +311,20 @@ async def update_task_sheet_entry(
     if entry.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this entry")
 
+    achievements = _strip_text(sheet_data.achievements)
+    repo_link = _strip_text(sheet_data.repo_link)
+    ai_explanation = _strip_text(sheet_data.ai_explanation)
+
+    if ai_explanation and (not achievements or not repo_link):
+        ai_data = await _ai_fill_task_sheet(ai_explanation)
+        if not achievements:
+            achievements = _strip_text(ai_data.get("achievements"))
+        if not repo_link:
+            repo_link = _strip_text(ai_data.get("repo_link"))
+
+    if not achievements:
+        raise HTTPException(status_code=400, detail="Please provide achievements or an AI explanation.")
+
     target_date = sheet_data.date if sheet_data.date else entry.date
     duplicate = session.exec(
         select(TaskSheet).where(
@@ -191,8 +337,8 @@ async def update_task_sheet_entry(
         raise HTTPException(status_code=400, detail="Task sheet already exists for this date")
 
     entry.date = target_date
-    entry.achievements = sheet_data.achievements
-    entry.repo_link = sheet_data.repo_link
+    entry.achievements = achievements
+    entry.repo_link = repo_link or None
     session.add(entry)
     session.commit()
     session.refresh(entry)
@@ -250,16 +396,45 @@ async def create_happy_sheet(
 ):
     """Submit or update a happy sheet for the given date (upsert). Defaults to today."""
     try:
+        what_made_you_happy = _strip_text(sheet_data.what_made_you_happy)
+        what_made_others_happy = _strip_text(sheet_data.what_made_others_happy)
+        goals_without_greed = _strip_text(sheet_data.goals_without_greed)
+        dreams_supported = _strip_text(sheet_data.dreams_supported)
+        goals_without_greed_impossible = _strip_text(sheet_data.goals_without_greed_impossible)
+        ai_explanation = _strip_text(sheet_data.ai_explanation)
+
+        if ai_explanation:
+            ai_data = await _ai_fill_happy_sheet(ai_explanation)
+            if not what_made_you_happy:
+                what_made_you_happy = _strip_text(ai_data.get("what_made_you_happy"))
+            if not what_made_others_happy:
+                what_made_others_happy = _strip_text(ai_data.get("what_made_others_happy"))
+            if not goals_without_greed:
+                goals_without_greed = _strip_text(ai_data.get("goals_without_greed"))
+            if not dreams_supported:
+                dreams_supported = _strip_text(ai_data.get("dreams_supported"))
+            if not goals_without_greed_impossible:
+                goals_without_greed_impossible = _strip_text(ai_data.get("goals_without_greed_impossible"))
+
+        if not all([
+            what_made_you_happy,
+            what_made_others_happy,
+            goals_without_greed,
+            dreams_supported,
+            goals_without_greed_impossible,
+        ]):
+            raise HTTPException(status_code=400, detail="Please complete all fields or provide an AI explanation.")
+
         target_date = sheet_data.date if sheet_data.date else DateType.today()
         existing = session.exec(
             select(HappySheet).where(HappySheet.user_id == current_user.id, HappySheet.date == target_date)
         ).first()
         if existing:
-            existing.what_made_you_happy = sheet_data.what_made_you_happy
-            existing.what_made_others_happy = sheet_data.what_made_others_happy
-            existing.goals_without_greed = sheet_data.goals_without_greed
-            existing.dreams_supported = sheet_data.dreams_supported
-            existing.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
+            existing.what_made_you_happy = what_made_you_happy
+            existing.what_made_others_happy = what_made_others_happy
+            existing.goals_without_greed = goals_without_greed
+            existing.dreams_supported = dreams_supported
+            existing.goals_without_greed_impossible = goals_without_greed_impossible
             session.add(existing)
             session.commit()
             session.refresh(existing)
@@ -268,11 +443,11 @@ async def create_happy_sheet(
         happy_sheet = HappySheet(
             user_id=current_user.id,
             date=target_date,
-            what_made_you_happy=sheet_data.what_made_you_happy,
-            what_made_others_happy=sheet_data.what_made_others_happy,
-            goals_without_greed=sheet_data.goals_without_greed,
-            dreams_supported=sheet_data.dreams_supported,
-            goals_without_greed_impossible=sheet_data.goals_without_greed_impossible,
+            what_made_you_happy=what_made_you_happy,
+            what_made_others_happy=what_made_others_happy,
+            goals_without_greed=goals_without_greed,
+            dreams_supported=dreams_supported,
+            goals_without_greed_impossible=goals_without_greed_impossible,
         )
         session.add(happy_sheet)
         session.commit()
@@ -313,6 +488,35 @@ async def update_happy_sheet_entry(
     if entry.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this entry")
 
+    what_made_you_happy = _strip_text(sheet_data.what_made_you_happy)
+    what_made_others_happy = _strip_text(sheet_data.what_made_others_happy)
+    goals_without_greed = _strip_text(sheet_data.goals_without_greed)
+    dreams_supported = _strip_text(sheet_data.dreams_supported)
+    goals_without_greed_impossible = _strip_text(sheet_data.goals_without_greed_impossible)
+    ai_explanation = _strip_text(sheet_data.ai_explanation)
+
+    if ai_explanation:
+        ai_data = await _ai_fill_happy_sheet(ai_explanation)
+        if not what_made_you_happy:
+            what_made_you_happy = _strip_text(ai_data.get("what_made_you_happy"))
+        if not what_made_others_happy:
+            what_made_others_happy = _strip_text(ai_data.get("what_made_others_happy"))
+        if not goals_without_greed:
+            goals_without_greed = _strip_text(ai_data.get("goals_without_greed"))
+        if not dreams_supported:
+            dreams_supported = _strip_text(ai_data.get("dreams_supported"))
+        if not goals_without_greed_impossible:
+            goals_without_greed_impossible = _strip_text(ai_data.get("goals_without_greed_impossible"))
+
+    if not all([
+        what_made_you_happy,
+        what_made_others_happy,
+        goals_without_greed,
+        dreams_supported,
+        goals_without_greed_impossible,
+    ]):
+        raise HTTPException(status_code=400, detail="Please complete all fields or provide an AI explanation.")
+
     target_date = sheet_data.date if sheet_data.date else entry.date
     duplicate = session.exec(
         select(HappySheet).where(
@@ -325,11 +529,11 @@ async def update_happy_sheet_entry(
         raise HTTPException(status_code=400, detail="Happy sheet already exists for this date")
 
     entry.date = target_date
-    entry.what_made_you_happy = sheet_data.what_made_you_happy
-    entry.what_made_others_happy = sheet_data.what_made_others_happy
-    entry.goals_without_greed = sheet_data.goals_without_greed
-    entry.dreams_supported = sheet_data.dreams_supported
-    entry.goals_without_greed_impossible = sheet_data.goals_without_greed_impossible
+    entry.what_made_you_happy = what_made_you_happy
+    entry.what_made_others_happy = what_made_others_happy
+    entry.goals_without_greed = goals_without_greed
+    entry.dreams_supported = dreams_supported
+    entry.goals_without_greed_impossible = goals_without_greed_impossible
     session.add(entry)
     session.commit()
     session.refresh(entry)

@@ -1,5 +1,4 @@
 {
-  "/project-management/workspaces/[workspaceId]/page": "app/project-management/workspaces/[workspaceId]/page.js",
-  "/project-management/[id]/page": "app/project-management/[id]/page.js",
-  "/project-management/projects/page": "app/project-management/projects/page.js"
+  "/my-space/happy-sheet/page": "app/my-space/happy-sheet/page.js",
+  "/my-space/task-sheet/page": "app/my-space/task-sheet/page.js"
 }

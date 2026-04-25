@@ -2326,6 +2326,7 @@ export interface PersonalProjectEntry {
 export async function submitTaskSheet(data: {
   achievements: string;
   repo_link?: string;
+  ai_explanation?: string;
   date?: string; // YYYY-MM-DD; defaults to today if omitted
 }): Promise<ApiResponse<TaskSheetEntry>> {
   return apiFetch<TaskSheetEntry>("/my-space/task-sheet", {
@@ -2344,7 +2345,7 @@ export async function getAllTaskSheets(limit = 50): Promise<ApiResponse<TaskShee
 
 export async function updateTaskSheetEntry(
   entryId: number,
-  data: { achievements: string; repo_link?: string; date?: string }
+  data: { achievements: string; repo_link?: string; ai_explanation?: string; date?: string }
 ): Promise<ApiResponse<TaskSheetEntry>> {
   return apiFetch<TaskSheetEntry>(`/my-space/task-sheet/${entryId}`, {
     method: "PUT",
@@ -2365,6 +2366,7 @@ export async function submitHappySheet(data: {
   goals_without_greed: string;
   dreams_supported: string;
   goals_without_greed_impossible: string;
+  ai_explanation?: string;
   date?: string; // YYYY-MM-DD; defaults to today if omitted
 }): Promise<ApiResponse<HappySheetEntry>> {
   return apiFetch<HappySheetEntry>("/my-space/happy-sheet", {
@@ -2385,6 +2387,7 @@ export async function updateHappySheetEntry(
     goals_without_greed: string;
     dreams_supported: string;
     goals_without_greed_impossible: string;
+    ai_explanation?: string;
     date?: string;
   }
 ): Promise<ApiResponse<HappySheetEntry>> {

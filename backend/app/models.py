@@ -876,6 +876,7 @@ class TaskSheet(SQLModel, table=True):
 class TaskSheetCreate(SQLModel):
     achievements: str = Field(max_length=1000)
     repo_link: Optional[str] = None
+    ai_explanation: Optional[str] = Field(default=None, max_length=4000)
     date: Optional[DateType] = None  # if None, defaults to today on the backend
 
 class TaskSheetRead(SQLModel):
@@ -912,6 +913,7 @@ class HappySheetCreate(SQLModel):
     goals_without_greed: str
     dreams_supported: str
     goals_without_greed_impossible: str
+    ai_explanation: Optional[str] = Field(default=None, max_length=4000)
     date: Optional[DateType] = None  # if None, defaults to today on the backend
 
 class HappySheetRead(SQLModel):
@@ -1054,6 +1056,12 @@ class HappySheetLeaderboardItem(SQLModel):
 class HappySheetAiInsights(SQLModel):
     sentiment: str
     themes: List[str] = []
+    bullets: List[str] = []
+
+
+class HappySheetEntrySummary(SQLModel):
+    entry_id: int
+    summary: str
     bullets: List[str] = []
 
 

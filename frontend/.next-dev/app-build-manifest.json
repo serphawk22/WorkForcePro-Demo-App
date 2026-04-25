@@ -5,10 +5,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/global-error.js"
     ],
-    "/project-management/[id]/page": [
+    "/my-space/happy-sheet/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/project-management/[id]/page.js"
+      "static/chunks/app/my-space/happy-sheet/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -26,20 +26,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/not-found.js"
     ],
-    "/project-management/workspaces/[workspaceId]/page": [
+    "/my-space/task-sheet/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/project-management/workspaces/[workspaceId]/page.js"
-    ],
-    "/project-management/projects/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/project-management/projects/page.js"
-    ],
-    "/project-management/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/project-management/page.js"
+      "static/chunks/app/my-space/task-sheet/page.js"
     ]
   }
 }

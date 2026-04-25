@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
+import AiAssistantBlock from "@/components/my-space/AiAssistantBlock";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
@@ -62,6 +63,7 @@ export default function HappySheetPage() {
   const [dreamsForSerphawk, setDreamsForSerphawk] = useState("");
   const [dreamsWithSerphawk, setDreamsWithSerphawk] = useState("");
   const [goalsWithoutGreedImpossible, setGoalsWithoutGreedImpossible] = useState("");
+  const [aiExplanation, setAiExplanation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -176,6 +178,7 @@ export default function HappySheetPage() {
           setDreamsForSerphawk(entry.goals_without_greed);
           setDreamsWithSerphawk(entry.dreams_supported);
           setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
+          setAiExplanation("");
           setIsUpdate(true);
         } else {
           setEditingEntryId(null);
@@ -184,6 +187,7 @@ export default function HappySheetPage() {
           setDreamsForSerphawk("");
           setDreamsWithSerphawk("");
           setGoalsWithoutGreedImpossible("");
+          setAiExplanation("");
           setIsUpdate(false);
         }
       }
@@ -206,8 +210,13 @@ export default function HappySheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!whatMadeYouHappy.trim() || !whatMadeOthersHappy.trim() || !dreamsForSerphawk.trim() || !dreamsWithSerphawk.trim() || !goalsWithoutGreedImpossible.trim()) {
-      showFloatingToast({ type: "error", message: "Please fill all required fields" });
+    const hasAllFields =
+      whatMadeYouHappy.trim() &&
+      whatMadeOthersHappy.trim() &&
+      goalsWithoutGreedImpossible.trim();
+
+    if (!hasAllFields && !aiExplanation.trim()) {
+      showFloatingToast({ type: "error", message: "Fill all fields or talk to the AI Assistant." });
       return;
     }
     setIsSubmitting(true);
@@ -218,6 +227,7 @@ export default function HappySheetPage() {
         goals_without_greed: dreamsForSerphawk,
         dreams_supported: dreamsWithSerphawk,
         goals_without_greed_impossible: goalsWithoutGreedImpossible,
+        ai_explanation: aiExplanation.trim() || undefined,
         date: selectedDate,
       };
       const res = editingEntryId
@@ -234,6 +244,7 @@ export default function HappySheetPage() {
           setDreamsForSerphawk("");
           setDreamsWithSerphawk("");
           setGoalsWithoutGreedImpossible("");
+          setAiExplanation("");
         }
         // Refresh filtered view if active
         if (logFilterDate === selectedDate) {
@@ -261,6 +272,7 @@ export default function HappySheetPage() {
     setDreamsForSerphawk(entry.goals_without_greed);
     setDreamsWithSerphawk(entry.dreams_supported);
     setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
+    setAiExplanation("");
     setIsUpdate(true);
     showFloatingToast({ type: "success", message: "Entry loaded for editing." });
   };
@@ -288,6 +300,7 @@ export default function HappySheetPage() {
       setDreamsForSerphawk("");
       setDreamsWithSerphawk("");
       setGoalsWithoutGreedImpossible("");
+      setAiExplanation("");
     }
 
     if (logFilterDate === entry.date) {
@@ -666,11 +679,12 @@ export default function HappySheetPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            <AiAssistantBlock value={aiExplanation} onChange={setAiExplanation} />
             {([
               { label: "What Made You Happy? *", value: whatMadeYouHappy, set: setWhatMadeYouHappy, placeholder: "Share your moments of joy..." },
               { label: "What Made Others Happy? *", value: whatMadeOthersHappy, set: setWhatMadeOthersHappy, placeholder: "How did you brighten someone's day?" },
-              { label: "My Dreams for serphawk *", value: dreamsForSerphawk, set: setDreamsForSerphawk, placeholder: "Share your dreams for serphawk..." },
-              { label: "My Dreams with serphawk that serphawk can help reach *", value: dreamsWithSerphawk, set: setDreamsWithSerphawk, placeholder: "Share your dreams that we can support you with..." },
+              { label: "My Dreams for serphawk", value: dreamsForSerphawk, set: setDreamsForSerphawk, placeholder: "Share your dreams for serphawk..." },
+              { label: "My Dreams with serphawk that serphawk can help reach", value: dreamsWithSerphawk, set: setDreamsWithSerphawk, placeholder: "Share your dreams that we can support you with..." },
               { label: "Goals without any greed even if it is impossible *", value: goalsWithoutGreedImpossible, set: setGoalsWithoutGreedImpossible, placeholder: "What goals matter to you regardless of greed?" },
             ] as const).map(({ label, value, set, placeholder }) => (
               <div key={label}>
@@ -796,13 +810,6 @@ export default function HappySheetPage() {
                             </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleCreateTaskFromEntry(entry)}
-                          className="h-8 px-2.5 rounded-lg border border-emerald-300/70 dark:border-emerald-400/30 text-xs text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/70 dark:hover:bg-emerald-500/10 inline-flex items-center gap-1"
-                        >
-                          <Plus size={12} /> Create Task
-                        </button>
                       </div>
                     )}
                   </div>
@@ -811,54 +818,18 @@ export default function HappySheetPage() {
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Happy Moment</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_you_happy}</p>
-                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.what_made_you_happy?.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() => handleCreateTaskFromEntry(entry, entry.what_made_you_happy, "Happy Moment")}
-                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
-                        >
-                          <Plus size={11} /> Create Task
-                        </button>
-                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Made Others Happy</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.what_made_others_happy}</p>
-                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.what_made_others_happy?.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() => handleCreateTaskFromEntry(entry, entry.what_made_others_happy, "Made Others Happy")}
-                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
-                        >
-                          <Plus size={11} /> Create Task
-                        </button>
-                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams for serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.goals_without_greed}</p>
-                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.goals_without_greed?.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() => handleCreateTaskFromEntry(entry, entry.goals_without_greed, "My Dreams for serphawk")}
-                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
-                        >
-                          <Plus size={11} /> Create Task
-                        </button>
-                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">My Dreams with serphawk</p>
                       <p className="text-sm text-[#2B124C] dark:text-purple-100">{entry.dreams_supported}</p>
-                      {(entry.user_id === user.id || user.role === "admin") && Boolean(entry.dreams_supported?.trim()) && (
-                        <button
-                          type="button"
-                          onClick={() => handleCreateTaskFromEntry(entry, entry.dreams_supported, "My Dreams with serphawk")}
-                          className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[#522B5B]/35 px-2 py-1 text-[11px] font-medium text-[#522B5B] dark:text-purple-200 hover:bg-[#522B5B] hover:text-white transition-colors"
-                        >
-                          <Plus size={11} /> Create Task
-                        </button>
-                      )}
                     </div>
                     <div className="rounded-lg p-3 lighthouse-sub-card lg:col-span-2">
                       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Goals (No Greed)</p>

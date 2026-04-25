@@ -4,6 +4,7 @@ Provides contextual page explanations and quick navigation actions.
 """
 import os
 import json
+import re
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -81,6 +82,17 @@ When a user wants to apply for leave / request time off / take sick leave / go o
 - If a user says "create a subtask for [Task Name]", set is_subtask_intent=true and parent_task_name=[Task Name].
 - If they follow up with "assign it to [Name] by [Date]", update task_data while KEEPING parent_task_name.
 - If task_draft is provided in context, merge it with the new user message and only update fields that changed.
+
+─── FORM-FILL PRIORITY (MY SPACE) ───────────────────────────
+If the user is on a My Space form page (task sheet, happy sheet, learning canvas, visionary canvas)
+and asks to fill/log/write/submit content, DO NOT convert it into task/subtask creation.
+In those cases:
+- is_task_intent=false
+- is_subtask_intent=false
+- task_data=null
+- needs_clarification=false (unless user asked a direct question)
+Only return a concise reply focused on the user-requested form content.
+Treat task/subtask as intent ONLY when user explicitly says create/add/assign task or subtask.
 
 ─── REQUIRED FIELDS FOR MAIN TASK CREATION ───────────────────
 For main tasks (is_task_intent=true), ensure task_data tracks these fields:
@@ -490,6 +502,38 @@ def _route_for_role(page_key: str, role: str) -> str:
     return route_map.get(page_key, f"/{page_key}")
 
 
+MY_SPACE_FORM_PAGES = {
+    "my-space/task-sheet",
+    "my-space/happy-sheet",
+    "my-space/learning-canvas",
+    "my-space/visionary-canvas",
+}
+
+FILL_INTENT_WORDS = (
+    "fill",
+    "log",
+    "write",
+    "submit",
+    "complete",
+    "update",
+)
+
+
+def _is_fill_request(message: str) -> bool:
+    msg = (message or "").lower()
+    return any(word in msg for word in FILL_INTENT_WORDS)
+
+
+def _has_explicit_task_creation_intent(message: str) -> bool:
+    msg = (message or "").lower()
+    return bool(
+        re.search(
+            r"\b(create|add|assign|make|open)\b.{0,24}\b(task|subtask)\b|\b(task|subtask)\b.{0,24}\b(create|add|assign|make)\b",
+            msg,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -570,6 +614,20 @@ async def chatbot_query(
         ai_response = None
     
     if ai_response:
+        # Keep My Space form-filling intents focused: do not force task/subtask flows
+        # unless user explicitly asks to create a task/subtask.
+        if (
+            page_key in MY_SPACE_FORM_PAGES
+            and _is_fill_request(message)
+            and not _has_explicit_task_creation_intent(message)
+        ):
+            ai_response["is_task_intent"] = False
+            ai_response["is_subtask_intent"] = False
+            ai_response["task_data"] = None
+            ai_response["needs_clarification"] = False
+            ai_response["clarification_question"] = None
+            ai_response["suggestions"] = ai_response.get("suggestions")
+
         # Resolve assignee_id and parent_task_id if needed
         if (ai_response.get("is_task_intent") or ai_response.get("is_subtask_intent")) and ai_response.get("task_data"):
             task_data = ai_response["task_data"]
