@@ -2625,3 +2625,23 @@ export async function removeMeetingLink(): Promise<ApiResponse<{ message: string
   return apiFetch<{ message: string }>("/teams/meeting", { method: "DELETE" });
 }
 
+
+// ==================== GLOBAL SEARCH ====================
+
+export interface SearchResult {
+  id: number;
+  title: string;
+  subtitle: string;
+  icon: string | null;
+  type: "Employee" | "Project" | "Task";
+}
+
+export interface GlobalSearchResponse {
+  employees: SearchResult[];
+  projects: SearchResult[];
+  tasks: SearchResult[];
+}
+
+export async function getGlobalSearch(query: string): Promise<ApiResponse<GlobalSearchResponse>> {
+  return apiFetch<GlobalSearchResponse>(`/search?q=${encodeURIComponent(query)}`);
+}

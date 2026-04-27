@@ -564,9 +564,6 @@ async def get_recurring_task_instances(
     if not getattr(task, "is_recurring", False):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task is not recurring")
 
-    if task.assigned_to != current_user.id and not is_admin_user(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this task")
-
     # Ensure instances exist around today
     ensure_instances_for_task(session, task, horizon_days=120, past_days=60)
 

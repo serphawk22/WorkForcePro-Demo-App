@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
+import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import { getApiBaseUrl } from "@/lib/api";
 
 export default function TopBar() {
@@ -49,7 +50,10 @@ export default function TopBar() {
   const profilePictureUrl = getProfilePictureUrl();
 
   return (
-    <div className="flex justify-center items-center px-4 pt-2.5 pb-1">
+    <div className="flex items-center px-4 pt-2.5 pb-1 w-full">
+      {/* Left Spacer for perfect flex centering */}
+      <div className="flex-1 hidden md:block" />
+
       {/* Gradient border wrapper — centered pill */}
       <div className="topbar-pill-border w-full max-w-[820px]">
         <header className="topbar-pill-inner flex items-center justify-between px-6 py-3">
@@ -59,6 +63,7 @@ export default function TopBar() {
             <span className="hidden sm:block w-px h-3.5 bg-border/50" />
             <span className="hidden sm:block text-[10px] tracking-widest text-muted-foreground font-medium">{date}</span>
           </div>
+
 
           {/* Right: actions */}
           <div className="flex items-center gap-0.5">
@@ -101,6 +106,11 @@ export default function TopBar() {
             </button>
           </div>
         </header>
+      </div>
+
+      {/* Right Flank: Floating Global Search Button */}
+      <div className="flex-1 hidden md:flex justify-end pr-2 md:pr-4">
+        <GlobalSearch />
       </div>
     </div>
   );

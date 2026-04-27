@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations, search
 
 load_dotenv()
 
@@ -610,6 +610,7 @@ app.include_router(ai_assistant.router)
 app.include_router(weekly_progress.router)
 app.include_router(workspaces.router)
 app.include_router(organizations.router)
+app.include_router(search.router)
 
 
 @app.get("/")
