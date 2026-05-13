@@ -145,6 +145,38 @@ export interface User {
   profile_picture?: string;
 }
 
+export interface AdminQuery {
+  id: number;
+  organization_id?: number | null;
+  workspace_id: number;
+  workspace_name?: string | null;
+  raised_by: number;
+  raised_by_name?: string | null;
+  assigned_to?: number | null;
+  assigned_to_name?: string | null;
+  assigned_to_email?: string | null;
+  title: string;
+  description?: string | null;
+  status: "open" | "in_progress" | "resolved" | "on_hold" | "closed";
+  priority: "low" | "medium" | "high";
+  related_task_id?: number | null;
+  created_at: string;
+  started_at?: string | null;
+  resolved_at?: string | null;
+  updated_at: string;
+  duration_hours?: number | null;
+  time_to_start_hours?: number | null;
+}
+
+export interface AdminQueryCreate {
+  workspace_id: number;
+  assigned_to?: number | null;
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high";
+  related_task_id?: number | null;
+}
+
 export interface AttendanceRecord {
   id: number;
   user_id: number;
@@ -955,6 +987,20 @@ export async function fetchEmployeeDashboard(): Promise<ApiResponse<EmployeeDash
  */
 export async function fetchAllUsers(): Promise<ApiResponse<User[]>> {
   return apiFetch<User[]>("/dashboard/users");
+}
+
+/**
+ * Get admin queries for the current organization.
+ */
+export async function getAdminQueries(filters?: {
+  workspaceId?: number | null;
+  status?: "open" | "in_progress" | "resolved" | "on_hold" | "closed";
+}): Promise<ApiResponse<AdminQuery[]>> {
+  const params = new URLSearchParams();
+  if (filters?.workspaceId) params.append("workspace_id", String(filters.workspaceId));
+  if (filters?.status) params.append("status", filters.status);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<AdminQuery[]>(`/admin/queries/list${query}`);
 }
 
 // ==================== ADMIN ====================

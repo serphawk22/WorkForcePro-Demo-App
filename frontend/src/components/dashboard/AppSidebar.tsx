@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Menu,
   PanelLeftClose,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
@@ -60,6 +61,7 @@ const adminLinks = [
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
+  { label: "Ticket Management", icon: AlertCircle, path: "/admin/queries" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
   { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },

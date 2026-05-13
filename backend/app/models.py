@@ -894,6 +894,82 @@ class TaskSheetWithUser(TaskSheetRead):
     profile_picture: Optional[str] = None
 
 
+# ==================== ADMIN QUERY/TICKET MODELS ====================
+
+class QueryStatus(str, Enum):
+    """Status of admin-raised queries/tickets."""
+    open = "open"
+    in_progress = "in_progress"
+    resolved = "resolved"
+    on_hold = "on_hold"
+    closed = "closed"
+
+
+class AdminQuery(SQLModel, table=True):
+    """Admin-raised queries/tickets for projects with time tracking."""
+    __tablename__ = "admin_queries"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    workspace_id: int = Field(foreign_key="workspaces.id", index=True)
+    raised_by: int = Field(foreign_key="users.id", index=True)  # Admin who raised this
+    assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    title: str = Field(min_length=1, max_length=300)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    status: QueryStatus = Field(default=QueryStatus.open, index=True)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    related_task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")  # Link to task if any
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    started_at: Optional[datetime] = None  # When work started
+    resolved_at: Optional[datetime] = None  # When resolved/closed
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AdminQueryCreate(SQLModel):
+    """Schema for creating an admin query."""
+    workspace_id: int
+    assigned_to: Optional[int] = None
+    title: str = Field(min_length=1, max_length=300)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    related_task_id: Optional[int] = None
+
+
+class AdminQueryUpdate(SQLModel):
+    """Schema for updating an admin query."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[QueryStatus] = None
+    priority: Optional[TaskPriority] = None
+    assigned_to: Optional[int] = None
+    started_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+
+
+class AdminQueryRead(SQLModel):
+    """Schema for reading admin query data."""
+    id: int
+    organization_id: Optional[int] = None
+    workspace_id: int
+    workspace_name: Optional[str] = None
+    raised_by: int
+    raised_by_name: Optional[str] = None
+    assigned_to: Optional[int] = None
+    assigned_to_name: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    status: QueryStatus
+    priority: TaskPriority
+    related_task_id: Optional[int] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    updated_at: datetime
+    duration_hours: Optional[float] = None  # Calculated: time from created to resolved
+    time_to_start_hours: Optional[float] = None  # Time from created to started
+
+
 class HappySheet(SQLModel, table=True):
     """Personal well-being happy sheet tracking model."""
     __tablename__ = "happy_sheets"
