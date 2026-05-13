@@ -1,0 +1,23 @@
+# Local Postgres for WorkForce Pro API. From repo root:
+#   docker compose up -d
+# Then set backend/.env DATABASE_URL=postgresql://workforce:workforce@127.0.0.1:5432/workforcepro
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: workforcepro-db
+    environment:
+      POSTGRES_USER: workforce
+      POSTGRES_PASSWORD: workforce
+      POSTGRES_DB: workforcepro
+    ports:
+      - "5432:5432"
+    volumes:
+      - workforcepro_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workforce -d workforcepro"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  workforcepro_pgdata:
