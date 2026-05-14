@@ -76,6 +76,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
+  const [loadingLabels, setLoadingLabels] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [developers, setDevelopers] = useState<TeamMember[]>([]);
@@ -168,6 +169,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
   };
 
   const loadLabelsData = async () => {
+    setLoadingLabels(true);
     try {
       const result = await listLabels();
       if (result.data) {
@@ -175,6 +177,13 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
       }
     } catch (error) {
       console.error("Failed to load labels:", error);
+      toast({
+        title: "Warning",
+        description: "Could not load labels. You can still create the ticket without labels.",
+        variant: "default",
+      });
+    } finally {
+      setLoadingLabels(false);
     }
   };
 
@@ -440,38 +449,49 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Labels</FormLabel>
-                          <div className="flex flex-wrap gap-2">
-                            {labels.map((label) => {
-                              const isSelected = field.value?.includes(label.id);
-                              return (
-                                <button
-                                  key={label.id}
-                                  type="button"
-                                  onClick={() => {
-                                    const newValue = isSelected
-                                      ? (field.value || []).filter((id) => id !== label.id)
-                                      : [...(field.value || []), label.id];
-                                    field.onChange(newValue);
-                                  }}
-                                  className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-all ${
-                                    isSelected
-                                      ? "ring-2 ring-offset-1"
-                                      : "opacity-60 hover:opacity-100"
-                                  }`}
-                                  style={{
-                                    backgroundColor: label.color + "20",
-                                    color: label.color,
-                                    ...(isSelected && {
-                                      boxShadow: `0 0 0 2px var(--background), 0 0 0 4px ${label.color}`,
-                                    }),
-                                  }}
-                                >
-                                  {label.name}
-                                  {isSelected && <X className="h-3 w-3" />}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          {loadingLabels ? (
+                            <div className="flex items-center justify-center py-4">
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              <span className="ml-2 text-sm text-muted-foreground">Loading labels...</span>
+                            </div>
+                          ) : labels.length === 0 ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                              No labels created yet. You can still create the ticket and add labels later.
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {labels.map((label) => {
+                                const isSelected = field.value?.includes(label.id);
+                                return (
+                                  <button
+                                    key={label.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const newValue = isSelected
+                                        ? (field.value || []).filter((id) => id !== label.id)
+                                        : [...(field.value || []), label.id];
+                                      field.onChange(newValue);
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "ring-2 ring-offset-1"
+                                        : "opacity-60 hover:opacity-100"
+                                    }`}
+                                    style={{
+                                      backgroundColor: label.color + "20",
+                                      color: label.color,
+                                      ...(isSelected && {
+                                        boxShadow: `0 0 0 2px var(--background), 0 0 0 4px ${label.color}`,
+                                      }),
+                                    }}
+                                  >
+                                    {label.name}
+                                    {isSelected && <X className="h-3 w-3" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                           <FormDescription>Select labels to organize your ticket (optional)</FormDescription>
                         </FormItem>
                       )}

@@ -391,10 +391,36 @@ async def list_labels(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> List[LabelRead]:
-    """List all labels for the current organization."""
+    """List all labels for the current organization. Creates default labels if none exist."""
     labels = session.exec(
         select(Label).where(Label.organization_id == current_user.organization_id).order_by(Label.name)
     ).all()
+    
+    # If no labels exist, create default ones
+    if not labels:
+        default_labels = [
+            ("bug", "#EF4444", "Bug or error report"),
+            ("feature", "#3B82F6", "New feature request"),
+            ("hotfix", "#F97316", "Urgent hotfix needed"),
+            ("urgent", "#DC2626", "Critical/urgent priority"),
+            ("technical-debt", "#8B5CF6", "Technical debt or refactoring"),
+        ]
+        
+        for name, color, description in default_labels:
+            label = Label(
+                organization_id=current_user.organization_id,
+                name=name,
+                color=color,
+                description=description,
+                created_by=current_user.id,
+            )
+            session.add(label)
+        session.commit()
+        
+        # Fetch the newly created labels
+        labels = session.exec(
+            select(Label).where(Label.organization_id == current_user.organization_id).order_by(Label.name)
+        ).all()
     
     return [
         LabelRead(
