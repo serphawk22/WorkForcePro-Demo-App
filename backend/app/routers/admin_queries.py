@@ -9,7 +9,7 @@ from sqlmodel import Session, select, and_
 from app.database import get_session
 from app.models import (
     AdminQuery, AdminQueryCreate, AdminQueryRead, AdminQueryUpdate,
-    QueryStatus, User, Workspace, Organization
+    QueryStatus, Task, User, Workspace, Organization
 )
 from app.auth import get_current_admin_user, ensure_same_organization
 
@@ -70,6 +70,15 @@ async def create_admin_query(
             raise HTTPException(status_code=404, detail="Assigned developer not found")
         if assigned_to_user.organization_id and current_user.organization_id and assigned_to_user.organization_id != current_user.organization_id:
             raise HTTPException(status_code=403, detail="Not authorized to assign this developer")
+
+    if query_data.related_task_id is not None:
+        related_task = session.exec(select(Task).where(Task.id == query_data.related_task_id)).first()
+        if not related_task:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if related_task.workspace_id != query_data.workspace_id:
+            raise HTTPException(status_code=400, detail="Selected project does not belong to the chosen space")
+        if related_task.organization_id and current_user.organization_id and related_task.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=403, detail="Not authorized for this project")
     
     # Create the query
     admin_query = AdminQuery(

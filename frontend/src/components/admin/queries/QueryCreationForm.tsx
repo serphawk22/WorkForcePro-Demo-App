@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -25,12 +25,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getToken } from "@/lib/api";
+import { getAllTasks, getToken } from "@/lib/api";
 
 const API_BASE = "/api";
 
 const querySchema = z.object({
   workspace_id: z.coerce.number().min(1, "Project is required"),
+  related_task_id: z.coerce.number().int().positive().optional(),
   title: z.string().min(5, "Title must be at least 5 characters").max(300),
   description: z.string().max(2000).optional(),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
@@ -43,20 +44,51 @@ interface QueryCreationFormProps {
   onSuccess?: () => void;
 }
 
+interface Project {
+  id: number;
+  title: string;
+  public_id?: string;
+  workspace_id?: number | null;
+}
+
 export function QueryCreationForm({ workspaces, onSuccess }: QueryCreationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const { toast } = useToast();
 
   const form = useForm<QueryFormValues>({
     resolver: zodResolver(querySchema),
     defaultValues: {
       workspace_id: workspaces[0]?.id || 0,
+      related_task_id: undefined,
       title: "",
       description: "",
       priority: "medium",
     },
   });
+
+  const loadProjects = async (workspaceId: number) => {
+    try {
+      const result = await getAllTasks(undefined, undefined, workspaceId, { rootsOnly: true });
+      const filteredProjects = (result.data || []).filter((task) => !task.parent_task_id);
+      setProjects(filteredProjects);
+      form.setValue("related_task_id", filteredProjects[0]?.id ?? undefined);
+    } catch (error) {
+      console.error("Failed to fetch projects:", error);
+      setProjects([]);
+      form.setValue("related_task_id", undefined);
+    }
+  };
+
+  useEffect(() => {
+    if (workspaces.length > 0) {
+      const defaultWorkspaceId = form.getValues("workspace_id") || workspaces[0].id;
+      form.setValue("workspace_id", defaultWorkspaceId);
+      loadProjects(defaultWorkspaceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaces]);
 
   const onSubmit = async (values: QueryFormValues) => {
     setIsSubmitting(true);
@@ -70,7 +102,10 @@ export function QueryCreationForm({ workspaces, onSuccess }: QueryCreationFormPr
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          related_task_id: values.related_task_id || undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -81,6 +116,7 @@ export function QueryCreationForm({ workspaces, onSuccess }: QueryCreationFormPr
       const data = await response.json();
       setIsSuccess(true);
       form.reset();
+      setProjects([]);
 
       toast({
         title: "Success",
@@ -112,17 +148,24 @@ export function QueryCreationForm({ workspaces, onSuccess }: QueryCreationFormPr
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Project Selection */}
+          {/* Space Selection */}
           <FormField
             control={form.control}
             name="workspace_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Project</FormLabel>
-                <Select value={field.value.toString()} onValueChange={(v) => field.onChange(parseInt(v))}>
+                <FormLabel>Space</FormLabel>
+                <Select
+                  value={field.value.toString()}
+                  onValueChange={(v) => {
+                    const workspaceId = parseInt(v);
+                    field.onChange(workspaceId);
+                    loadProjects(workspaceId);
+                  }}
+                >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a project" />
+                      <SelectValue placeholder="Select a space" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -133,7 +176,39 @@ export function QueryCreationForm({ workspaces, onSuccess }: QueryCreationFormPr
                     ))}
                   </SelectContent>
                 </Select>
-                <FormDescription>Select the project for this ticket</FormDescription>
+                <FormDescription>Select the space for this ticket</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Project Selection */}
+          <FormField
+            control={form.control}
+            name="related_task_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project</FormLabel>
+                <Select
+                  value={field.value ? field.value.toString() : "none"}
+                  onValueChange={(v) => field.onChange(v === "none" ? undefined : parseInt(v))}
+                  disabled={projects.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a project" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">No project selected</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id.toString()}>
+                        {project.public_id ? `${project.public_id} - ` : ""}{project.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>Select a project inside the chosen space</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

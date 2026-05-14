@@ -33,13 +33,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useRouter } from "next/navigation";
-import { fetchAllUsers, getToken } from "@/lib/api";
+import { fetchAllUsers, getAllTasks, getToken } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = "/api";
 
 const querySchema = z.object({
   workspace_id: z.coerce.number().min(1, "Project is required"),
+  related_task_id: z.coerce.number().int().positive().optional(),
   assigned_to: z.coerce.number().int().positive().optional(),
   title: z.string().min(5, "Title must be at least 5 characters").max(300),
   description: z.string().max(2000).optional(),
@@ -51,6 +52,13 @@ type QueryFormValues = z.infer<typeof querySchema>;
 interface Workspace {
   id: number;
   name: string;
+}
+
+interface Project {
+  id: number;
+  title: string;
+  public_id?: string;
+  workspace_id?: number | null;
 }
 
 interface TeamMember {
@@ -68,6 +76,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [developers, setDevelopers] = useState<TeamMember[]>([]);
   const router = useRouter();
   const { toast } = useToast();
@@ -76,12 +85,31 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
     resolver: zodResolver(querySchema),
     defaultValues: {
       workspace_id: 0,
+      related_task_id: undefined,
       assigned_to: undefined,
       title: "",
       description: "",
       priority: "medium",
     },
   });
+
+  const loadProjectsData = async (workspaceId: number) => {
+    try {
+      const token = getToken();
+      if (!token) return;
+
+      const response = await getAllTasks(undefined, undefined, workspaceId, { rootsOnly: true });
+      if (response.data) {
+        const filteredProjects = response.data.filter((task) => !task.parent_task_id);
+        setProjects(filteredProjects);
+        form.setValue("related_task_id", filteredProjects[0]?.id ?? undefined);
+      }
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+      setProjects([]);
+      form.setValue("related_task_id", undefined);
+    }
+  };
 
   const loadWorkspacesData = async () => {
     setLoadingWorkspaces(true);
@@ -111,6 +139,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
       setWorkspaces(data);
       if (data.length > 0) {
         form.setValue("workspace_id", data[0].id);
+        await loadProjectsData(data[0].id);
       }
     } catch (error) {
       console.error("Failed to load workspaces:", error);
@@ -146,6 +175,13 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
     }
   };
 
+  const handleWorkspaceChange = async (workspaceId: number) => {
+    form.setValue("workspace_id", workspaceId, { shouldValidate: true });
+    form.setValue("related_task_id", undefined, { shouldValidate: true });
+    setProjects([]);
+    await loadProjectsData(workspaceId);
+  };
+
   const onSubmit = async (values: QueryFormValues) => {
     setIsSubmitting(true);
 
@@ -160,6 +196,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
         body: JSON.stringify({
           ...values,
           assigned_to: values.assigned_to || undefined,
+          related_task_id: values.related_task_id || undefined,
         }),
       });
 
@@ -175,6 +212,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
 
       form.reset({
         workspace_id: workspaces[0]?.id || 0,
+        related_task_id: undefined,
         assigned_to: undefined,
         title: "",
         description: "",
@@ -243,14 +281,14 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
                       name="workspace_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Project</FormLabel>
+                          <FormLabel>Space</FormLabel>
                           <Select
                             value={field.value ? field.value.toString() : "0"}
-                            onValueChange={(v) => field.onChange(parseInt(v))}
+                            onValueChange={(v) => handleWorkspaceChange(parseInt(v))}
                           >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select a project" />
+                                <SelectValue placeholder="Select a space" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -261,7 +299,37 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
                               ))}
                             </SelectContent>
                           </Select>
-                          <FormDescription>Select the project for this ticket</FormDescription>
+                          <FormDescription>Select the space that owns this ticket</FormDescription>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="related_task_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Project</FormLabel>
+                          <Select
+                            value={field.value ? field.value.toString() : "none"}
+                            onValueChange={(v) => field.onChange(v === "none" ? undefined : parseInt(v))}
+                            disabled={projects.length === 0}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a project" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">No project selected</SelectItem>
+                              {projects.map((project) => (
+                                <SelectItem key={project.id} value={project.id.toString()}>
+                                  {project.public_id ? `${project.public_id} - ` : ""}{project.title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>Select a project inside the chosen space</FormDescription>
                         </FormItem>
                       )}
                     />
