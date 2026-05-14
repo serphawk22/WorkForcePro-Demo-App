@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,12 +28,12 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, ArrowRight, Loader2, Plus } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2, Plus, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useRouter } from "next/navigation";
-import { fetchAllUsers, getAllTasks, getToken } from "@/lib/api";
+import { fetchAllUsers, getAllTasks, getToken, listLabels, type Label } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = "/api";
@@ -45,6 +45,7 @@ const querySchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters").max(300),
   description: z.string().max(2000).optional(),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
+  label_ids: z.array(z.number()).optional(),
 });
 
 type QueryFormValues = z.infer<typeof querySchema>;
@@ -78,6 +79,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [developers, setDevelopers] = useState<TeamMember[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -90,6 +92,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
       title: "",
       description: "",
       priority: "medium",
+      label_ids: [],
     },
   });
 
@@ -164,6 +167,17 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
     }
   };
 
+  const loadLabelsData = async () => {
+    try {
+      const result = await listLabels();
+      if (result.data) {
+        setLabels(result.data);
+      }
+    } catch (error) {
+      console.error("Failed to load labels:", error);
+    }
+  };
+
   const handleDialogOpenChange = async (open: boolean) => {
     setIsDialogOpen(open);
 
@@ -172,6 +186,9 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
     }
     if (open && developers.length === 0) {
       await loadDeveloperData();
+    }
+    if (open && labels.length === 0) {
+      await loadLabelsData();
     }
   };
 
@@ -197,6 +214,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
           ...values,
           assigned_to: values.assigned_to || undefined,
           related_task_id: values.related_task_id || undefined,
+          label_ids: (values.label_ids && values.label_ids.length > 0) ? values.label_ids : undefined,
         }),
       });
 
@@ -217,6 +235,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
         title: "",
         description: "",
         priority: "medium",
+        label_ids: [],
       });
       setIsDialogOpen(false);
 
@@ -411,6 +430,49 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
                               <SelectItem value="high">High - Urgent</SelectItem>
                             </SelectContent>
                           </Select>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="label_ids"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Labels</FormLabel>
+                          <div className="flex flex-wrap gap-2">
+                            {labels.map((label) => {
+                              const isSelected = field.value?.includes(label.id);
+                              return (
+                                <button
+                                  key={label.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const newValue = isSelected
+                                      ? (field.value || []).filter((id) => id !== label.id)
+                                      : [...(field.value || []), label.id];
+                                    field.onChange(newValue);
+                                  }}
+                                  className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                                    isSelected
+                                      ? "ring-2 ring-offset-1"
+                                      : "opacity-60 hover:opacity-100"
+                                  }`}
+                                  style={{
+                                    backgroundColor: label.color + "20",
+                                    color: label.color,
+                                    ...(isSelected && {
+                                      boxShadow: `0 0 0 2px var(--background), 0 0 0 4px ${label.color}`,
+                                    }),
+                                  }}
+                                >
+                                  {label.name}
+                                  {isSelected && <X className="h-3 w-3" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <FormDescription>Select labels to organize your ticket (optional)</FormDescription>
                         </FormItem>
                       )}
                     />

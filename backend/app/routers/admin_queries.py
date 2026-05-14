@@ -9,7 +9,8 @@ from sqlmodel import Session, select, and_
 from app.database import get_session
 from app.models import (
     AdminQuery, AdminQueryCreate, AdminQueryRead, AdminQueryUpdate,
-    QueryStatus, Task, User, Workspace, Organization, UserRole, NotificationType
+    QueryStatus, Task, User, Workspace, Organization, UserRole, NotificationType,
+    Label, LabelCreate, LabelRead, AdminQueryLabel
 )
 from app.auth import get_current_admin_user, get_current_user, ensure_same_organization
 from app.routers.notifications import create_notification
@@ -21,6 +22,24 @@ def _to_admin_query_read(session: Session, query: AdminQuery) -> AdminQueryRead:
     workspace = session.exec(select(Workspace).where(Workspace.id == query.workspace_id)).first()
     raised_by_user = session.exec(select(User).where(User.id == query.raised_by)).first()
     assigned_to_user = session.exec(select(User).where(User.id == query.assigned_to)).first() if query.assigned_to else None
+    
+    # Fetch labels for this query
+    label_links = session.exec(
+        select(AdminQueryLabel).where(AdminQueryLabel.admin_query_id == query.id)
+    ).all()
+    labels = []
+    for link in label_links:
+        label = session.exec(select(Label).where(Label.id == link.label_id)).first()
+        if label:
+            labels.append(LabelRead(
+                id=label.id,
+                name=label.name,
+                color=label.color,
+                description=label.description,
+                organization_id=label.organization_id,
+                created_by=label.created_by,
+                created_at=label.created_at,
+            ))
 
     return AdminQueryRead(
         id=query.id,
@@ -43,6 +62,7 @@ def _to_admin_query_read(session: Session, query: AdminQuery) -> AdminQueryRead:
         updated_at=query.updated_at,
         duration_hours=_calculate_duration(query),
         time_to_start_hours=_calculate_time_to_start(query),
+        labels=labels if labels else None,
     )
 
 
@@ -95,6 +115,19 @@ async def create_admin_query(
     session.add(admin_query)
     session.commit()
     session.refresh(admin_query)
+    
+    # Add labels if provided
+    if query_data.label_ids:
+        for label_id in query_data.label_ids:
+            label = session.exec(select(Label).where(Label.id == label_id)).first()
+            if not label:
+                raise HTTPException(status_code=404, detail=f"Label {label_id} not found")
+            if label.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=403, detail="Not authorized to use this label")
+            
+            label_link = AdminQueryLabel(admin_query_id=admin_query.id, label_id=label_id)
+            session.add(label_link)
+        session.commit()
 
     if current_user.role == UserRole.employee:
         admins = session.exec(
@@ -214,6 +247,24 @@ async def update_admin_query(
         admin_query.started_at = update_data.started_at
     if update_data.resolved_at is not None:
         admin_query.resolved_at = update_data.resolved_at
+    if update_data.label_ids is not None:
+        # Remove old labels
+        session.exec(
+            select(AdminQueryLabel).where(AdminQueryLabel.admin_query_id == query_id)
+        ).delete()
+        session.commit()
+        
+        # Add new labels
+        for label_id in update_data.label_ids:
+            label = session.exec(select(Label).where(Label.id == label_id)).first()
+            if not label:
+                raise HTTPException(status_code=404, detail=f"Label {label_id} not found")
+            if label.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=403, detail="Not authorized to use this label")
+            
+            label_link = AdminQueryLabel(admin_query_id=query_id, label_id=label_id)
+            session.add(label_link)
+        session.commit()
     
     admin_query.updated_at = datetime.now(timezone.utc)
     session.add(admin_query)
@@ -294,7 +345,87 @@ async def resolve_query(
     return _to_admin_query_read(session, admin_query)
 
 
-# ==================== HELPER FUNCTIONS ====================
+# ==================== LABEL MANAGEMENT ====================
+
+@router.post("/labels", response_model=LabelRead, status_code=status.HTTP_201_CREATED)
+async def create_label(
+    label_data: LabelCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user),
+) -> LabelRead:
+    """Create a new label for organizing tickets."""
+    # Check if label with same name already exists in organization
+    existing = session.exec(
+        select(Label).where(
+            Label.organization_id == current_user.organization_id,
+            Label.name.ilike(label_data.name)
+        )
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Label with this name already exists")
+    
+    label = Label(
+        organization_id=current_user.organization_id,
+        name=label_data.name,
+        color=label_data.color,
+        description=label_data.description,
+        created_by=current_user.id,
+    )
+    session.add(label)
+    session.commit()
+    session.refresh(label)
+    
+    return LabelRead(
+        id=label.id,
+        name=label.name,
+        color=label.color,
+        description=label.description,
+        organization_id=label.organization_id,
+        created_by=label.created_by,
+        created_at=label.created_at,
+    )
+
+
+@router.get("/labels", response_model=List[LabelRead])
+async def list_labels(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> List[LabelRead]:
+    """List all labels for the current organization."""
+    labels = session.exec(
+        select(Label).where(Label.organization_id == current_user.organization_id).order_by(Label.name)
+    ).all()
+    
+    return [
+        LabelRead(
+            id=label.id,
+            name=label.name,
+            color=label.color,
+            description=label.description,
+            organization_id=label.organization_id,
+            created_by=label.created_by,
+            created_at=label.created_at,
+        )
+        for label in labels
+    ]
+
+
+@router.delete("/labels/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_label(
+    label_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin_user),
+) -> None:
+    """Delete a label."""
+    label = session.exec(select(Label).where(Label.id == label_id)).first()
+    if not label:
+        raise HTTPException(status_code=404, detail="Label not found")
+    
+    if label.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    session.delete(label)
+    session.commit()
 
 def _calculate_duration(query: AdminQuery) -> Optional[float]:
     """Calculate total duration from creation to resolution in hours."""

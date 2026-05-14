@@ -28,7 +28,7 @@ import {
 import { CheckCircle2, Clock, PlayCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { getToken } from "@/lib/api";
+import { getToken, type Label } from "@/lib/api";
 
 const API_BASE = "/api";
 
@@ -39,13 +39,14 @@ interface Query {
   raised_by_name: string;
   title: string;
   description?: string;
-  status: "open" | "in_progress" | "resolved" | "on_hold" | "closed";
+  status: "backlog" | "ready" | "in_progress" | "blocked" | "resolved" | "closed" | "open" | "on_hold";
   priority: "low" | "medium" | "high";
   created_at: string;
   started_at?: string;
   resolved_at?: string;
   duration_hours?: number;
   time_to_start_hours?: number;
+  labels?: Label[] | null;
 }
 
 interface QueriesListProps {
@@ -57,11 +58,15 @@ interface QueriesListProps {
 }
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  open: { bg: "bg-blue-100", text: "text-blue-800" },
+  backlog: { bg: "bg-gray-100", text: "text-gray-800" },
+  ready: { bg: "bg-blue-100", text: "text-blue-800" },
   in_progress: { bg: "bg-yellow-100", text: "text-yellow-800" },
+  blocked: { bg: "bg-red-100", text: "text-red-800" },
   resolved: { bg: "bg-green-100", text: "text-green-800" },
-  on_hold: { bg: "bg-gray-100", text: "text-gray-800" },
   closed: { bg: "bg-slate-100", text: "text-slate-800" },
+  // Legacy statuses
+  open: { bg: "bg-blue-100", text: "text-blue-800" },
+  on_hold: { bg: "bg-gray-100", text: "text-gray-800" },
 };
 
 const priorityColors: Record<string, string> = {
@@ -136,25 +141,27 @@ export function QueriesList({
 
   return (
     <div className="space-y-4">
-      {/* Workspace Filter */}
-      <div className="flex items-center gap-4">
-        <label className="text-sm font-medium">Filter by Project:</label>
-        <Select
-          value={selectedWorkspace?.toString() || "all"}
-          onValueChange={(v) => onWorkspaceSelect(v === "all" ? null : parseInt(v))}
-        >
-          <SelectTrigger className="w-64">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Projects</SelectItem>
-            {workspaces.map((ws) => (
-              <SelectItem key={ws.id} value={ws.id.toString()}>
-                {ws.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Project:</label>
+          <Select
+            value={selectedWorkspace?.toString() || "all"}
+            onValueChange={(v) => onWorkspaceSelect(v === "all" ? null : parseInt(v))}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Projects</SelectItem>
+              {workspaces.map((ws) => (
+                <SelectItem key={ws.id} value={ws.id.toString()}>
+                  {ws.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Queries Table */}
@@ -172,6 +179,7 @@ export function QueriesList({
                 <TableHead>Title</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Priority</TableHead>
+                <TableHead>Labels</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Time to Start</TableHead>
                 <TableHead>Total Duration</TableHead>
@@ -217,12 +225,33 @@ export function QueriesList({
                               {format(new Date(query.created_at), "PPP p")}
                             </p>
                           </div>
+                          {query.labels && query.labels.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase">
+                                Labels
+                              </p>
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {query.labels.map((label) => (
+                                  <Badge
+                                    key={label.id}
+                                    style={{
+                                      backgroundColor: label.color + "20",
+                                      color: label.color,
+                                      border: `1px solid ${label.color}`,
+                                    }}
+                                  >
+                                    {label.name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </DialogContent>
                     </Dialog>
                   </TableCell>
                   <TableCell>
-                    <Badge className={`${statusColors[query.status].bg} ${statusColors[query.status].text}`}>
+                    <Badge className={`${statusColors[query.status]?.bg || statusColors.open.bg} ${statusColors[query.status]?.text || statusColors.open.text}`}>
                       {query.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
@@ -230,6 +259,28 @@ export function QueriesList({
                     <Badge className={priorityColors[query.priority]}>
                       {query.priority.charAt(0).toUpperCase() + query.priority.slice(1)}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {query.labels && query.labels.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {query.labels.map((label) => (
+                          <Badge
+                            key={label.id}
+                            variant="outline"
+                            style={{
+                              backgroundColor: label.color + "20",
+                              color: label.color,
+                              borderColor: label.color,
+                            }}
+                            className="text-xs"
+                          >
+                            {label.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {format(new Date(query.created_at), "MMM dd")}
@@ -248,7 +299,7 @@ export function QueriesList({
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      {query.status === "open" && (
+                      {(query.status === "open" || query.status === "ready" || query.status === "backlog") && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -262,7 +313,7 @@ export function QueriesList({
                           )}
                         </Button>
                       )}
-                      {(query.status === "in_progress" || query.status === "open") && (
+                      {(query.status === "in_progress" || query.status === "open" || query.status === "ready") && (
                         <Button
                           size="sm"
                           variant="outline"

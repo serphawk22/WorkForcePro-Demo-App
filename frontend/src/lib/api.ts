@@ -145,6 +145,16 @@ export interface User {
   profile_picture?: string;
 }
 
+export interface Label {
+  id: number;
+  name: string;
+  color: string;
+  description?: string | null;
+  organization_id?: number | null;
+  created_by: number;
+  created_at: string;
+}
+
 export interface AdminQuery {
   id: number;
   organization_id?: number | null;
@@ -157,7 +167,7 @@ export interface AdminQuery {
   assigned_to_email?: string | null;
   title: string;
   description?: string | null;
-  status: "open" | "in_progress" | "resolved" | "on_hold" | "closed";
+  status: "backlog" | "ready" | "in_progress" | "blocked" | "resolved" | "closed" | "open" | "on_hold";
   priority: "low" | "medium" | "high";
   related_task_id?: number | null;
   created_at: string;
@@ -166,6 +176,7 @@ export interface AdminQuery {
   updated_at: string;
   duration_hours?: number | null;
   time_to_start_hours?: number | null;
+  labels?: Label[] | null;
 }
 
 export interface AdminQueryCreate {
@@ -175,6 +186,7 @@ export interface AdminQueryCreate {
   description?: string;
   priority?: "low" | "medium" | "high";
   related_task_id?: number | null;
+  label_ids?: number[] | null;
 }
 
 export interface AttendanceRecord {
@@ -1023,6 +1035,32 @@ export async function startAdminQuery(queryId: number): Promise<ApiResponse<Admi
 export async function resolveAdminQuery(queryId: number): Promise<ApiResponse<AdminQuery>> {
   return apiFetch<AdminQuery>(`/admin/queries/${queryId}/resolve`, {
     method: "POST",
+  });
+}
+
+export async function updateAdminQuery(queryId: number, data: Partial<AdminQueryCreate>): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ==================== LABEL MANAGEMENT ====================
+
+export async function createLabel(data: { name: string; color?: string; description?: string }): Promise<ApiResponse<Label>> {
+  return apiFetch<Label>("/admin/queries/labels", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listLabels(): Promise<ApiResponse<Label[]>> {
+  return apiFetch<Label[]>("/admin/queries/labels");
+}
+
+export async function deleteLabel(labelId: number): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/admin/queries/labels/${labelId}`, {
+    method: "DELETE",
   });
 }
 

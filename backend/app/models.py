@@ -898,12 +898,66 @@ class TaskSheetWithUser(TaskSheetRead):
 # ==================== ADMIN QUERY/TICKET MODELS ====================
 
 class QueryStatus(str, Enum):
-    """Status of admin-raised queries/tickets."""
-    open = "open"
+    """Status of admin-raised queries/tickets with workflow states."""
+    backlog = "backlog"
+    ready = "ready"
     in_progress = "in_progress"
+    blocked = "blocked"
     resolved = "resolved"
-    on_hold = "on_hold"
     closed = "closed"
+    # Legacy statuses for backward compatibility
+    open = "open"
+    on_hold = "on_hold"
+
+
+class Label(SQLModel, table=True):
+    """Labels/tags for organizing and filtering tickets."""
+    __tablename__ = "labels"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    name: str = Field(min_length=1, max_length=50, index=True)
+    color: str = Field(default="#3B82F6", max_length=7)  # Hex color code
+    description: Optional[str] = Field(default=None, max_length=200)
+    created_by: int = Field(foreign_key="users.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="unique_org_label_name"),
+    )
+
+
+class LabelBase(SQLModel):
+    """Base label model."""
+    name: str = Field(min_length=1, max_length=50)
+    color: str = Field(default="#3B82F6", max_length=7)
+    description: Optional[str] = Field(default=None, max_length=200)
+
+
+class LabelCreate(LabelBase):
+    """Schema for creating a label."""
+    pass
+
+
+class LabelRead(LabelBase):
+    """Schema for reading label data."""
+    id: int
+    organization_id: Optional[int] = None
+    created_by: int
+    created_at: datetime
+
+
+class AdminQueryLabel(SQLModel, table=True):
+    """Junction table for many-to-many relationship between AdminQuery and Label."""
+    __tablename__ = "admin_query_labels"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    label_id: int = Field(foreign_key="labels.id", ondelete="CASCADE", index=True)
+    
+    __table_args__ = (
+        UniqueConstraint("admin_query_id", "label_id", name="unique_query_label"),
+    )
 
 
 class AdminQuery(SQLModel, table=True):
@@ -934,6 +988,7 @@ class AdminQueryCreate(SQLModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     priority: TaskPriority = Field(default=TaskPriority.medium)
     related_task_id: Optional[int] = None
+    label_ids: Optional[List[int]] = Field(default=None)  # List of label IDs to attach
 
 
 class AdminQueryUpdate(SQLModel):
@@ -945,6 +1000,7 @@ class AdminQueryUpdate(SQLModel):
     assigned_to: Optional[int] = None
     started_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
+    label_ids: Optional[List[int]] = None  # List of label IDs to attach
 
 
 class AdminQueryRead(SQLModel):
@@ -969,6 +1025,7 @@ class AdminQueryRead(SQLModel):
     updated_at: datetime
     duration_hours: Optional[float] = None  # Calculated: time from created to resolved
     time_to_start_hours: Optional[float] = None  # Time from created to started
+    labels: Optional[List[LabelRead]] = None  # Labels/tags for this ticket
 
 
 class HappySheet(SQLModel, table=True):
