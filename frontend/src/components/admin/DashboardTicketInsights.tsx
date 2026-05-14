@@ -98,7 +98,7 @@ export function DashboardTicketInsights() {
       summary.set(query.workspace_id, current);
     }
 
-    return [...summary.values()].sort((a, b) => b.total - a.total);
+    return Array.from(summary.values()).sort((a, b) => b.total - a.total);
   }, [queries]);
 
   const thisWeekCreated = weekQueries.length;
