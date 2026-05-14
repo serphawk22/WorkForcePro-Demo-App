@@ -1003,6 +1003,29 @@ export async function getAdminQueries(filters?: {
   return apiFetch<AdminQuery[]>(`/admin/queries/list${query}`);
 }
 
+export async function getMyAdminQueries(): Promise<ApiResponse<AdminQuery[]>> {
+  return apiFetch<AdminQuery[]>("/admin/queries/my");
+}
+
+export async function createAdminQuery(data: AdminQueryCreate): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>("/admin/queries", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function startAdminQuery(queryId: number): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/start`, {
+    method: "POST",
+  });
+}
+
+export async function resolveAdminQuery(queryId: number): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/resolve`, {
+    method: "POST",
+  });
+}
+
 // ==================== ADMIN ====================
 
 /**

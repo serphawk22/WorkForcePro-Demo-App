@@ -74,6 +74,12 @@ async def lifespan(app: FastAPI):
                     """))
                 except Exception:
                     pass
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'ADMIN_QUERY_RAISED';
+                    """))
+                except Exception:
+                    pass
                 # Add 'submitted' and 'reviewing' to taskstatus enum if missing
                 try:
                     conn.execute(text("""

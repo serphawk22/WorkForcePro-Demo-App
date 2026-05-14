@@ -9,9 +9,10 @@ from sqlmodel import Session, select, and_
 from app.database import get_session
 from app.models import (
     AdminQuery, AdminQueryCreate, AdminQueryRead, AdminQueryUpdate,
-    QueryStatus, Task, User, Workspace, Organization
+    QueryStatus, Task, User, Workspace, Organization, UserRole, NotificationType
 )
-from app.auth import get_current_admin_user, ensure_same_organization
+from app.auth import get_current_admin_user, get_current_user, ensure_same_organization
+from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/admin/queries", tags=["Admin Queries"])
 
@@ -49,7 +50,7 @@ def _to_admin_query_read(session: Session, query: AdminQuery) -> AdminQueryRead:
 async def create_admin_query(
     query_data: AdminQueryCreate,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> AdminQueryRead:
     """Create a new admin query/ticket for a project."""
     # Verify workspace exists and user has access
@@ -95,7 +96,41 @@ async def create_admin_query(
     session.commit()
     session.refresh(admin_query)
 
+    if current_user.role == UserRole.employee:
+        admins = session.exec(
+            select(User).where(
+                User.role == UserRole.admin,
+                User.organization_id == current_user.organization_id,
+            )
+        ).all()
+        for admin in admins:
+            try:
+                create_notification(
+                    session=session,
+                    user_id=admin.id,
+                    type=NotificationType.ADMIN_QUERY_RAISED,
+                    message=f"{current_user.name} raised ticket #{admin_query.id} - {admin_query.title}",
+                    task_id=query_data.related_task_id,
+                )
+            except Exception:
+                pass
+
     return _to_admin_query_read(session, admin_query)
+
+
+@router.get("/my", response_model=List[AdminQueryRead])
+async def get_my_admin_queries(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> List[AdminQueryRead]:
+    """Get tickets that the current user raised or is assigned to."""
+    query_stmt = select(AdminQuery).where(
+        AdminQuery.organization_id == current_user.organization_id,
+        (AdminQuery.raised_by == current_user.id) | (AdminQuery.assigned_to == current_user.id),
+    ).order_by(AdminQuery.created_at.desc())
+
+    queries = session.exec(query_stmt).all()
+    return [_to_admin_query_read(session, query) for query in queries]
 
 
 @router.get("/list", response_model=List[AdminQueryRead])
@@ -211,7 +246,7 @@ async def delete_admin_query(
 async def start_query(
     query_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> AdminQueryRead:
     """Mark a query as started (begin work on it)."""
     admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
@@ -220,6 +255,8 @@ async def start_query(
     
     if admin_query.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.role != UserRole.admin and admin_query.assigned_to != current_user.id and admin_query.raised_by != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only work on your own assigned ticket")
     
     admin_query.started_at = datetime.now(timezone.utc)
     admin_query.status = QueryStatus.in_progress
@@ -235,7 +272,7 @@ async def start_query(
 async def resolve_query(
     query_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> AdminQueryRead:
     """Mark a query as resolved."""
     admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
@@ -244,6 +281,8 @@ async def resolve_query(
     
     if admin_query.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.role != UserRole.admin and admin_query.assigned_to != current_user.id and admin_query.raised_by != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only close your own assigned ticket")
     
     admin_query.resolved_at = datetime.now(timezone.utc)
     admin_query.status = QueryStatus.resolved

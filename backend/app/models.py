@@ -90,6 +90,7 @@ class NotificationType(str, Enum):
     USER_APPROVED = "user_approved"
     USER_REJECTED = "user_rejected"
     WEEKLY_PROGRESS_COMMENT = "weekly_progress_comment"
+    ADMIN_QUERY_RAISED = "admin_query_raised"
 
 
 # ==================== USER MODELS ====================
