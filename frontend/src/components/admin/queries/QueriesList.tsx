@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -25,7 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { CheckCircle2, Clock, PlayCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, PlayCircle, Loader2, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { getToken, type Label } from "@/lib/api";
@@ -47,6 +48,9 @@ interface Query {
   duration_hours?: number;
   time_to_start_hours?: number;
   labels?: Label[] | null;
+  estimated_hours?: number | null;
+  actual_hours_logged?: number;
+  remaining_hours?: number | null;
 }
 
 interface QueriesListProps {
@@ -83,6 +87,7 @@ export function QueriesList({
   workspaces,
 }: QueriesListProps) {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const router = useRouter();
   const { toast } = useToast();
 
   const handleStartQuery = async (queryId: number) => {
@@ -180,6 +185,7 @@ export function QueriesList({
                 <TableHead>Status</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Labels</TableHead>
+                <TableHead>Time Logged</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Time to Start</TableHead>
                 <TableHead>Total Duration</TableHead>
@@ -282,6 +288,22 @@ export function QueriesList({
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {query.actual_hours_logged !== undefined ? (
+                        <div>
+                          <p className="font-medium">{query.actual_hours_logged.toFixed(1)}h</p>
+                          {query.estimated_hours && (
+                            <p className="text-xs text-muted-foreground">
+                              of {query.estimated_hours.toFixed(1)}h
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {format(new Date(query.created_at), "MMM dd")}
                   </TableCell>
@@ -298,13 +320,22 @@ export function QueriesList({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => router.push(`/admin/tickets/${query.id}`)}
+                        title="View details"
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
                       {(query.status === "open" || query.status === "ready" || query.status === "backlog") && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleStartQuery(query.id)}
                           disabled={updatingId === query.id}
+                          title="Start work"
                         >
                           {updatingId === query.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -319,6 +350,7 @@ export function QueriesList({
                           variant="outline"
                           onClick={() => handleResolveQuery(query.id)}
                           disabled={updatingId === query.id}
+                          title="Resolve"
                         >
                           {updatingId === query.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />

@@ -10,7 +10,9 @@ from app.database import get_session
 from app.models import (
     AdminQuery, AdminQueryCreate, AdminQueryRead, AdminQueryUpdate,
     QueryStatus, Task, User, Workspace, Organization, UserRole, NotificationType,
-    Label, LabelCreate, LabelRead, AdminQueryLabel
+    Label, LabelCreate, LabelRead, AdminQueryLabel,
+    TicketComment, TicketCommentCreate, TicketCommentRead,
+    TimeLogEntry, TimeLogCreate, TimeLogRead
 )
 from app.auth import get_current_admin_user, get_current_user, ensure_same_organization
 from app.routers.notifications import create_notification
@@ -40,6 +42,11 @@ def _to_admin_query_read(session: Session, query: AdminQuery) -> AdminQueryRead:
                 created_by=label.created_by,
                 created_at=label.created_at,
             ))
+    
+    # Calculate remaining hours
+    remaining_hours = None
+    if query.estimated_hours:
+        remaining_hours = max(0, query.estimated_hours - query.actual_hours_logged)
 
     return AdminQueryRead(
         id=query.id,
@@ -63,6 +70,9 @@ def _to_admin_query_read(session: Session, query: AdminQuery) -> AdminQueryRead:
         duration_hours=_calculate_duration(query),
         time_to_start_hours=_calculate_time_to_start(query),
         labels=labels if labels else None,
+        estimated_hours=query.estimated_hours,
+        actual_hours_logged=query.actual_hours_logged,
+        remaining_hours=remaining_hours,
     )
 
 
@@ -111,6 +121,8 @@ async def create_admin_query(
         description=query_data.description,
         priority=query_data.priority,
         related_task_id=query_data.related_task_id,
+        estimated_hours=query_data.estimated_hours,
+        actual_hours_logged=0.0,
     )
     session.add(admin_query)
     session.commit()
@@ -467,3 +479,205 @@ def _calculate_time_to_start(query: AdminQuery) -> Optional[float]:
         return None
     delta = query.started_at - query.created_at
     return delta.total_seconds() / 3600
+
+
+# ==================== TIME LOGGING ====================
+
+@router.post("/{query_id}/log-time", response_model=AdminQueryRead)
+async def log_time(
+    query_id: int,
+    time_data: TimeLogCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> AdminQueryRead:
+    """Log time spent on a ticket."""
+    admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
+    if not admin_query:
+        raise HTTPException(status_code=404, detail="Query not found")
+    
+    if admin_query.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Create time log entry
+    time_log = TimeLogEntry(
+        admin_query_id=query_id,
+        user_id=current_user.id,
+        hours_spent=time_data.hours_spent,
+        note=time_data.note,
+    )
+    session.add(time_log)
+    
+    # Update total logged time
+    admin_query.actual_hours_logged += time_data.hours_spent
+    admin_query.updated_at = datetime.now(timezone.utc)
+    session.add(admin_query)
+    session.commit()
+    session.refresh(admin_query)
+    
+    return _to_admin_query_read(session, admin_query)
+
+
+@router.get("/{query_id}/time-logs", response_model=List[TimeLogRead])
+async def get_time_logs(
+    query_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> List[TimeLogRead]:
+    """Get all time logs for a ticket."""
+    admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
+    if not admin_query:
+        raise HTTPException(status_code=404, detail="Query not found")
+    
+    if admin_query.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    time_logs = session.exec(
+        select(TimeLogEntry).where(TimeLogEntry.admin_query_id == query_id).order_by(TimeLogEntry.logged_at.desc())
+    ).all()
+    
+    result = []
+    for log in time_logs:
+        user = session.exec(select(User).where(User.id == log.user_id)).first()
+        result.append(TimeLogRead(
+            id=log.id,
+            admin_query_id=log.admin_query_id,
+            user_id=log.user_id,
+            user_name=user.name if user else None,
+            hours_spent=log.hours_spent,
+            note=log.note,
+            logged_at=log.logged_at,
+        ))
+    
+    return result
+
+
+# ==================== COMMENTS ====================
+
+@router.post("/{query_id}/comments", response_model=TicketCommentRead)
+async def create_comment(
+    query_id: int,
+    comment_data: TicketCommentCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> TicketCommentRead:
+    """Create a comment on a ticket."""
+    admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
+    if not admin_query:
+        raise HTTPException(status_code=404, detail="Query not found")
+    
+    if admin_query.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Validate mentioned users
+    if comment_data.mentions:
+        for user_id in comment_data.mentions:
+            user = session.exec(select(User).where(User.id == user_id)).first()
+            if not user or user.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=404, detail=f"User {user_id} not found or not in your organization")
+    
+    # Create comment
+    import json
+    comment = TicketComment(
+        admin_query_id=query_id,
+        user_id=current_user.id,
+        content=comment_data.content,
+        mentions=json.dumps(comment_data.mentions) if comment_data.mentions else None,
+    )
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+    
+    # Notify @mentioned users
+    if comment_data.mentions:
+        for user_id in comment_data.mentions:
+            try:
+                create_notification(
+                    session=session,
+                    user_id=user_id,
+                    type=NotificationType.TASK_COMMENT,
+                    message=f"{current_user.name} mentioned you in ticket #{admin_query.id}",
+                    task_id=query_id,
+                )
+            except Exception:
+                pass
+    
+    user = session.exec(select(User).where(User.id == current_user.id)).first()
+    mentions = json.loads(comment.mentions) if comment.mentions else None
+    
+    return TicketCommentRead(
+        id=comment.id,
+        admin_query_id=comment.admin_query_id,
+        user_id=comment.user_id,
+        user_name=user.name if user else None,
+        user_email=user.email if user else None,
+        content=comment.content,
+        mentions=mentions,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+    )
+
+
+@router.get("/{query_id}/comments", response_model=List[TicketCommentRead])
+async def get_comments(
+    query_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> List[TicketCommentRead]:
+    """Get all comments on a ticket."""
+    admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
+    if not admin_query:
+        raise HTTPException(status_code=404, detail="Query not found")
+    
+    if admin_query.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    comments = session.exec(
+        select(TicketComment).where(TicketComment.admin_query_id == query_id).order_by(TicketComment.created_at.asc())
+    ).all()
+    
+    import json
+    result = []
+    for comment in comments:
+        user = session.exec(select(User).where(User.id == comment.user_id)).first()
+        mentions = json.loads(comment.mentions) if comment.mentions else None
+        
+        result.append(TicketCommentRead(
+            id=comment.id,
+            admin_query_id=comment.admin_query_id,
+            user_id=comment.user_id,
+            user_name=user.name if user else None,
+            user_email=user.email if user else None,
+            content=comment.content,
+            mentions=mentions,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+        ))
+    
+    return result
+
+
+@router.delete("/{query_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    query_id: int,
+    comment_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Delete a comment (only comment author or admins can delete)."""
+    comment = session.exec(select(TicketComment).where(TicketComment.id == comment_id)).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    
+    admin_query = session.exec(select(AdminQuery).where(AdminQuery.id == query_id)).first()
+    if not admin_query or comment.admin_query_id != query_id:
+        raise HTTPException(status_code=404, detail="Comment not found on this ticket")
+    
+    if admin_query.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Only comment author or admins can delete
+    if comment.user_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="You can only delete your own comments")
+    
+    session.delete(comment)
+    session.commit()

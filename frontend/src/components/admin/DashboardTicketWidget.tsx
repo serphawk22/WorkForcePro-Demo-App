@@ -45,6 +45,7 @@ const querySchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters").max(300),
   description: z.string().max(2000).optional(),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
+  estimated_hours: z.coerce.number().positive("Hours must be positive").optional(),
   label_ids: z.array(z.number()).optional(),
 });
 
@@ -223,6 +224,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
           ...values,
           assigned_to: values.assigned_to || undefined,
           related_task_id: values.related_task_id || undefined,
+          estimated_hours: values.estimated_hours || undefined,
           label_ids: (values.label_ids && values.label_ids.length > 0) ? values.label_ids : undefined,
         }),
       });
@@ -244,6 +246,7 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
         title: "",
         description: "",
         priority: "medium",
+        estimated_hours: undefined,
         label_ids: [],
       });
       setIsDialogOpen(false);
@@ -439,6 +442,26 @@ export function DashboardTicketWidget({ onTicketCreated }: DashboardTicketWidget
                               <SelectItem value="high">High - Urgent</SelectItem>
                             </SelectContent>
                           </Select>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="estimated_hours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Estimated Hours (Optional)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="e.g., 8"
+                              min="0.5"
+                              step="0.5"
+                              {...field}
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">How long do you estimate this will take?</p>
                         </FormItem>
                       )}
                     />

@@ -978,6 +978,9 @@ class AdminQuery(SQLModel, table=True):
     started_at: Optional[datetime] = None  # When work started
     resolved_at: Optional[datetime] = None  # When resolved/closed
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Time tracking
+    estimated_hours: Optional[float] = Field(default=None, ge=0)  # Estimated time to complete
+    actual_hours_logged: float = Field(default=0.0, ge=0)  # Total logged work time
 
 
 class AdminQueryCreate(SQLModel):
@@ -989,6 +992,7 @@ class AdminQueryCreate(SQLModel):
     priority: TaskPriority = Field(default=TaskPriority.medium)
     related_task_id: Optional[int] = None
     label_ids: Optional[List[int]] = Field(default=None)  # List of label IDs to attach
+    estimated_hours: Optional[float] = Field(default=None, ge=0)  # Estimated time to complete
 
 
 class AdminQueryUpdate(SQLModel):
@@ -1001,6 +1005,7 @@ class AdminQueryUpdate(SQLModel):
     started_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
     label_ids: Optional[List[int]] = None  # List of label IDs to attach
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
 
 
 class AdminQueryRead(SQLModel):
@@ -1026,6 +1031,70 @@ class AdminQueryRead(SQLModel):
     duration_hours: Optional[float] = None  # Calculated: time from created to resolved
     time_to_start_hours: Optional[float] = None  # Time from created to started
     labels: Optional[List[LabelRead]] = None  # Labels/tags for this ticket
+    estimated_hours: Optional[float] = None  # Estimated time to complete
+    actual_hours_logged: float = 0.0  # Total logged work time
+    remaining_hours: Optional[float] = None  # Calculated: estimated - actual
+
+
+class TicketComment(SQLModel, table=True):
+    """Comments on tickets/queries."""
+    __tablename__ = "ticket_comments"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)  # Who made the comment
+    content: str = Field(min_length=1, max_length=5000)
+    mentions: Optional[str] = Field(default=None, max_length=500)  # JSON array of @mentioned user IDs
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TicketCommentCreate(SQLModel):
+    """Schema for creating a ticket comment."""
+    content: str = Field(min_length=1, max_length=5000)
+    mentions: Optional[List[int]] = Field(default=None)  # List of user IDs to @mention
+
+
+class TicketCommentRead(SQLModel):
+    """Schema for reading ticket comment data."""
+    id: int
+    admin_query_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    content: str
+    mentions: Optional[List[int]] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TimeLogEntry(SQLModel, table=True):
+    """Time log entries for tickets."""
+    __tablename__ = "time_log_entries"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)  # Who logged the time
+    hours_spent: float = Field(gt=0, le=24)  # Hours spent (0.5 to 24)
+    note: Optional[str] = Field(default=None, max_length=500)  # What was done
+    logged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class TimeLogCreate(SQLModel):
+    """Schema for logging time on a ticket."""
+    hours_spent: float = Field(gt=0, le=24, description="Hours spent (0.5 to 24)")
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class TimeLogRead(SQLModel):
+    """Schema for reading time log data."""
+    id: int
+    admin_query_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    hours_spent: float
+    note: Optional[str] = None
+    logged_at: datetime
 
 
 class HappySheet(SQLModel, table=True):

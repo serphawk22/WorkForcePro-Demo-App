@@ -177,6 +177,31 @@ export interface AdminQuery {
   duration_hours?: number | null;
   time_to_start_hours?: number | null;
   labels?: Label[] | null;
+  estimated_hours?: number | null;
+  actual_hours_logged?: number;
+  remaining_hours?: number | null;
+}
+
+export interface TicketComment {
+  id: number;
+  admin_query_id: number;
+  user_id: number;
+  user_name?: string | null;
+  user_email?: string | null;
+  content: string;
+  mentions?: number[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimeLog {
+  id: number;
+  admin_query_id: number;
+  user_id: number;
+  user_name?: string | null;
+  hours_spent: number;
+  note?: string | null;
+  logged_at: string;
 }
 
 export interface AdminQueryCreate {
@@ -1060,6 +1085,38 @@ export async function listLabels(): Promise<ApiResponse<Label[]>> {
 
 export async function deleteLabel(labelId: number): Promise<ApiResponse<void>> {
   return apiFetch<void>(`/admin/queries/labels/${labelId}`, {
+    method: "DELETE",
+  });
+}
+
+// ==================== TIME TRACKING ====================
+
+export async function logTime(queryId: number, data: { hours_spent: number; note?: string }): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/log-time`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getTimeLogs(queryId: number): Promise<ApiResponse<TimeLog[]>> {
+  return apiFetch<TimeLog[]>(`/admin/queries/${queryId}/time-logs`);
+}
+
+// ==================== COMMENTS ====================
+
+export async function createComment(queryId: number, data: { content: string; mentions?: number[] }): Promise<ApiResponse<TicketComment>> {
+  return apiFetch<TicketComment>(`/admin/queries/${queryId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getComments(queryId: number): Promise<ApiResponse<TicketComment[]>> {
+  return apiFetch<TicketComment[]>(`/admin/queries/${queryId}/comments`);
+}
+
+export async function deleteComment(queryId: number, commentId: number): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/admin/queries/${queryId}/comments/${commentId}`, {
     method: "DELETE",
   });
 }
