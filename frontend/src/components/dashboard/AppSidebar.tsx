@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Menu,
   PanelLeftClose,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
@@ -56,6 +57,7 @@ function LighthouseNavIcon({ size = 18, className }: { size?: number; className?
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
+  { label: "My Day", icon: Zap, path: "/my-day" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
@@ -68,6 +70,7 @@ const adminLinks = [
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
+  { label: "My Day", icon: Zap, path: "/my-day" },
   { label: "Weekly Progress", icon: ClipboardList, path: "/weekly-progress" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
