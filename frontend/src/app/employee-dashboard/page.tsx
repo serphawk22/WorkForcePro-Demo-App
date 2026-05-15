@@ -14,6 +14,7 @@ import {
   getMyHappySheets, HappySheetEntry, getMyPersonalProjects, PersonalProjectEntry,
 } from "@/lib/api";
 import WeeklyProgressEmployeeSection from "@/components/dashboard/WeeklyProgressEmployeeSection";
+import { EmployeeTicketCenter } from "@/components/employee/EmployeeTicketCenter";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -161,9 +162,15 @@ export default function EmployeeDashboard() {
         setDashboardStats(statsResponse.data);
       }
       if (tasksResponse.data) {
-        setTasks(tasksResponse.data);
+        const prioritizedTasks = [...tasksResponse.data].sort((a, b) => {
+          const aAssigned = a.assigned_to === user?.id ? 1 : 0;
+          const bAssigned = b.assigned_to === user?.id ? 1 : 0;
+          if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+          return +new Date(b.created_at) - +new Date(a.created_at);
+        });
+        setTasks(prioritizedTasks);
         // Pre-fetch subtasks for all tasks so they're visible on refresh
-        tasksResponse.data.forEach(task => loadSubtasks(task.id));
+        prioritizedTasks.forEach(task => loadSubtasks(task.id));
       }
       if (meetingResponse.data !== undefined) {
         setActiveMeeting(meetingResponse.data);
@@ -716,6 +723,8 @@ export default function EmployeeDashboard() {
               </div>
             </article>
           </section>
+
+          <EmployeeTicketCenter />
 
           {/* Teams Meeting Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

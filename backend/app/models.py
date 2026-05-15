@@ -90,6 +90,7 @@ class NotificationType(str, Enum):
     USER_APPROVED = "user_approved"
     USER_REJECTED = "user_rejected"
     WEEKLY_PROGRESS_COMMENT = "weekly_progress_comment"
+    ADMIN_QUERY_RAISED = "admin_query_raised"
 
 
 # ==================== USER MODELS ====================
@@ -892,6 +893,208 @@ class TaskSheetWithUser(TaskSheetRead):
     user_name: Optional[str] = None
     user_email: Optional[str] = None
     profile_picture: Optional[str] = None
+
+
+# ==================== ADMIN QUERY/TICKET MODELS ====================
+
+class QueryStatus(str, Enum):
+    """Status of admin-raised queries/tickets with workflow states."""
+    backlog = "backlog"
+    ready = "ready"
+    in_progress = "in_progress"
+    blocked = "blocked"
+    resolved = "resolved"
+    closed = "closed"
+    # Legacy statuses for backward compatibility
+    open = "open"
+    on_hold = "on_hold"
+
+
+class Label(SQLModel, table=True):
+    """Labels/tags for organizing and filtering tickets."""
+    __tablename__ = "labels"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    name: str = Field(min_length=1, max_length=50, index=True)
+    color: str = Field(default="#3B82F6", max_length=7)  # Hex color code
+    description: Optional[str] = Field(default=None, max_length=200)
+    created_by: int = Field(foreign_key="users.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="unique_org_label_name"),
+    )
+
+
+class LabelBase(SQLModel):
+    """Base label model."""
+    name: str = Field(min_length=1, max_length=50)
+    color: str = Field(default="#3B82F6", max_length=7)
+    description: Optional[str] = Field(default=None, max_length=200)
+
+
+class LabelCreate(LabelBase):
+    """Schema for creating a label."""
+    pass
+
+
+class LabelRead(LabelBase):
+    """Schema for reading label data."""
+    id: int
+    organization_id: Optional[int] = None
+    created_by: int
+    created_at: datetime
+
+
+class AdminQueryLabel(SQLModel, table=True):
+    """Junction table for many-to-many relationship between AdminQuery and Label."""
+    __tablename__ = "admin_query_labels"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    label_id: int = Field(foreign_key="labels.id", ondelete="CASCADE", index=True)
+    
+    __table_args__ = (
+        UniqueConstraint("admin_query_id", "label_id", name="unique_query_label"),
+    )
+
+
+class AdminQuery(SQLModel, table=True):
+    """Admin-raised queries/tickets for projects with time tracking."""
+    __tablename__ = "admin_queries"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    workspace_id: int = Field(foreign_key="workspaces.id", index=True)
+    raised_by: int = Field(foreign_key="users.id", index=True)  # Admin who raised this
+    assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    title: str = Field(min_length=1, max_length=300)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    status: QueryStatus = Field(default=QueryStatus.open, index=True)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    related_task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")  # Link to task if any
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    started_at: Optional[datetime] = None  # When work started
+    resolved_at: Optional[datetime] = None  # When resolved/closed
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Time tracking
+    estimated_hours: Optional[float] = Field(default=None, ge=0)  # Estimated time to complete
+    actual_hours_logged: float = Field(default=0.0, ge=0)  # Total logged work time
+
+
+class AdminQueryCreate(SQLModel):
+    """Schema for creating an admin query."""
+    workspace_id: int
+    assigned_to: Optional[int] = None
+    title: str = Field(min_length=1, max_length=300)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    related_task_id: Optional[int] = None
+    label_ids: Optional[List[int]] = Field(default=None)  # List of label IDs to attach
+    estimated_hours: Optional[float] = Field(default=None, ge=0)  # Estimated time to complete
+
+
+class AdminQueryUpdate(SQLModel):
+    """Schema for updating an admin query."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[QueryStatus] = None
+    priority: Optional[TaskPriority] = None
+    assigned_to: Optional[int] = None
+    started_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    label_ids: Optional[List[int]] = None  # List of label IDs to attach
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+
+
+class AdminQueryRead(SQLModel):
+    """Schema for reading admin query data."""
+    id: int
+    organization_id: Optional[int] = None
+    workspace_id: int
+    workspace_name: Optional[str] = None
+    raised_by: int
+    raised_by_name: Optional[str] = None
+    assigned_to: Optional[int] = None
+    assigned_to_name: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    status: QueryStatus
+    priority: TaskPriority
+    related_task_id: Optional[int] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+    updated_at: datetime
+    duration_hours: Optional[float] = None  # Calculated: time from created to resolved
+    time_to_start_hours: Optional[float] = None  # Time from created to started
+    labels: Optional[List[LabelRead]] = None  # Labels/tags for this ticket
+    estimated_hours: Optional[float] = None  # Estimated time to complete
+    actual_hours_logged: float = 0.0  # Total logged work time
+    remaining_hours: Optional[float] = None  # Calculated: estimated - actual
+
+
+class TicketComment(SQLModel, table=True):
+    """Comments on tickets/queries."""
+    __tablename__ = "ticket_comments"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)  # Who made the comment
+    content: str = Field(min_length=1, max_length=5000)
+    mentions: Optional[str] = Field(default=None, max_length=500)  # JSON array of @mentioned user IDs
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TicketCommentCreate(SQLModel):
+    """Schema for creating a ticket comment."""
+    content: str = Field(min_length=1, max_length=5000)
+    mentions: Optional[List[int]] = Field(default=None)  # List of user IDs to @mention
+
+
+class TicketCommentRead(SQLModel):
+    """Schema for reading ticket comment data."""
+    id: int
+    admin_query_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    content: str
+    mentions: Optional[List[int]] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TimeLogEntry(SQLModel, table=True):
+    """Time log entries for tickets."""
+    __tablename__ = "time_log_entries"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_query_id: int = Field(foreign_key="admin_queries.id", ondelete="CASCADE", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)  # Who logged the time
+    hours_spent: float = Field(gt=0, le=24)  # Hours spent (0.5 to 24)
+    note: Optional[str] = Field(default=None, max_length=500)  # What was done
+    logged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class TimeLogCreate(SQLModel):
+    """Schema for logging time on a ticket."""
+    hours_spent: float = Field(gt=0, le=24, description="Hours spent (0.5 to 24)")
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class TimeLogRead(SQLModel):
+    """Schema for reading time log data."""
+    id: int
+    admin_query_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    hours_spent: float
+    note: Optional[str] = None
+    logged_at: datetime
 
 
 class HappySheet(SQLModel, table=True):

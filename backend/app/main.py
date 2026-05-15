@@ -7,9 +7,10 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations, search
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations, search, admin_queries
 
 load_dotenv()
 
@@ -70,6 +71,12 @@ async def lifespan(app: FastAPI):
                 try:
                     conn.execute(text("""
                         ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'WEEKLY_PROGRESS_COMMENT';
+                    """))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("""
+                        ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'ADMIN_QUERY_RAISED';
                     """))
                 except Exception:
                     pass
@@ -515,6 +522,13 @@ async def lifespan(app: FastAPI):
             wp.organization_id = usr.organization_id if usr else default_org.id
             session.add(wp)
 
+        try:
+            session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
+            session.commit()
+            print("✅ admin_queries.assigned_to column added")
+        except Exception:
+            session.rollback()
+
         session.commit()
 
         if default_workspace:
@@ -598,6 +612,7 @@ app.include_router(payroll.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)
+app.include_router(admin_queries.router)
 app.include_router(subtasks.router)
 app.include_router(leave.router)
 app.include_router(dashboard.router)

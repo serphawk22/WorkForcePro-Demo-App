@@ -145,6 +145,75 @@ export interface User {
   profile_picture?: string;
 }
 
+export interface Label {
+  id: number;
+  name: string;
+  color: string;
+  description?: string | null;
+  organization_id?: number | null;
+  created_by: number;
+  created_at: string;
+}
+
+export interface AdminQuery {
+  id: number;
+  organization_id?: number | null;
+  workspace_id: number;
+  workspace_name?: string | null;
+  raised_by: number;
+  raised_by_name?: string | null;
+  assigned_to?: number | null;
+  assigned_to_name?: string | null;
+  assigned_to_email?: string | null;
+  title: string;
+  description?: string | null;
+  status: "backlog" | "ready" | "in_progress" | "blocked" | "resolved" | "closed" | "open" | "on_hold";
+  priority: "low" | "medium" | "high";
+  related_task_id?: number | null;
+  created_at: string;
+  started_at?: string | null;
+  resolved_at?: string | null;
+  updated_at: string;
+  duration_hours?: number | null;
+  time_to_start_hours?: number | null;
+  labels?: Label[] | null;
+  estimated_hours?: number | null;
+  actual_hours_logged?: number;
+  remaining_hours?: number | null;
+}
+
+export interface TicketComment {
+  id: number;
+  admin_query_id: number;
+  user_id: number;
+  user_name?: string | null;
+  user_email?: string | null;
+  content: string;
+  mentions?: number[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimeLog {
+  id: number;
+  admin_query_id: number;
+  user_id: number;
+  user_name?: string | null;
+  hours_spent: number;
+  note?: string | null;
+  logged_at: string;
+}
+
+export interface AdminQueryCreate {
+  workspace_id: number;
+  assigned_to?: number | null;
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high";
+  related_task_id?: number | null;
+  label_ids?: number[] | null;
+}
+
 export interface AttendanceRecord {
   id: number;
   user_id: number;
@@ -955,6 +1024,101 @@ export async function fetchEmployeeDashboard(): Promise<ApiResponse<EmployeeDash
  */
 export async function fetchAllUsers(): Promise<ApiResponse<User[]>> {
   return apiFetch<User[]>("/dashboard/users");
+}
+
+/**
+ * Get admin queries for the current organization.
+ */
+export async function getAdminQueries(filters?: {
+  workspaceId?: number | null;
+  status?: "open" | "in_progress" | "resolved" | "on_hold" | "closed";
+}): Promise<ApiResponse<AdminQuery[]>> {
+  const params = new URLSearchParams();
+  if (filters?.workspaceId) params.append("workspace_id", String(filters.workspaceId));
+  if (filters?.status) params.append("status", filters.status);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<AdminQuery[]>(`/admin/queries/list${query}`);
+}
+
+export async function getMyAdminQueries(): Promise<ApiResponse<AdminQuery[]>> {
+  return apiFetch<AdminQuery[]>("/admin/queries/my");
+}
+
+export async function createAdminQuery(data: AdminQueryCreate): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>("/admin/queries", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function startAdminQuery(queryId: number): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/start`, {
+    method: "POST",
+  });
+}
+
+export async function resolveAdminQuery(queryId: number): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/resolve`, {
+    method: "POST",
+  });
+}
+
+export async function updateAdminQuery(queryId: number, data: Partial<AdminQueryCreate>): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ==================== LABEL MANAGEMENT ====================
+
+export async function createLabel(data: { name: string; color?: string; description?: string }): Promise<ApiResponse<Label>> {
+  return apiFetch<Label>("/admin/queries/labels", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listLabels(): Promise<ApiResponse<Label[]>> {
+  return apiFetch<Label[]>("/admin/queries/labels");
+}
+
+export async function deleteLabel(labelId: number): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/admin/queries/labels/${labelId}`, {
+    method: "DELETE",
+  });
+}
+
+// ==================== TIME TRACKING ====================
+
+export async function logTime(queryId: number, data: { hours_spent: number; note?: string }): Promise<ApiResponse<AdminQuery>> {
+  return apiFetch<AdminQuery>(`/admin/queries/${queryId}/log-time`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getTimeLogs(queryId: number): Promise<ApiResponse<TimeLog[]>> {
+  return apiFetch<TimeLog[]>(`/admin/queries/${queryId}/time-logs`);
+}
+
+// ==================== COMMENTS ====================
+
+export async function createComment(queryId: number, data: { content: string; mentions?: number[] }): Promise<ApiResponse<TicketComment>> {
+  return apiFetch<TicketComment>(`/admin/queries/${queryId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getComments(queryId: number): Promise<ApiResponse<TicketComment[]>> {
+  return apiFetch<TicketComment[]>(`/admin/queries/${queryId}/comments`);
+}
+
+export async function deleteComment(queryId: number, commentId: number): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/admin/queries/${queryId}/comments/${commentId}`, {
+    method: "DELETE",
+  });
 }
 
 // ==================== ADMIN ====================
@@ -1987,17 +2151,7 @@ export async function createSubtaskComment(
   });
 }
 
-/**
- * Create a comment on a task.
- */
-export async function createComment(
-  commentData: TaskCommentCreate
-): Promise<ApiResponse<TaskComment>> {
-  return apiFetch<TaskComment>(`/comments/`, {
-    method: "POST",
-    body: JSON.stringify(commentData),
-  });
-}
+
 
 export type { ApiResponse, LoginResponse, RegisterResponse };
 

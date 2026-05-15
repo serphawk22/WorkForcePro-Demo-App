@@ -16,7 +16,7 @@ import {
   getProjectDetails, 
   updateTaskLinks, 
   updateTaskStatus,
-  createComment,
+  createTaskComment,
   createSubtask,
   getAssignableUsers,
   updateSubtask,
@@ -613,7 +613,7 @@ export default function ProjectDetailPage() {
     
     setIsAddingComment(true);
     try {
-      const response = await createComment({
+      const response = await createTaskComment({
         task_id: taskId,
         comment: newComment.trim(),
       });
