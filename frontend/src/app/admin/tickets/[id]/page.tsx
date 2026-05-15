@@ -26,7 +26,7 @@ import {
 export default function TicketDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const ticketId = parseInt(params.id as string);
+  const ticketId = parseInt((params?.id as string) || "0");
   const { toast } = useToast();
 
   const [ticket, setTicket] = useState<AdminQuery | null>(null);
