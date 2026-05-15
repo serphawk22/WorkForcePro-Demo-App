@@ -14,6 +14,9 @@ const candidatePythons = win
       path.join(backend, "venv", "Scripts", "python.exe"),
       path.join(backend, ".venv", "Scripts", "python.exe"),
       path.join(root, ".venv", "Scripts", "python.exe"),
+      path.join(backend, "venv", "bin", "python"),
+      path.join(backend, ".venv", "bin", "python"),
+      path.join(root, ".venv", "bin", "python"),
     ]
   : [
       path.join(backend, "venv", "bin", "python"),

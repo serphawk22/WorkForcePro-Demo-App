@@ -56,7 +56,9 @@ export default function TaskSheetPage() {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [logFilterDate, setLogFilterDate] = useState(todayStr());
-  const [achievements, setAchievements] = useState("");
+  const [tasksCompleted, setTasksCompleted] = useState("");
+  const [workImpact, setWorkImpact] = useState("");
+  const [timeTaken, setTimeTaken] = useState("");
   const [repoLink, setRepoLink] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
@@ -95,7 +97,9 @@ export default function TaskSheetPage() {
 
   useEffect(() => {
     if (!myEntries.length) {
-      setAchievements("");
+      setTasksCompleted("");
+      setWorkImpact("");
+      setTimeTaken("");
       setRepoLink("");
       setIsUpdate(false);
       setEditingEntryId(null);
@@ -103,12 +107,16 @@ export default function TaskSheetPage() {
     }
     const selectedEntry = myEntries.find((e) => e.date === selectedDate);
     if (selectedEntry) {
-      setAchievements(selectedEntry.achievements);
+      setTasksCompleted(selectedEntry.tasks_completed);
+      setWorkImpact(selectedEntry.work_impact);
+      setTimeTaken(selectedEntry.time_taken);
       setRepoLink(selectedEntry.repo_link || "");
       setIsUpdate(true);
       setEditingEntryId(selectedEntry.id);
     } else {
-      setAchievements("");
+      setTasksCompleted("");
+      setWorkImpact("");
+      setTimeTaken("");
       setRepoLink("");
       setIsUpdate(false);
       setEditingEntryId(null);
@@ -117,14 +125,16 @@ export default function TaskSheetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!achievements.trim()) {
-      showFloatingToast({ type: "error", message: "Please add achievements." });
+    if (!tasksCompleted.trim() || !workImpact.trim() || !timeTaken.trim()) {
+      showFloatingToast({ type: "error", message: "Please fill in all required fields." });
       return;
     }
     setIsSubmitting(true);
     try {
       const payload = {
-        achievements,
+        tasks_completed: tasksCompleted,
+        work_impact: workImpact,
+        time_taken: timeTaken,
         repo_link: repoLink || undefined,
         date: selectedDate,
       };
@@ -150,7 +160,9 @@ export default function TaskSheetPage() {
 
   const handleEditEntry = (entry: TaskSheetEntry) => {
     setSelectedDate(entry.date);
-    setAchievements(entry.achievements);
+    setTasksCompleted(entry.tasks_completed);
+    setWorkImpact(entry.work_impact);
+    setTimeTaken(entry.time_taken);
     setRepoLink(entry.repo_link || "");
     setIsUpdate(true);
     setEditingEntryId(entry.id);
@@ -173,7 +185,9 @@ export default function TaskSheetPage() {
     }
     if (editingEntryId === entry.id) {
       setEditingEntryId(null);
-      setAchievements("");
+      setTasksCompleted("");
+      setWorkImpact("");
+      setTimeTaken("");
       setRepoLink("");
       setIsUpdate(false);
     }
@@ -219,10 +233,9 @@ export default function TaskSheetPage() {
     const rowPaddingY = 12;
     const lineHeight = 20;
     const headerHeight = 48;
-    const colWidths = [260, 700];
-    const headers = ["Employee Name", "Entry"];
+    const colWidths = [180, 320, 320, 140];
+    const headers = ["Name", "Tasks Completed", "Impact / Usefulness", "Time Taken"];
     const tableWidth = colWidths.reduce((a, b) => a + b, 0);
-    const dividerX = padding + colWidths[0];
     const width = padding * 2 + tableWidth;
 
     const scratch = document.createElement("canvas");
@@ -233,9 +246,11 @@ export default function TaskSheetPage() {
     const computedRows = rows.map((row) => {
       const wrapped = [
         getWrappedLines(sctx, String(row.user_name || "-"), colWidths[0] - 20),
-        getWrappedLines(sctx, String(row.achievements || "-"), colWidths[1] - 20),
+        getWrappedLines(sctx, String(row.tasks_completed || "-"), colWidths[1] - 20),
+        getWrappedLines(sctx, String(row.work_impact || "-"), colWidths[2] - 20),
+        getWrappedLines(sctx, String(row.time_taken || "-"), colWidths[3] - 20),
       ];
-      const maxLines = Math.max(wrapped[0].length, wrapped[1].length);
+      const maxLines = Math.max(...wrapped.map(w => w.length));
       const height = rowPaddingY * 2 + maxLines * lineHeight;
       return { wrapped, height };
     });
@@ -272,43 +287,37 @@ export default function TaskSheetPage() {
     ctx.strokeRect(padding, tableTop, tableWidth, headerHeight);
 
     ctx.fillStyle = "#0f172a";
-    ctx.font = "700 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.font = "700 14px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
     headers.forEach((h, idx) => {
       ctx.fillText(h, x + 10, tableTop + 30);
       x += colWidths[idx];
     });
 
     let y = tableTop + headerHeight;
-    computedRows.forEach((rowData, rowIdx) => {
+    computedRows.forEach((rowData) => {
       let cellX = padding;
       ctx.strokeStyle = "#e2e8f0";
       ctx.strokeRect(padding, y, tableWidth, rowData.height);
 
       rowData.wrapped.forEach((lines, colIdx) => {
         ctx.fillStyle = "#0f172a";
-        ctx.font = "600 15px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        ctx.font = "400 14px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
         lines.forEach((line, lineIdx) => {
           ctx.fillText(line, cellX + 10, y + rowPaddingY + 16 + lineIdx * lineHeight);
         });
+
+        // Vertical dividers
+        if (colIdx < colWidths.length - 1) {
+          ctx.beginPath();
+          ctx.moveTo(cellX + colWidths[colIdx], y);
+          ctx.lineTo(cellX + colWidths[colIdx], y + rowData.height);
+          ctx.stroke();
+        }
         cellX += colWidths[colIdx];
       });
 
       y += rowData.height;
-      if (rowIdx < computedRows.length - 1) {
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(padding + tableWidth, y);
-        ctx.stroke();
-      }
     });
-
-    // Match inner divider to table outer border style.
-    ctx.beginPath();
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
-    ctx.moveTo(dividerX + 0.5, tableTop);
-    ctx.lineTo(dividerX + 0.5, tableTop + headerHeight + bodyHeight);
-    ctx.stroke();
 
     return canvas;
   };
@@ -357,7 +366,7 @@ export default function TaskSheetPage() {
         <div className="rounded-2xl p-6 md:p-8 shadow-sm lighthouse-card">
           <div className="flex items-center gap-3 mb-6">
             <Swords size={24} className="lighthouse-accent" />
-            <h3 className="text-xl font-bold text-[#2B124C] dark:text-purple-100">Log Your Operational Victories</h3>
+            <h3 className="text-xl font-bold text-[#2B124C] dark:text-purple-100">Daily Impact Log</h3>
           </div>
 
           <div className="mb-5 flex items-center gap-2">
@@ -378,18 +387,47 @@ export default function TaskSheetPage() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Operational Victories *</label>
-              <textarea value={achievements} onChange={(e) => setAchievements(e.target.value)} placeholder="Describe your achievements, learnings, and progress today..." className="w-full min-h-[140px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input" maxLength={1000} />
-              <div className="mt-1 text-right text-xs font-medium text-[#854F6C] dark:text-purple-400">{achievements.length} / 1000 characters</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Tasks Completed *</label>
+                <textarea
+                  value={tasksCompleted}
+                  onChange={(e) => setTasksCompleted(e.target.value)}
+                  placeholder="What specific tasks were completed today?"
+                  className="w-full min-h-[100px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Usefulness / Impact *</label>
+                <textarea
+                  value={workImpact}
+                  onChange={(e) => setWorkImpact(e.target.value)}
+                  placeholder="How did this work help the company?"
+                  className="w-full min-h-[80px] p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Approximate Time Taken *</label>
+                <input
+                  type="text"
+                  value={timeTaken}
+                  onChange={(e) => setTimeTaken(e.target.value)}
+                  placeholder="e.g. 2 hours, Full day"
+                  className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input"
+                />
+              </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Direct Repository Link</label>
               <input type="url" value={repoLink} onChange={(e) => setRepoLink(e.target.value)} placeholder="https://github.com/..." className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input" />
             </div>
+
             <div className="pt-2">
-              <button type="submit" disabled={isSubmitting} className="w-full h-11 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90" style={{ background: "#522B5B" }}>
-                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : editingEntryId ? "Save Edited Entry" : isUpdate ? "Update Selected Date Log" : "Publish Strategic Log"}
+              <button type="submit" disabled={isSubmitting} className="w-full h-11 bg-primary text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90">
+                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : editingEntryId ? "Save Edited Entry" : isUpdate ? "Update Selected Date Log" : "Publish Daily Log"}
               </button>
             </div>
           </form>
@@ -415,14 +453,14 @@ export default function TaskSheetPage() {
                   onClick={handleDownloadPng}
                   disabled={isExportingPng}
                   className="h-8 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Download daily task sheet PNG"
+                  title="Download daily task sheet JPEG"
                 >
                   {isExportingPng ? (
                     <div className="h-3 w-3 rounded-full border-2 border-[#522B5B]/30 dark:border-white/20 border-t-[#522B5B] dark:border-t-white animate-spin" />
                   ) : (
                     <Download size={14} />
                   )}
-                  <span className="hidden sm:inline">{isExportingPng ? "Exporting..." : "Download"}</span>
+                  <span className="hidden sm:inline">{isExportingPng ? "Exporting..." : "Download Report"}</span>
                 </button>
               )}
             </div>
@@ -492,12 +530,23 @@ export default function TaskSheetPage() {
                     )}
                   </div>
 
-                  <div className="rounded-lg p-3 lighthouse-sub-card">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Task Log</p>
-                    <p className="text-sm text-[#2B124C] dark:text-purple-100 whitespace-pre-wrap">{entry.achievements}</p>
-                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-lg p-3 lighthouse-sub-card">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Tasks Completed</p>
+                      <p className="text-sm text-[#2B124C] dark:text-purple-100 whitespace-pre-wrap">{entry.tasks_completed}</p>
+                    </div>
 
-                  {entry.repo_link && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="rounded-lg p-3 lighthouse-sub-card">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Impact / Usefulness</p>
+                        <p className="text-sm text-[#2B124C] dark:text-purple-100 whitespace-pre-wrap">{entry.work_impact}</p>
+                      </div>
+                      <div className="rounded-lg p-3 lighthouse-sub-card">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-[#854F6C] dark:text-purple-400">Time Taken</p>
+                        <p className="text-sm text-[#2B124C] dark:text-purple-100 whitespace-pre-wrap">{entry.time_taken}</p>
+                      </div>
+                    </div>
+                  </div>                  {entry.repo_link && (
                     <a
                       href={entry.repo_link}
                       target="_blank"

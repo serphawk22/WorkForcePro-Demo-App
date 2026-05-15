@@ -2331,7 +2331,9 @@ export interface TaskSheetEntry {
   id: number;
   user_id: number;
   date: string;
-  achievements: string;
+  tasks_completed: string;
+  work_impact: string;
+  time_taken: string;
   repo_link?: string | null;
   created_at: string;
   user_name?: string | null;
@@ -2371,7 +2373,9 @@ export interface DailyTaskSheetReportRow {
   user_name: string;
   user_email: string;
   date: string;
-  achievements?: string | null;
+  tasks_completed?: string | null;
+  work_impact?: string | null;
+  time_taken?: string | null;
   repo_link?: string | null;
 }
 
@@ -2478,9 +2482,10 @@ export interface PersonalProjectEntry {
 
 // Task Sheet
 export async function submitTaskSheet(data: {
-  achievements: string;
+  tasks_completed: string;
+  work_impact: string;
+  time_taken: string;
   repo_link?: string;
-  ai_explanation?: string;
   date?: string; // YYYY-MM-DD; defaults to today if omitted
 }): Promise<ApiResponse<TaskSheetEntry>> {
   return apiFetch<TaskSheetEntry>("/my-space/task-sheet", {
@@ -2499,7 +2504,13 @@ export async function getAllTaskSheets(limit = 50): Promise<ApiResponse<TaskShee
 
 export async function updateTaskSheetEntry(
   entryId: number,
-  data: { achievements: string; repo_link?: string; ai_explanation?: string; date?: string }
+  data: {
+    tasks_completed: string;
+    work_impact: string;
+    time_taken: string;
+    repo_link?: string;
+    date?: string;
+  }
 ): Promise<ApiResponse<TaskSheetEntry>> {
   return apiFetch<TaskSheetEntry>(`/my-space/task-sheet/${entryId}`, {
     method: "PUT",

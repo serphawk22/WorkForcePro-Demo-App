@@ -93,7 +93,7 @@ export default function VisionaryCanvasPage() {
             <p className="text-sm mb-4 text-[#854F6C] dark:text-purple-400">What is that one &quot;moonshot&quot; project you dream of building? Capture it here.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Dream project is to..." rows={5} className="w-full p-3 rounded-xl text-sm focus:outline-none resize-y lighthouse-input" />
-              <button type="submit" disabled={isSubmitting} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#522B5B" }}>
+              <button type="submit" disabled={isSubmitting} className="w-full py-3 rounded-xl text-sm font-bold bg-primary text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60">
                 {isSubmitting ? "Saving..." : editingEntryId ? "Update Aspiration" : "Save Aspiration"}
               </button>
             </form>

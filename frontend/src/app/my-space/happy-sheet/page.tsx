@@ -672,8 +672,7 @@ export default function HappySheetPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full h-11 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90"
-                style={{ background: "#522B5B" }}
+                className="w-full h-11 bg-primary text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90"
               >
                 {isSubmitting
                   ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />

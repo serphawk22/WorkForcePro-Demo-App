@@ -160,7 +160,7 @@ export default function LearningCanvasPage() {
               <Folder size={18} className="text-[#D97706] dark:text-amber-400" />
               <h3 className="font-bold text-sm text-[#2B124C] dark:text-purple-100">My Projects</h3>
             </div>
-            <button onClick={() => setShowAddProject((v) => !v)} className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: "#522B5B" }}>
+            <button onClick={() => setShowAddProject((v) => !v)} className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-white">
               {showAddProject ? <X size={12} /> : <Plus size={12} />}{showAddProject ? "Cancel" : "Add Project"}
             </button>
           </div>
