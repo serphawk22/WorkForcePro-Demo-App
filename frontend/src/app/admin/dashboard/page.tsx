@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
+import { DashboardTicketWidget } from "@/components/admin/DashboardTicketWidget";
+import { DashboardTicketInsights } from "@/components/admin/DashboardTicketInsights";
 import { 
   Users, UserCheck, Calendar, Clock, AlertCircle, 
   ListTodo, Target, CalendarDays, Loader2, Award, Copy, ArrowRight,
@@ -466,6 +468,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </section>
+
+            {/* Ticket Management Widget */}
+            <DashboardTicketWidget />
+
+            <DashboardTicketInsights />
 
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {prioritySummaryCards.map((card) => (

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from sqlmodel import SQLModel, create_engine, Session
 from typing import Generator
 
-load_dotenv()
+load_dotenv(override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
