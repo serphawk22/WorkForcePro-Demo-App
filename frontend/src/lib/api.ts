@@ -2151,17 +2151,7 @@ export async function createSubtaskComment(
   });
 }
 
-/**
- * Create a comment on a task.
- */
-export async function createComment(
-  commentData: TaskCommentCreate
-): Promise<ApiResponse<TaskComment>> {
-  return apiFetch<TaskComment>(`/comments/`, {
-    method: "POST",
-    body: JSON.stringify(commentData),
-  });
-}
+
 
 export type { ApiResponse, LoginResponse, RegisterResponse };
 
