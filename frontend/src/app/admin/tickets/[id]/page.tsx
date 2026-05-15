@@ -249,11 +249,11 @@ export default function TicketDetailPage() {
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Estimated</p>
-                    <p className="text-2xl font-bold">{ticket.estimated_hours.toFixed(1)}h</p>
+                    <p className="text-2xl font-bold">{(ticket.estimated_hours ?? 0).toFixed(1)}h</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Logged</p>
-                    <p className="text-2xl font-bold text-blue-600">{ticket.actual_hours_logged.toFixed(1)}h</p>
+                    <p className="text-2xl font-bold text-blue-600">{(ticket.actual_hours_logged ?? 0).toFixed(1)}h</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Remaining</p>
