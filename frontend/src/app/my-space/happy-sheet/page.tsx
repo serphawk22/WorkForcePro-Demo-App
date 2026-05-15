@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
-import AiAssistantBlock from "@/components/my-space/AiAssistantBlock";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Brain, Pencil, Trash2 } from "lucide-react";
+import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Pencil, Trash2 } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import {
   submitHappySheet,
@@ -26,13 +25,11 @@ import {
   HappySheetStreakEntry,
   HappySheetWeeklyHighlightEntry,
   HappySheetLeaderboardEntry,
-  HappySheetAiInsights,
   getHappySheetAppreciations,
   addHappySheetAppreciation,
   getHappySheetStreaks,
   getHappySheetWeeklyHighlights,
   getHappySheetWeeklyLeaderboard,
-  getHappySheetWeeklyAiInsights,
 } from "@/lib/api";
 
 const AVATAR_COLORS = [
@@ -63,7 +60,6 @@ export default function HappySheetPage() {
   const [dreamsForSerphawk, setDreamsForSerphawk] = useState("");
   const [dreamsWithSerphawk, setDreamsWithSerphawk] = useState("");
   const [goalsWithoutGreedImpossible, setGoalsWithoutGreedImpossible] = useState("");
-  const [aiExplanation, setAiExplanation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdate, setIsUpdate] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
@@ -87,7 +83,6 @@ export default function HappySheetPage() {
   const [streakByUser, setStreakByUser] = useState<Record<number, HappySheetStreakEntry>>({});
   const [weeklyHighlights, setWeeklyHighlights] = useState<HappySheetWeeklyHighlightEntry[]>([]);
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<HappySheetLeaderboardEntry[]>([]);
-  const [aiInsights, setAiInsights] = useState<HappySheetAiInsights | null>(null);
 
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState<HappySheetEntry | null>(null);
@@ -143,11 +138,10 @@ export default function HappySheetPage() {
           return [entry.id, res.data || []] as const;
         })
       );
-      const [streakRes, highlightsRes, leaderboardRes, insightsRes] = await Promise.all([
+      const [streakRes, highlightsRes, leaderboardRes] = await Promise.all([
         getHappySheetStreaks(),
         getHappySheetWeeklyHighlights(),
         getHappySheetWeeklyLeaderboard(),
-        getHappySheetWeeklyAiInsights(),
       ]);
 
       setReactionsByEntry(Object.fromEntries(reactionPairs));
@@ -158,7 +152,6 @@ export default function HappySheetPage() {
       );
       setWeeklyHighlights(highlightsRes.data || []);
       setWeeklyLeaderboard(leaderboardRes.data || []);
-      setAiInsights(insightsRes.data || null);
     };
 
     load();
@@ -178,7 +171,6 @@ export default function HappySheetPage() {
           setDreamsForSerphawk(entry.goals_without_greed);
           setDreamsWithSerphawk(entry.dreams_supported);
           setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
-          setAiExplanation("");
           setIsUpdate(true);
         } else {
           setEditingEntryId(null);
@@ -187,7 +179,6 @@ export default function HappySheetPage() {
           setDreamsForSerphawk("");
           setDreamsWithSerphawk("");
           setGoalsWithoutGreedImpossible("");
-          setAiExplanation("");
           setIsUpdate(false);
         }
       }
@@ -215,8 +206,8 @@ export default function HappySheetPage() {
       whatMadeOthersHappy.trim() &&
       goalsWithoutGreedImpossible.trim();
 
-    if (!hasAllFields && !aiExplanation.trim()) {
-      showFloatingToast({ type: "error", message: "Fill all fields or talk to the AI Assistant." });
+    if (!hasAllFields) {
+      showFloatingToast({ type: "error", message: "Please fill all required fields." });
       return;
     }
     setIsSubmitting(true);
@@ -227,7 +218,6 @@ export default function HappySheetPage() {
         goals_without_greed: dreamsForSerphawk,
         dreams_supported: dreamsWithSerphawk,
         goals_without_greed_impossible: goalsWithoutGreedImpossible,
-        ai_explanation: aiExplanation.trim() || undefined,
         date: selectedDate,
       };
       const res = editingEntryId
@@ -244,9 +234,7 @@ export default function HappySheetPage() {
           setDreamsForSerphawk("");
           setDreamsWithSerphawk("");
           setGoalsWithoutGreedImpossible("");
-          setAiExplanation("");
         }
-        // Refresh filtered view if active
         if (logFilterDate === selectedDate) {
           const r2 = await getTeamHappySheetsByDate(logFilterDate);
           if (r2.data) setFilteredTeam(r2.data);
@@ -272,7 +260,6 @@ export default function HappySheetPage() {
     setDreamsForSerphawk(entry.goals_without_greed);
     setDreamsWithSerphawk(entry.dreams_supported);
     setGoalsWithoutGreedImpossible(entry.goals_without_greed_impossible || "");
-    setAiExplanation("");
     setIsUpdate(true);
     showFloatingToast({ type: "success", message: "Entry loaded for editing." });
   };
@@ -300,7 +287,6 @@ export default function HappySheetPage() {
       setDreamsForSerphawk("");
       setDreamsWithSerphawk("");
       setGoalsWithoutGreedImpossible("");
-      setAiExplanation("");
     }
 
     if (logFilterDate === entry.date) {
@@ -630,20 +616,6 @@ export default function HappySheetPage() {
                 </div>
               )}
             </div>
-            <div className="pt-2 border-t border-slate-200/70 dark:border-white/10">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[#2B124C] dark:text-purple-100 mb-2">
-                <Brain size={14} /> AI Insights
-              </div>
-              {aiInsights ? (
-                <ul className="space-y-1 text-xs text-[#522B5B] dark:text-purple-200">
-                  {aiInsights.bullets.map((b, i) => (
-                    <li key={i}>• {b}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-[#854F6C] dark:text-purple-300">Insights are generating...</p>
-              )}
-            </div>
           </div>
         </div>
 
@@ -679,7 +651,6 @@ export default function HappySheetPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <AiAssistantBlock value={aiExplanation} onChange={setAiExplanation} />
             {([
               { label: "What Made You Happy? *", value: whatMadeYouHappy, set: setWhatMadeYouHappy, placeholder: "Share your moments of joy..." },
               { label: "What Made Others Happy? *", value: whatMadeOthersHappy, set: setWhatMadeOthersHappy, placeholder: "How did you brighten someone's day?" },

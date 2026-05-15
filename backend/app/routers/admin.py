@@ -351,8 +351,9 @@ async def delete_user(
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Permanently delete a user from the database (admin only).
-    WARNING: This will also delete all associated records (tasks, attendance, etc.)
+    Soft delete a user from the database (admin only).
+    This deactivates the user so their data remains visible for historical purposes,
+    instead of permanently deleting all associated records.
     """
     try:
         statement = select(User).where(
@@ -375,124 +376,13 @@ async def delete_user(
         
         user_email = user.email
         
-        # Delete all related records
-        # 1. Delete subtasks assigned to or created by this user
-        try:
-            subtasks = session.exec(select(Subtask).where(
-                (Subtask.assigned_to == user_id) | (Subtask.assigned_by == user_id)
-            )).all()
-            for subtask in subtasks:
-                session.delete(subtask)
-        except Exception:
-            pass
+        # Soft delete: deactivate the user account so their data is preserved.
+        user.is_active = False
         
-        # 2. Delete task comments by this user
-        try:
-            comments = session.exec(select(TaskComment).where(TaskComment.user_id == user_id)).all()
-            for comment in comments:
-                session.delete(comment)
-        except Exception:
-            pass
-        
-        # 3. Delete tasks assigned to or created by this user
-        try:
-            tasks = session.exec(select(Task).where(
-                (Task.assigned_to == user_id) | (Task.assigned_by == user_id)
-            )).all()
-            for task in tasks:
-                # First delete any subtasks for this task
-                task_subtasks = session.exec(select(Subtask).where(Subtask.task_id == task.id)).all()
-                for st in task_subtasks:
-                    session.delete(st)
-                # Then delete task comments
-                task_comments = session.exec(select(TaskComment).where(TaskComment.task_id == task.id)).all()
-                for tc in task_comments:
-                    session.delete(tc)
-                session.delete(task)
-        except Exception:
-            pass
-        
-        # 4. Delete attendance records
-        try:
-            attendance_records = session.exec(select(Attendance).where(Attendance.user_id == user_id)).all()
-            for record in attendance_records:
-                session.delete(record)
-        except Exception:
-            pass
-        
-        # 5. Delete leave requests
-        try:
-            leave_requests = session.exec(select(LeaveRequest).where(LeaveRequest.user_id == user_id)).all()
-            for leave in leave_requests:
-                session.delete(leave)
-        except Exception:
-            pass
-        
-        # 6. Delete notifications
-        try:
-            notifications = session.exec(select(Notification).where(Notification.user_id == user_id)).all()
-            for notification in notifications:
-                session.delete(notification)
-        except Exception:
-            pass
-        
-        # 7. Delete payroll records (uses employee_id, not user_id)
-        try:
-            payrolls = session.exec(select(Payroll).where(Payroll.employee_id == user_id)).all()
-            for payroll in payrolls:
-                session.delete(payroll)
-        except Exception:
-            pass
-        
-        # 8. Delete my-space records (TaskSheet, HappySheet, DreamProject, LearningFocus, PersonalProject)
-        try:
-            task_sheets = session.exec(select(TaskSheet).where(TaskSheet.user_id == user_id)).all()
-            for ts in task_sheets:
-                session.delete(ts)
-        except Exception:
-            pass
-        
-        try:
-            happy_sheets = session.exec(select(HappySheet).where(HappySheet.user_id == user_id)).all()
-            for hs in happy_sheets:
-                session.delete(hs)
-        except Exception:
-            pass
-        
-        # 8b. Delete happy sheet streaks (has foreign key to users)
-        try:
-            happy_sheet_streaks = session.exec(select(HappySheetStreak).where(HappySheetStreak.user_id == user_id)).all()
-            for hss in happy_sheet_streaks:
-                session.delete(hss)
-        except Exception:
-            pass
-        
-        try:
-            dream_projects = session.exec(select(DreamProject).where(DreamProject.user_id == user_id)).all()
-            for dp in dream_projects:
-                session.delete(dp)
-        except Exception:
-            pass
-        
-        try:
-            learning_focuses = session.exec(select(LearningFocus).where(LearningFocus.user_id == user_id)).all()
-            for lf in learning_focuses:
-                session.delete(lf)
-        except Exception:
-            pass
-        
-        try:
-            personal_projects = session.exec(select(PersonalProject).where(PersonalProject.user_id == user_id)).all()
-            for pp in personal_projects:
-                session.delete(pp)
-        except Exception:
-            pass
-        
-        # Finally, delete the user
-        session.delete(user)
+        session.add(user)
         session.commit()
         
-        return {"message": f"User {user_email} has been permanently deleted along with all associated data"}
+        return {"message": f"User {user_email} has been deactivated and removed from active lists, but their data remains intact"}
     except HTTPException:
         raise
     except Exception as e:
