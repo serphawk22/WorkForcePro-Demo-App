@@ -98,8 +98,8 @@ async def _ai_fill_task_sheet(explanation: str) -> dict:
                     "role": "system",
                     "content": (
                         "You convert a user's explanation into a task sheet JSON object. "
-                        "Return only JSON: {\"achievements\": string, \"repo_link\": string|null}. "
-                        "Keep achievements concise and factual."
+                        "Return only JSON: {\"tasks_completed\": string, \"work_impact\": string, \"time_taken\": string, \"repo_link\": string|null}. "
+                        "Keep tasks_completed concise and factual. work_impact should describe the value added. time_taken should be an estimate like '2 hours'."
                     ),
                 },
                 {"role": "user", "content": text},
@@ -109,11 +109,23 @@ async def _ai_fill_task_sheet(explanation: str) -> dict:
         )
         content = _strip_markdown_fences(response.choices[0].message.content or "")
         parsed = json.loads(content)
-        achievements = _strip_text(parsed.get("achievements")) or fallback["achievements"]
+        tasks_completed = _strip_text(parsed.get("tasks_completed") or parsed.get("achievements")) or fallback["achievements"]
+        work_impact = _strip_text(parsed.get("work_impact")) or "Derived from AI explanation"
+        time_taken = _strip_text(parsed.get("time_taken")) or "N/A"
         repo_link = _strip_text(parsed.get("repo_link")) or fallback["repo_link"]
-        return {"achievements": achievements, "repo_link": repo_link}
+        return {
+            "tasks_completed": tasks_completed,
+            "work_impact": work_impact,
+            "time_taken": time_taken,
+            "repo_link": repo_link
+        }
     except Exception:
-        return fallback
+        return {
+            "tasks_completed": fallback["achievements"],
+            "work_impact": "Migrated from AI explanation",
+            "time_taken": "N/A",
+            "repo_link": fallback["repo_link"]
+        }
 
 
 async def _ai_fill_happy_sheet(explanation: str) -> dict:
@@ -221,26 +233,34 @@ async def create_task_sheet(
     current_user: User = Depends(get_current_user),
 ):
     """Submit or update a task sheet for the given date (upsert). Defaults to today."""
-    achievements = _strip_text(sheet_data.achievements)
+    tasks_completed = _strip_text(sheet_data.tasks_completed)
+    work_impact = _strip_text(sheet_data.work_impact)
+    time_taken = _strip_text(sheet_data.time_taken)
     repo_link = _strip_text(sheet_data.repo_link)
     ai_explanation = _strip_text(sheet_data.ai_explanation)
 
-    if ai_explanation and (not achievements or not repo_link):
+    if ai_explanation and (not tasks_completed or not work_impact or not time_taken):
         ai_data = await _ai_fill_task_sheet(ai_explanation)
-        if not achievements:
-            achievements = _strip_text(ai_data.get("achievements"))
+        if not tasks_completed:
+            tasks_completed = _strip_text(ai_data.get("tasks_completed"))
+        if not work_impact:
+            work_impact = _strip_text(ai_data.get("work_impact"))
+        if not time_taken:
+            time_taken = _strip_text(ai_data.get("time_taken"))
         if not repo_link:
             repo_link = _strip_text(ai_data.get("repo_link"))
 
-    if not achievements:
-        raise HTTPException(status_code=400, detail="Please provide achievements or an AI explanation.")
+    if not all([tasks_completed, work_impact, time_taken]):
+        raise HTTPException(status_code=400, detail="Please provide all required fields or an AI explanation.")
 
     target_date = sheet_data.date if sheet_data.date else DateType.today()
     existing = session.exec(
         select(TaskSheet).where(TaskSheet.user_id == current_user.id, TaskSheet.date == target_date)
     ).first()
     if existing:
-        existing.achievements = achievements
+        existing.tasks_completed = tasks_completed
+        existing.work_impact = work_impact
+        existing.time_taken = time_taken
         existing.repo_link = repo_link or None
         session.add(existing)
         session.commit()
@@ -256,7 +276,9 @@ async def create_task_sheet(
     task_sheet = TaskSheet(
         user_id=current_user.id,
         date=target_date,
-        achievements=achievements,
+        tasks_completed=tasks_completed,
+        work_impact=work_impact,
+        time_taken=time_taken,
         repo_link=repo_link or None,
     )
     session.add(task_sheet)
@@ -311,19 +333,25 @@ async def update_task_sheet_entry(
     if entry.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this entry")
 
-    achievements = _strip_text(sheet_data.achievements)
+    tasks_completed = _strip_text(sheet_data.tasks_completed)
+    work_impact = _strip_text(sheet_data.work_impact)
+    time_taken = _strip_text(sheet_data.time_taken)
     repo_link = _strip_text(sheet_data.repo_link)
     ai_explanation = _strip_text(sheet_data.ai_explanation)
 
-    if ai_explanation and (not achievements or not repo_link):
+    if ai_explanation and (not tasks_completed or not work_impact or not time_taken):
         ai_data = await _ai_fill_task_sheet(ai_explanation)
-        if not achievements:
-            achievements = _strip_text(ai_data.get("achievements"))
+        if not tasks_completed:
+            tasks_completed = _strip_text(ai_data.get("tasks_completed"))
+        if not work_impact:
+            work_impact = _strip_text(ai_data.get("work_impact"))
+        if not time_taken:
+            time_taken = _strip_text(ai_data.get("time_taken"))
         if not repo_link:
             repo_link = _strip_text(ai_data.get("repo_link"))
 
-    if not achievements:
-        raise HTTPException(status_code=400, detail="Please provide achievements or an AI explanation.")
+    if not all([tasks_completed, work_impact, time_taken]):
+        raise HTTPException(status_code=400, detail="Please provide all required fields or an AI explanation.")
 
     target_date = sheet_data.date if sheet_data.date else entry.date
     duplicate = session.exec(
@@ -337,7 +365,9 @@ async def update_task_sheet_entry(
         raise HTTPException(status_code=400, detail="Task sheet already exists for this date")
 
     entry.date = target_date
-    entry.achievements = achievements
+    entry.tasks_completed = tasks_completed
+    entry.work_impact = work_impact
+    entry.time_taken = time_taken
     entry.repo_link = repo_link or None
     session.add(entry)
     session.commit()
@@ -1302,7 +1332,9 @@ async def get_daily_task_sheet_report(
             user_name=user.name,
             user_email=user.email,
             date=target_date,
-            achievements=sheet.achievements if sheet else None,
+            tasks_completed=sheet.tasks_completed if sheet else None,
+            work_impact=sheet.work_impact if sheet else None,
+            time_taken=sheet.time_taken if sheet else None,
             repo_link=sheet.repo_link if sheet else None,
         )
         for user, sheet in results
