@@ -280,6 +280,7 @@ async def create_task_sheet(
         work_impact=work_impact,
         time_taken=time_taken,
         repo_link=repo_link or None,
+        organization_id=getattr(current_user, "organization_id", None)
     )
     session.add(task_sheet)
     session.commit()
@@ -408,6 +409,26 @@ async def get_all_task_sheets(
     """Get all task sheets (visible to all authenticated users)."""
     results = session.exec(
         select(TaskSheet, User).join(User).order_by(TaskSheet.date.desc()).limit(limit)
+    ).all()
+    return [
+        TaskSheetWithUser(**sheet.model_dump(), user_name=user.name, user_email=user.email)
+        for sheet, user in results
+    ]
+
+
+@router.get("/task-sheet/me", response_model=List[TaskSheetWithUser])
+async def get_my_task_sheets(
+    limit: int = 50,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get task sheets only for the current user."""
+    results = session.exec(
+        select(TaskSheet, User)
+        .join(User)
+        .where(TaskSheet.user_id == current_user.id)
+        .order_by(TaskSheet.date.desc())
+        .limit(limit)
     ).all()
     return [
         TaskSheetWithUser(**sheet.model_dump(), user_name=user.name, user_email=user.email)
@@ -632,6 +653,26 @@ async def get_team_happy_sheets(
             entry["user_email"] = user.email
             latest_per_user.append(HappySheetWithUser(**entry))
     return latest_per_user
+
+
+@router.get("/happy-sheet/me", response_model=List[HappySheetWithUser])
+async def get_my_happy_sheets(
+    limit: int = 50,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get happy sheets only for the current user."""
+    results = session.exec(
+        select(HappySheet, User)
+        .join(User)
+        .where(HappySheet.user_id == current_user.id)
+        .order_by(HappySheet.date.desc())
+        .limit(limit)
+    ).all()
+    return [
+        HappySheetWithUser(**sheet.model_dump(), user_name=user.name, user_email=user.email)
+        for sheet, user in results
+    ]
 
 
 @router.get("/happy-sheet/all", response_model=List[HappySheetWithUser])
