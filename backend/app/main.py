@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         return
 
     if is_sqlite:
-        print("✅ SQLite dev: skipping PostgreSQL-only migrations (tables from SQLModel metadata)")
+        print("[SUCCESS] SQLite dev: skipping PostgreSQL-only migrations (tables from SQLModel metadata)")
     from sqlalchemy import text
 
     if not is_sqlite:
@@ -110,9 +110,9 @@ async def lifespan(app: FastAPI):
                     WHERE public_id IS NULL;
                 """))
                 conn.commit()
-                print("✅ Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
+                print("[SUCCESS] Database migrations completed (approved_at, approved_by, public_id, taskstatus enum)")
             except Exception as e:
-                print(f"⚠️ Migration note: {e}")
+                print(f"[WARNING] Migration note: {e}")
 
     if not is_sqlite:
         # Additional migrations — each runs in its own connection so one failure doesn't abort others
@@ -260,7 +260,7 @@ async def lifespan(app: FastAPI):
                     conn.commit()
             except Exception:
                 pass  # Already exists or syntax error on non-Postgres
-        print("✅ Additional migrations complete")
+        print("[SUCCESS] Additional migrations complete")
 
     if not is_sqlite:
         # Add workspace FK only if missing
@@ -355,9 +355,9 @@ async def lifespan(app: FastAPI):
                     "CREATE INDEX IF NOT EXISTS ix_task_instances_task_id ON task_instances (task_id);"
                 ))
                 conn.commit()
-            print("✅ task_instances table ready")
+            print("[SUCCESS] task_instances table ready")
         except Exception as e:
-            print(f"⚠️ task_instances migration note: {e}")
+            print(f"[WARNING] task_instances migration note: {e}")
 
         # weekly_progress + weekly_comments + notifications.weekly_progress_id
         try:
@@ -394,9 +394,9 @@ async def lifespan(app: FastAPI):
                     "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS weekly_progress_id INTEGER REFERENCES weekly_progress(id) ON DELETE SET NULL;"
                 ))
                 conn.commit()
-            print("✅ weekly_progress tables ready")
+            print("[SUCCESS] weekly_progress tables ready")
         except Exception as e:
-            print(f"⚠️ weekly_progress migration note: {e}")
+            print(f"[WARNING] weekly_progress migration note: {e}")
     
     # Seed default admin account
     from app.models import User, UserRole, Workspace, Organization
@@ -440,7 +440,7 @@ async def lifespan(app: FastAPI):
             )
             session.add(admin_user)
             session.commit()
-            print(f"✅ Default admin account created: {admin_email} / admin")
+            print(f"[SUCCESS] Default admin account created: {admin_email} / admin")
         else:
             # Ensure admin is approved and active
             if existing_admin.status != "APPROVED" or not existing_admin.is_active:
@@ -450,9 +450,9 @@ async def lifespan(app: FastAPI):
                     existing_admin.organization_id = default_org.id
                 session.add(existing_admin)
                 session.commit()
-                print(f"✅ Admin account updated to APPROVED status: {admin_email}")
+                print(f"[SUCCESS] Admin account updated to APPROVED status: {admin_email}")
             else:
-                print(f"✅ Admin account already exists: {admin_email}")
+                print(f"[SUCCESS] Admin account already exists: {admin_email}")
 
         # Backfill users organization_id
         orgless_users = session.exec(select(User).where(User.organization_id.is_(None))).all()
@@ -525,7 +525,7 @@ async def lifespan(app: FastAPI):
         try:
             session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
             session.commit()
-            print("✅ admin_queries.assigned_to column added")
+            print("[SUCCESS] admin_queries.assigned_to column added")
         except Exception:
             session.rollback()
 
