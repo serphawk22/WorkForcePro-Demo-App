@@ -870,12 +870,17 @@ class TaskSheet(SQLModel, table=True):
     organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     date: DateType = Field(default_factory=DateType.today)
-    achievements: str = Field(max_length=1000)
+    tasks_completed: str = Field(sa_column=Column(Text, nullable=False))
+    work_impact: str = Field(sa_column=Column(Text, nullable=False))
+    time_taken: str = Field(max_length=100)
     repo_link: Optional[str] = Field(default=None, max_length=500)
+    achievements: Optional[str] = Field(default=None) # Legacy field, kept for safety
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TaskSheetCreate(SQLModel):
-    achievements: str = Field(max_length=1000)
+    tasks_completed: str
+    work_impact: str
+    time_taken: str
     repo_link: Optional[str] = None
     ai_explanation: Optional[str] = Field(default=None, max_length=4000)
     date: Optional[DateType] = None  # if None, defaults to today on the backend
@@ -885,7 +890,9 @@ class TaskSheetRead(SQLModel):
     organization_id: Optional[int] = None
     user_id: int
     date: DateType
-    achievements: str
+    tasks_completed: str
+    work_impact: str
+    time_taken: str
     repo_link: Optional[str]
     created_at: datetime
 
@@ -1287,7 +1294,9 @@ class DailyTaskSheetReportRow(SQLModel):
     user_name: str
     user_email: str
     date: DateType
-    achievements: Optional[str] = None
+    tasks_completed: Optional[str] = None
+    work_impact: Optional[str] = None
+    time_taken: Optional[str] = None
     repo_link: Optional[str] = None
 
 

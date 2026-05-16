@@ -181,7 +181,7 @@ export default function LearningCanvasPage() {
               </div>
               <input type="url" value={newImageUrl} onChange={(e) => setNewImageUrl(e.target.value)} placeholder="Image URL (optional)" className="w-full h-9 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
               <textarea value={newWriteup} onChange={(e) => setNewWriteup(e.target.value)} placeholder="Writeup (optional)" rows={3} className="w-full p-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
-              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60 w-full md:w-auto" style={{ background: "#D97706" }}>{isAddingProject ? "Saving..." : editingProjectId ? "Update" : "Add"}</button>
+              <button type="submit" disabled={isAddingProject} className="h-9 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-60 w-full md:w-auto bg-primary">{isAddingProject ? "Saving..." : editingProjectId ? "Update" : "Add"}</button>
             </form>
           )}
           {isLoadingProjects ? (
@@ -236,7 +236,7 @@ export default function LearningCanvasPage() {
             <form onSubmit={handleSubmitFocus} className="space-y-4">
               <p className="text-xs text-[#854F6C] dark:text-purple-400">What are you reading or learning right now?</p>
               <input type="text" value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="Learning code igniter..." className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none lighthouse-input" />
-              <button type="submit" disabled={isSubmittingFocus} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: "#D97706" }}>{isSubmittingFocus ? "Saving..." : editingFocusId ? "Update Focus" : "Share Focus"}</button>
+              <button type="submit" disabled={isSubmittingFocus} className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-widest uppercase hover:opacity-90 transition-opacity disabled:opacity-60 bg-primary">{isSubmittingFocus ? "Saving..." : editingFocusId ? "Update Focus" : "Share Focus"}</button>
             </form>
           </div>
           <div>
