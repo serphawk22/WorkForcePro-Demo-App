@@ -425,10 +425,39 @@ export default function TaskSheetPage() {
               <input type="url" value={repoLink} onChange={(e) => setRepoLink(e.target.value)} placeholder="https://github.com/..." className="w-full h-10 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input" />
             </div>
 
-            <div className="pt-2">
-              <button type="submit" disabled={isSubmitting} className="w-full h-11 bg-primary text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90">
-                {isSubmitting ? <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : editingEntryId ? "Save Edited Entry" : isUpdate ? "Update Selected Date Log" : "Publish Daily Log"}
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              <button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className="flex-1 h-11 bg-primary text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:opacity-90"
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                ) : editingEntryId ? (
+                  <>Save Changes</>
+                ) : isUpdate ? (
+                  <>Update Daily Log</>
+                ) : (
+                  <>Publish Daily Log</>
+                )}
               </button>
+
+              {(editingEntryId || isUpdate || tasksCompleted || workImpact || timeTaken || repoLink) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingEntryId(null);
+                    setIsUpdate(false);
+                    setTasksCompleted("");
+                    setWorkImpact("");
+                    setTimeTaken("");
+                    setRepoLink("");
+                  }}
+                  className="h-11 px-4 border border-slate-300/70 dark:border-white/10 text-[#522B5B] dark:text-purple-300 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-sm"
+                >
+                  {editingEntryId ? "Cancel Edit" : "Clear Form"}
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -510,7 +539,7 @@ export default function TaskSheetPage() {
                         {new Date(entry.date + "T00:00:00").toLocaleDateString()}
                       </div>
                     </div>
-                    {entry.user_id === user.id && (
+                    {(entry.user_id === user?.id || user?.role === "admin") && (
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
