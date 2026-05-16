@@ -251,6 +251,11 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)',
         'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS writeup VARCHAR(5000)',
         'CREATE INDEX IF NOT EXISTS ix_personal_projects_stage ON personal_projects(stage)',
+        # Task sheet new columns
+        'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS tasks_completed TEXT',
+        'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS work_impact TEXT',
+        'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS time_taken VARCHAR(100)',
+        'ALTER TABLE task_sheets ALTER COLUMN achievements DROP NOT NULL',
         ]
 
         for migration in additional_migrations:
@@ -258,7 +263,8 @@ async def lifespan(app: FastAPI):
                 with engine.connect() as conn:
                     conn.execute(text(migration))
                     conn.commit()
-            except Exception:
+            except Exception as e:
+                print(f"[ERROR] Migration failed: {migration} \nError: {e}")
                 pass  # Already exists or syntax error on non-Postgres
         print("[SUCCESS] Additional migrations complete")
 
