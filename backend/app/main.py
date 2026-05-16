@@ -251,11 +251,20 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)',
         'ALTER TABLE personal_projects ADD COLUMN IF NOT EXISTS writeup VARCHAR(5000)',
         'CREATE INDEX IF NOT EXISTS ix_personal_projects_stage ON personal_projects(stage)',
+        # Happy sheet new columns
+        "ALTER TABLE happy_sheets ADD COLUMN IF NOT EXISTS goals_without_greed_impossible TEXT DEFAULT ''",
+        "UPDATE happy_sheets SET goals_without_greed_impossible = '' WHERE goals_without_greed_impossible IS NULL",
+
         # Task sheet new columns
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS tasks_completed TEXT',
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS work_impact TEXT',
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS time_taken VARCHAR(100)',
         'ALTER TABLE task_sheets ALTER COLUMN achievements DROP NOT NULL',
+        
+        # Backfill task_sheets so Pydantic doesn't crash on NULL values
+        "UPDATE task_sheets SET tasks_completed = COALESCE(achievements, 'N/A') WHERE tasks_completed IS NULL",
+        "UPDATE task_sheets SET work_impact = 'Migrated from legacy achievements' WHERE work_impact IS NULL",
+        "UPDATE task_sheets SET time_taken = 'N/A' WHERE time_taken IS NULL",
         ]
 
         for migration in additional_migrations:
