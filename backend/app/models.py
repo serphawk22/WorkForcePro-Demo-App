@@ -537,7 +537,7 @@ class SubtaskCreate(SQLModel):
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=1000)
     assigned_to: int
-    assigned_by: int
+    assigned_by: Optional[int] = None
     priority: TaskPriority = Field(default=TaskPriority.medium)
     due_date: DateType
     parent_subtask_id: Optional[int] = None  # For creating nested subtasks
