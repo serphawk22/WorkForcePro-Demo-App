@@ -29,8 +29,37 @@ from app.models import (
 )
 from app.auth import get_current_user, get_current_admin_user, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
+from app.services.email_service import (
+    build_subtask_assignment_email,
+    get_employee_delivery_email,
+    send_email,
+)
 
 router = APIRouter(prefix="/tasks", tags=["Subtasks"])
+
+
+def _send_subtask_assignment_email(
+    user: User,
+    subtask: Subtask,
+    parent_task: Task,
+    assigner_name: str,
+) -> None:
+    recipient = get_employee_delivery_email(user)
+    if not recipient:
+        return
+    try:
+        subject, body = build_subtask_assignment_email(
+            user_name=user.name,
+            subtask_id=subtask.id,
+            subtask_title=subtask.title,
+            parent_task_id=parent_task.id,
+            parent_task_title=parent_task.title,
+            assigner_name=assigner_name,
+            due_date=subtask.due_date,
+        )
+        send_email(recipient, subject, body)
+    except Exception as exc:
+        print(f"[EMAIL] subtask assignment email failed for {recipient}: {exc}")
 
 
 @router.post("/subtasks/{subtask_id}/comments", response_model=SubtaskCommentRead, status_code=status.HTTP_201_CREATED)
@@ -223,6 +252,12 @@ async def create_subtask(
             type=NotificationType.SUBTASK_ASSIGNED,
             message=f"{current_user.name} assigned you a subtask: '{subtask.title}' under task #{task.id}",
             task_id=task.id
+        )
+        _send_subtask_assignment_email(
+            assignee,
+            subtask,
+            task,
+            reporter.name if reporter else current_user.name,
         )
 
     if assignment_alert_message:
@@ -545,6 +580,9 @@ async def update_subtask(
             message=f"New subtask assigned: '{subtask.title}' (Reassigned by {current_user.name})",
             task_id=subtask.parent_task_id
         )
+        new_assignee = session.get(User, subtask.assigned_to)
+        if new_assignee:
+            _send_subtask_assignment_email(new_assignee, subtask, parent_task, current_user.name)
 
     # Reload and refresh to ensure all fields are correctly populated for response
     session.refresh(subtask)

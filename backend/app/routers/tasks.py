@@ -33,16 +33,17 @@ from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
     SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus, Workspace,
-    SubtaskComment, TaskSheet, HappySheet,
+    SubtaskComment,
 )
 from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
 from app.services.email_service import (
-    build_missing_sheet_email,
     build_task_assignment_email,
+    get_employee_delivery_email,
     send_email,
 )
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
+from app.services.sheet_reminder_service import send_missing_sheet_reminders
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -83,7 +84,8 @@ def _clear_actionable_task_notifications(session: Session, task_id: int) -> None
 
 
 def _send_task_assignment_email(user: User, task: Task, assigner_name: Optional[str]) -> None:
-    if not user.email:
+    recipient = get_employee_delivery_email(user)
+    if not recipient:
         return
     try:
         subject, body = build_task_assignment_email(
@@ -91,10 +93,11 @@ def _send_task_assignment_email(user: User, task: Task, assigner_name: Optional[
             task_id=task.id,
             task_title=task.title,
             assigner_name=assigner_name,
+            due_date=task.due_date,
         )
-        send_email(user.email, subject, body)
+        send_email(recipient, subject, body)
     except Exception as exc:
-        print(f"[EMAIL] task assignment email failed for {user.email}: {exc}")
+        print(f"[EMAIL] task assignment email failed for {recipient}: {exc}")
 
 
 def _resolve_voice_content_type(raw_content_type: str, filename: Optional[str]) -> str:
@@ -714,38 +717,7 @@ async def send_task_and_happy_sheet_reminders(
     if not cron_ok and not admin_ok:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    today = date.today()
-    task_user_ids = set(session.exec(select(TaskSheet.user_id).where(TaskSheet.date == today)).scalars().all())
-    happy_user_ids = set(session.exec(select(HappySheet.user_id).where(HappySheet.date == today)).scalars().all())
-    users = session.exec(select(User).where(User.is_active == True)).all()
-
-    sent: list[str] = []
-    failed: list[str] = []
-    for user in users:
-        missing_task = user.id not in task_user_ids
-        missing_happy = user.id not in happy_user_ids
-        if not (missing_task or missing_happy):
-            continue
-        if not user.email:
-            failed.append(f"{user.id}: no email")
-            continue
-        subject, body = build_missing_sheet_email(
-            user_name=user.name,
-            missing_task_sheet=missing_task,
-            missing_happy_sheet=missing_happy,
-        )
-        try:
-            send_email(user.email, subject, body)
-            sent.append(user.email)
-        except Exception as exc:
-            failed.append(f"{user.email}: {exc}")
-
-    return {
-        "sent_count": len(sent),
-        "failed_count": len(failed),
-        "sent_emails": sent,
-        "failures": failed,
-    }
+    return send_missing_sheet_reminders(session, target_date=date.today())
 
 
 @router.patch("/{task_id}/status", response_model=TaskRead)
