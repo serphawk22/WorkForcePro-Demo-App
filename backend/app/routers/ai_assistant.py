@@ -21,6 +21,7 @@ from app.models import (
 from app.auth import get_current_admin_user
 from app.routers.tasks import generate_public_id
 from app.routers.notifications import create_notification
+from app.services.email_service import build_task_assignment_email, get_employee_delivery_email, send_email
 from app.services.recurring_tasks import ensure_instances_for_task
 
 router = APIRouter(prefix="/api/ai-assistant", tags=["AI Assistant"])
@@ -320,6 +321,19 @@ async def create_task_from_ai(
             message=f"New task assigned: Task #{task.id} - {task.title}",
             task_id=task.id,
         )
+        recipient = get_employee_delivery_email(assignee)
+        if recipient:
+            try:
+                subject, body = build_task_assignment_email(
+                    user_name=assignee.name,
+                    task_id=task.id,
+                    task_title=task.title,
+                    assigner_name=admin.name,
+                    due_date=task.due_date,
+                )
+                send_email(recipient, subject, body)
+            except Exception as exc:
+                print(f"[EMAIL] AI task assignment email failed for {recipient}: {exc}")
 
     return ConfirmTaskResponse(
         success=True,
