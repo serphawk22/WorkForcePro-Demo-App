@@ -46,6 +46,7 @@ def _send_subtask_assignment_email(
 ) -> None:
     recipient = get_employee_delivery_email(user)
     if not recipient:
+        print(f"[EMAIL] subtask assignment skipped; no mapped email for {user.name}")
         return
     try:
         subject, body = build_subtask_assignment_email(
@@ -175,7 +176,7 @@ async def create_subtask(
         )
 
     requested_assignee_id = subtask_data.assigned_to
-    requested_reporter_id = subtask_data.assigned_by
+    requested_reporter_id = subtask_data.assigned_by or current_user.id
 
     reporter_stmt = select(User).where(User.id == requested_reporter_id)
     reporter = session.exec(reporter_stmt).first()
@@ -191,14 +192,6 @@ async def create_subtask(
             detail="Only admins can choose a different reporter"
         )
 
-    assignment_alert_message = None
-    if task.assigned_to and requested_assignee_id != task.assigned_to:
-        requested_assignee_id = task.assigned_to
-        assignment_alert_message = (
-            f"Assignment corrected automatically for subtask '{subtask_data.title}'. "
-            f"Because it belongs to task #{task.id}, it was assigned to that task's assignee."
-        )
-    
     # Assignee is mandatory for subtask creation.
     assignee_stmt = select(User).where(User.id == requested_assignee_id)
     assignee = session.exec(assignee_stmt).first()
@@ -260,15 +253,6 @@ async def create_subtask(
             reporter.name if reporter else current_user.name,
         )
 
-    if assignment_alert_message:
-        create_notification(
-            session=session,
-            user_id=current_user.id,
-            type=NotificationType.TASK_COMMENT,
-            message=assignment_alert_message,
-            task_id=task.id,
-        )
-    
     return subtask
 
 
