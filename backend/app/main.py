@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
 from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
+from app.services.weekly_sheet_scheduler import start_scheduler, stop_scheduler
 
 load_dotenv()
 
@@ -501,8 +502,10 @@ async def lifespan(app: FastAPI):
             if orphan_tasks:
                 session.commit()
     
+    start_scheduler()
     yield
     # Shutdown: cleanup if needed
+    stop_scheduler()
 
 
 app = FastAPI(
