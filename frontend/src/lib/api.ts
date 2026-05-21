@@ -285,7 +285,9 @@ export interface Task {
   flag_reason?: string | null;
   flagged_by?: number | null;
   flagged_at?: string | null;
+  comments?: string[];
 }
+
 
 export interface TaskCreate {
   title: string;
@@ -481,36 +483,8 @@ export interface Notification {
   type: string;
   message: string;
   task_id: number | null;
-  weekly_progress_id?: number | null;
   is_read: boolean;
   created_at: string;
-}
-
-// ==================== WEEKLY PROGRESS ====================
-
-export interface WeeklyComment {
-  id: number;
-  weekly_progress_id: number;
-  admin_id: number;
-  comment: string;
-  created_at: string;
-  admin_name?: string | null;
-}
-
-export interface WeeklyProgressEntry {
-  id: number;
-  user_id: number;
-  week_start_date: string;
-  description: string;
-  github_link: string | null;
-  deployed_link: string | null;
-  last_seen_comments_at: string | null;
-  created_at: string;
-  updated_at: string;
-  comments: WeeklyComment[];
-  has_unread_comments: boolean;
-  employee_name?: string | null;
-  employee_email?: string | null;
 }
 
 export interface OrganizationSettings {
@@ -520,59 +494,10 @@ export interface OrganizationSettings {
   logo?: string | null;
   theme?: string | null;
   timezone?: string | null;
-  weekly_progress_enabled_for_admin: boolean;
-  weekly_progress_enabled_for_employee: boolean;
   task_warning_stage_days: number;
   task_warning_comment_days: number;
   created_by?: number | null;
   created_at: string;
-}
-
-export async function getMyWeeklyProgress(): Promise<ApiResponse<WeeklyProgressEntry[]>> {
-  return apiFetch<WeeklyProgressEntry[]>("/weekly-progress/me");
-}
-
-export async function upsertMyWeeklyProgress(data: {
-  week_start_date: string;
-  description: string;
-  github_link?: string;
-  deployed_link?: string;
-}): Promise<ApiResponse<WeeklyProgressEntry>> {
-  return apiFetch<WeeklyProgressEntry>("/weekly-progress/me", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateMyWeeklyProgress(
-  entryId: number,
-  data: { description?: string; github_link?: string; deployed_link?: string }
-): Promise<ApiResponse<WeeklyProgressEntry>> {
-  return apiFetch<WeeklyProgressEntry>(`/weekly-progress/me/${entryId}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function markWeeklyCommentsSeen(entryId: number): Promise<ApiResponse<WeeklyProgressEntry>> {
-  return apiFetch<WeeklyProgressEntry>(`/weekly-progress/me/${entryId}/seen-comments`, {
-    method: "PATCH",
-  });
-}
-
-export async function getAdminWeeklyProgress(params?: {
-  week_start?: string;
-  start_date?: string;
-  end_date?: string;
-  employee_id?: number;
-}): Promise<ApiResponse<WeeklyProgressEntry[]>> {
-  const sp = new URLSearchParams();
-  if (params?.week_start) sp.append("week_start", params.week_start);
-  if (params?.start_date) sp.append("start_date", params.start_date);
-  if (params?.end_date) sp.append("end_date", params.end_date);
-  if (params?.employee_id != null) sp.append("employee_id", String(params.employee_id));
-  const q = sp.toString();
-  return apiFetch<WeeklyProgressEntry[]>(`/weekly-progress/admin${q ? `?${q}` : ""}`);
 }
 
 export async function getMyOrganizationSettings(): Promise<ApiResponse<OrganizationSettings>> {
@@ -580,38 +505,12 @@ export async function getMyOrganizationSettings(): Promise<ApiResponse<Organizat
 }
 
 export async function updateMyOrganizationSettings(data: {
-  weekly_progress_enabled_for_admin?: boolean;
-  weekly_progress_enabled_for_employee?: boolean;
   task_warning_stage_days?: number;
   task_warning_comment_days?: number;
 }): Promise<ApiResponse<OrganizationSettings>> {
   return apiFetch<OrganizationSettings>("/organizations/me", {
     method: "PUT",
     body: JSON.stringify(data),
-  });
-}
-
-export async function getAdminWeeklyByEmployee(userId: number): Promise<ApiResponse<WeeklyProgressEntry[]>> {
-  return apiFetch<WeeklyProgressEntry[]>(`/weekly-progress/admin/employee/${userId}`);
-}
-
-export async function postAdminWeeklyComment(
-  entryId: number,
-  comment: string
-): Promise<ApiResponse<WeeklyComment>> {
-  return apiFetch<WeeklyComment>(`/weekly-progress/admin/${entryId}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ comment }),
-  });
-}
-
-export async function postMyWeeklyComment(
-  entryId: number,
-  comment: string
-): Promise<ApiResponse<WeeklyComment>> {
-  return apiFetch<WeeklyComment>(`/weekly-progress/me/${entryId}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ comment }),
   });
 }
 
@@ -2379,15 +2278,6 @@ export interface DailyTaskSheetReportRow {
   repo_link?: string | null;
 }
 
-export interface WeeklyProgressReportRow {
-  user_id: number;
-  user_name: string;
-  user_email: string;
-  week_start_date: string;
-  description?: string | null;
-  github_link?: string | null;
-  deployed_link?: string | null;
-}
 
 export interface HappySheetReactionSummary {
   emoji: string;
@@ -2584,9 +2474,6 @@ export async function getAdminDailyTaskSheetReport(date: string): Promise<ApiRes
   return apiFetch<DailyTaskSheetReportRow[]>(`/my-space/task-sheet/admin/daily-report?date=${encodeURIComponent(date)}`);
 }
 
-export async function getAdminWeeklyProgressReport(weekStartDate: string): Promise<ApiResponse<WeeklyProgressReportRow[]>> {
-  return apiFetch<WeeklyProgressReportRow[]>(`/my-space/weekly-progress/admin/report?week_start_date=${encodeURIComponent(weekStartDate)}`);
-}
 
 export async function getHappySheetReactions(entryId: number): Promise<ApiResponse<HappySheetReactionSummary[]>> {
   return apiFetch<HappySheetReactionSummary[]>(`/my-space/happy-sheet/entry/${entryId}/reactions`);

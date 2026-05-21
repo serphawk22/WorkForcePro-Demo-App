@@ -19,6 +19,8 @@ import {
   upsertMyWeeklyProgress,
   DailyTaskSheetReportRow,
 } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Eye } from "lucide-react";
 
 const todayStr = () => {
   const now = new Date();

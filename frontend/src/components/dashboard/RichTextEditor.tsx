@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { ClipboardEvent, ReactNode } from "react";
 import { Bold, Italic, List, ListOrdered, RemoveFormatting, Underline } from "lucide-react";
-import { htmlToPlainText, sanitizeRichTextHtml } from "@/lib/weeklyProgress";
+import { htmlToPlainText, sanitizeRichTextHtml } from "@/lib/htmlUtils";
 
 interface RichTextEditorProps {
   value: string;
