@@ -83,7 +83,7 @@ export default function TaskSheetPage() {
     const day = d.getDay();
     const monday = new Date(d);
     monday.setDate(d.getDate() - ((day + 6) % 7));
-    monday.setHours(0, 0, 0, 0, 0);
+    monday.setHours(0, 0, 0, 0);
 
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
