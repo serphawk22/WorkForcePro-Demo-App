@@ -3,6 +3,7 @@ Weekly Sheet AI Generator for Lighthouse.
 """
 import os
 import json
+import logging
 from datetime import datetime, timezone, timedelta, date as DateType
 from typing import List, Optional
 
@@ -27,9 +28,113 @@ from app.models import (
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/api/my-space/weekly-sheet", tags=["Lighthouse Weekly Sheet"])
+logger = logging.getLogger(__name__)
 
 def monday_of_week(d: DateType) -> DateType:
     return d - timedelta(days=d.weekday())
+
+
+def _format_task_lines(tasks: List[dict], empty_message: str) -> str:
+    if not tasks:
+        return empty_message
+    return "\n".join(f"- {task.get('title') or 'Untitled task'}" for task in tasks)
+
+
+def _task_status_value(task: dict) -> str:
+    status_value = task.get("status")
+    return str(getattr(status_value, "value", status_value) or "").lower()
+
+
+def build_weekly_sheet_fallback(
+    week_start: DateType,
+    week_end: DateType,
+    attendance_data: dict,
+    task_data: List[dict],
+) -> dict:
+    """Build a useful weekly sheet when the AI provider is unavailable."""
+    completed_tasks = [
+        task for task in task_data
+        if task.get("completed") or _task_status_value(task) in {"submitted", "reviewing", "approved", "done", "completed"}
+    ]
+    pending_tasks = [task for task in task_data if task not in completed_tasks]
+    overdue_tasks = [
+        task for task in pending_tasks
+        if task.get("due_date") and str(task.get("due_date")) < str(week_end)
+    ]
+
+    total_attendance_hours = attendance_data.get("total_hours") or 0
+    days_logged = attendance_data.get("days_logged") or 0
+    estimated_hours = sum(task.get("estimated_hours") or 0 for task in task_data)
+    actual_task_hours = sum(task.get("actual_hours") or 0 for task in task_data)
+
+    if task_data:
+        summary = (
+            f"For the week of {week_start} to {week_end}, this sheet was prepared from the "
+            f"available task and attendance records. {len(completed_tasks)} of {len(task_data)} "
+            f"assigned tasks are marked complete, with {len(pending_tasks)} still pending."
+        )
+    else:
+        summary = (
+            f"For the week of {week_start} to {week_end}, no assigned task records were found. "
+            "This draft was created from the available attendance data and can be edited before submission."
+        )
+
+    blockers = (
+        _format_task_lines(overdue_tasks, "")
+        if overdue_tasks
+        else "No blockers were identified from the available task records."
+    )
+
+    priorities = pending_tasks[:3]
+
+    return {
+        "weekly_summary": summary,
+        "major_accomplishments": _format_task_lines(
+            completed_tasks,
+            "No completed tasks were recorded for this week."
+        ),
+        "tasks_completed": _format_task_lines(
+            completed_tasks,
+            "No completed tasks were recorded for this week."
+        ),
+        "pending_tasks": _format_task_lines(
+            pending_tasks,
+            "No pending tasks were found in the assigned task list."
+        ),
+        "blockers": blockers,
+        "productivity_insights": (
+            f"Attendance shows {total_attendance_hours:.2f} logged hours across {days_logged} day(s). "
+            f"Assigned tasks have {estimated_hours:.2f} estimated hours and {actual_task_hours:.2f} recorded actual hours."
+        ),
+        "time_utilization": (
+            f"Total attendance time logged this week is {total_attendance_hours:.2f} hours."
+        ),
+        "suggested_priorities": _format_task_lines(
+            priorities,
+            "Set clear priorities for next week and keep task records updated."
+        ),
+    }
+
+
+async def generate_weekly_sheet_content(
+    payload: str,
+    week_start: DateType,
+    week_end: DateType,
+    attendance_data: dict,
+    task_data: List[dict],
+) -> dict:
+    try:
+        ai_result = await call_openai_for_weekly_sheet(payload)
+        return {
+            **build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data),
+            **{key: value for key, value in ai_result.items() if value},
+        }
+    except HTTPException as exc:
+        logger.warning("Weekly sheet AI generation failed; using fallback content: %s", exc.detail)
+    except Exception as exc:
+        logger.warning("Weekly sheet AI generation failed; using fallback content: %s", exc)
+
+    return build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data)
 
 # ─── OpenAI helper ─────────────────────────────────────────────────────────────
 
@@ -61,7 +166,7 @@ async def call_openai_for_weekly_sheet(data_payload: str) -> dict:
         )
     
     from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=20.0)
 
     try:
         response = client.chat.completions.create(
@@ -170,7 +275,13 @@ async def generate_weekly_sheet(
         "tasks": task_data
     })
     
-    ai_result = await call_openai_for_weekly_sheet(payload)
+    ai_result = await generate_weekly_sheet_content(
+        payload,
+        week_start,
+        week_end,
+        attendance_data,
+        task_data,
+    )
     
     # Check if a draft exists
     existing = session.exec(
