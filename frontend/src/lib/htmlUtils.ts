@@ -1,5 +1,35 @@
 const SAFE_HREF_PATTERN = /^(https?:|mailto:|tel:)/i;
 
+export function normalizePointerLines(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+export function buildWeeklyDescription(
+  weeklyEntry: string,
+  highlightsRaw: string,
+  difficultiesRaw: string,
+): string {
+  const highlights = normalizePointerLines(highlightsRaw);
+  const difficulties = normalizePointerLines(difficultiesRaw);
+
+  const sections = [
+    `Weekly Entry:\n${weeklyEntry.trim()}`,
+    "",
+    "Highlights:",
+    ...(highlights.length > 0 ? highlights.map((item) => `- ${item}`) : ["- None"]),
+    "",
+    "Difficulties / Abnormalities:",
+    ...(difficulties.length > 0 ? difficulties.map((item) => `- ${item}`) : ["- None"]),
+  ];
+
+  return sections.join("\n");
+}
+
 export function htmlToPlainText(html: string): string {
   const source = (html || "").trim();
   if (!source) return "";

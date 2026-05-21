@@ -19,7 +19,7 @@ DEFAULT_EMPLOYEE_EMAILS = {
     "bhavani prasanth anupoju": "anupojubhavani9849@gmail.com",
     "kruti jadav": "krutipankajkumar@gmail.com",
     "n b rachana": "nbrachana26@gmail.com",
-    "paardhiv reddy tumma": "pardivreddy22@gmail.com",
+    "paardhiv reddy tumma": "paardhivreddy22@gmail.com",
     "ragavan e": "eragavan573@gmail.com",
     "rinu george": "rinugeorgep@gmail.com",
     "varshith": "varshivarshith4@gmail.com",
