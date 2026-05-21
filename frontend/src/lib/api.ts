@@ -487,6 +487,49 @@ export interface Notification {
   created_at: string;
 }
 
+// ==================== WEEKLY PROGRESS ====================
+
+export interface WeeklyComment {
+  id: number;
+  weekly_progress_id: number;
+  admin_id: number;
+  comment: string;
+  created_at: string;
+  admin_name?: string | null;
+}
+
+export interface WeeklyProgressEntry {
+  id: number;
+  user_id: number;
+  week_start_date: string;
+  description: string;
+  github_link: string | null;
+  deployed_link: string | null;
+  last_seen_comments_at: string | null;
+  created_at: string;
+  updated_at: string;
+  comments: WeeklyComment[];
+  has_unread_comments: boolean;
+  employee_name?: string | null;
+  employee_email?: string | null;
+}
+
+export async function getMyWeeklyProgress(): Promise<ApiResponse<WeeklyProgressEntry[]>> {
+  return apiFetch<WeeklyProgressEntry[]>("/weekly-progress/me");
+}
+
+export async function upsertMyWeeklyProgress(data: {
+  week_start_date: string;
+  description: string;
+  github_link?: string;
+  deployed_link?: string;
+}): Promise<ApiResponse<WeeklyProgressEntry>> {
+  return apiFetch<WeeklyProgressEntry>("/weekly-progress/me", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export interface OrganizationSettings {
   id: number;
   name: string;
