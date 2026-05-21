@@ -10,6 +10,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface WeeklySheet {
   id?: number;
@@ -23,6 +24,11 @@ interface WeeklySheet {
   time_utilization: string;
   suggested_priorities: string;
 }
+
+// This backend router is mounted at /api/my-space/weekly-sheet. In the browser,
+// getApiBaseUrl() returns the Next proxy prefix (/api), so both segments are needed.
+const weeklySheetEndpoint = (path: string) =>
+  `${getApiBaseUrl()}/api/my-space/weekly-sheet${path}`;
 
 export default function WeeklySheetGenerator() {
   const [sheet, setSheet] = useState<WeeklySheet | null>(null);
@@ -41,7 +47,7 @@ export default function WeeklySheetGenerator() {
   const fetchCurrentSheet = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/current", {
+      const res = await fetch(weeklySheetEndpoint("/current"), {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -60,7 +66,7 @@ export default function WeeklySheetGenerator() {
   const generateSheet = async () => {
     setGenerating(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/generate", {
+      const res = await fetch(weeklySheetEndpoint("/generate"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -82,7 +88,7 @@ export default function WeeklySheetGenerator() {
     if (!sheet) return;
     setSaving(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/save", {
+      const res = await fetch(weeklySheetEndpoint("/save"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
