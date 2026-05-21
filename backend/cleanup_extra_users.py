@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 from app.database import engine
 from app.models import (
     User, Attendance, Task, Subtask, LeaveRequest, 
-    Payroll, TaskSheet, HappySheet, WeeklyProgress,
+    Payroll, TaskSheet, HappySheet,
     DreamProject, LearningFocus, PersonalProject,
     TaskComment, Notification, HappySheetStreak
 )
@@ -63,16 +63,6 @@ def cleanup_extra_users():
             # 7. Payroll
             payrolls = session.exec(select(Payroll).where(Payroll.employee_id == user_id)).all()
             for p in payrolls: session.delete(p)
-
-            # 8. Weekly Progress
-            progress_entries = session.exec(select(WeeklyProgress).where(WeeklyProgress.user_id == user_id)).all()
-            for wp in progress_entries:
-                # Also delete comments on this progress
-                from app.models import WeeklyComment
-                wp_comments = session.exec(select(WeeklyComment).where(WeeklyComment.weekly_progress_id == wp.id)).all()
-                for wpc in wp_comments: session.delete(wpc)
-                session.delete(wp)
-            
             # 9. My Space
             task_sheets = session.exec(select(TaskSheet).where(TaskSheet.user_id == user_id)).all()
             for ts in task_sheets: session.delete(ts)

@@ -13,7 +13,6 @@ import {
   RecurringInstancesSummary, TaskInstanceSummary,
   getMyHappySheets, HappySheetEntry, getMyPersonalProjects, PersonalProjectEntry,
 } from "@/lib/api";
-import WeeklyProgressEmployeeSection from "@/components/dashboard/WeeklyProgressEmployeeSection";
 import { EmployeeTicketCenter } from "@/components/employee/EmployeeTicketCenter";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -831,8 +830,6 @@ export default function EmployeeDashboard() {
               )}
             </div>
           </div>
-
-          <WeeklyProgressEmployeeSection />
 
           {/* Active Projects */}
           <div

@@ -51,8 +51,6 @@ type ListColumnId =
   | "createdDate"
   | "startDate"
   | "updatedDate"
-  | "weekProgress"
-  | "weekActivity"
   | "assignee"
   | "dueDate"
   | "actions";
@@ -67,8 +65,6 @@ const DEFAULT_VISIBLE_COLUMNS: ListColumnId[] = [
   "createdDate",
   "startDate",
   "updatedDate",
-  "weekProgress",
-  "weekActivity",
   "assignee",
   "dueDate",
   "actions",
@@ -85,8 +81,6 @@ const LIST_COLUMN_DEFS: Array<{ id: ListColumnId; label: string; adminOnly?: boo
   { id: "createdDate", label: "Created Date" },
   { id: "startDate", label: "Start Date" },
   { id: "updatedDate", label: "Updated Date" },
-  { id: "weekProgress", label: "Last 7D Progress" },
-  { id: "weekActivity", label: "Last 7D Activity" },
   { id: "assignee", label: "Assignee" },
   { id: "dueDate", label: "Due Date" },
   { id: "actions", label: "Actions", adminOnly: true },
@@ -162,6 +156,123 @@ interface ProjectsClientProps {
   prefillAssignedByQuery?: string | null;
 }
 
+function getLevenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function matchesTask(task: Task, query: string, employees: User[]): boolean {
+  if (!query) return true;
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const title = (task.title || "").toLowerCase();
+  const description = (task.description || "").toLowerCase();
+  const publicId = (task.public_id || "").toLowerCase();
+  const idStr = String(task.id);
+  const priority = (task.priority || "").toLowerCase();
+  const status = (task.status || "").toLowerCase();
+  const workspaceName = (task.workspace_name || "").toLowerCase();
+
+  // Find assignee name
+  let assigneeName = (task.assignee_name || "").toLowerCase();
+  if (!assigneeName && task.assigned_to) {
+    const emp = employees.find(e => e.id === task.assigned_to);
+    if (emp) assigneeName = emp.name.toLowerCase();
+  }
+
+  // Find reporter/creator name
+  let reporterName = (task.assigned_by_name || "").toLowerCase();
+  if (!reporterName && task.assigned_by) {
+    const emp = employees.find(e => e.id === task.assigned_by);
+    if (emp) reporterName = emp.name.toLowerCase();
+  }
+
+  // Comments text
+  const comments = task.comments || [];
+  const commentsText = comments.map((c: string) => c.toLowerCase()).join(" ");
+
+  return terms.every(term => {
+    if (
+      title.includes(term) ||
+      description.includes(term) ||
+      publicId.includes(term) ||
+      idStr.includes(term) ||
+      priority.includes(term) ||
+      status.includes(term) ||
+      workspaceName.includes(term) ||
+      assigneeName.includes(term) ||
+      reporterName.includes(term) ||
+      commentsText.includes(term)
+    ) {
+      return true;
+    }
+
+    // Fuzzy matching for terms of length > 2
+    if (term.length > 2) {
+      const words = [
+        ...title.split(/\s+/),
+        ...description.split(/\s+/),
+        ...assigneeName.split(/\s+/),
+        ...reporterName.split(/\s+/)
+      ].filter(w => w.length > 2);
+      for (const word of words) {
+        if (getLevenshteinDistance(word, term) <= 1 || (term.length > 4 && word.includes(term.slice(0, -1)))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  });
+}
+
+function highlightText(text: string | null | undefined, query: string): React.ReactNode {
+  if (!text) return "";
+  if (!query) return text;
+  const terms = query.split(/\s+/).filter(Boolean).map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  if (terms.length === 0) return text;
+
+  // Sort terms by length descending to match longer phrases first
+  terms.sort((a, b) => b.length - a.length);
+
+  const regex = new RegExp(`(${terms.join("|")})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        regex.test(part) ? (
+          <mark key={index} className="bg-amber-300 dark:bg-amber-900/60 text-foreground px-0.5 rounded font-medium">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
+
 export default function ProjectsPage({
   workspaceQuery,
   statusQuery,
@@ -181,13 +292,27 @@ export default function ProjectsPage({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQueryInput, setSearchQueryInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<string>("__all");
+  const [dueDateFilter, setDueDateFilter] = useState<string>("__all");
+  const [createdDateFilter, setCreatedDateFilter] = useState<string>("__all");
+  const [sortBy, setSortBy] = useState<string>("latest_updated");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(searchQueryInput);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQueryInput]);
+
   const [statusFilter, setStatusFilter] = useState<string>(normalizeStatusFilterValue(statusQuery));
   const [workspaceFilter, setWorkspaceFilter] = useState<number | undefined>(workspaceQuery ? Number(workspaceQuery) : undefined);
   const [projectFilter, setProjectFilter] = useState<string>("__all");
   const [assigneeFilter, setAssigneeFilter] = useState<number | undefined>(undefined);
   const [flaggedFilter, setFlaggedFilter] = useState<boolean | undefined>(undefined);  // Filter for flagged projects
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
@@ -326,6 +451,37 @@ export default function ProjectsPage({
     { value: "__all", label: "All Projects", icon: <span className="text-muted-foreground">🗂️</span> },
     { value: "__subtasks__", label: "Subtasks", icon: <ListTree className="h-3.5 w-3.5 text-primary" /> },
   ], []);
+
+  const priorityFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Priorities", icon: <SlidersHorizontal className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "low", label: "Low Priority", icon: <span className="text-green-500">●</span> },
+    { value: "medium", label: "Medium Priority", icon: <span className="text-yellow-600">●</span> },
+    { value: "high", label: "High Priority", icon: <span className="text-red-500">●</span> },
+  ], []);
+
+  const dueDateFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Due Dates", icon: <Clock className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "today", label: "Due Today", icon: <Clock className="h-3.5 w-3.5 text-blue-400" /> },
+    { value: "this_week", label: "Due This Week", icon: <Clock className="h-3.5 w-3.5 text-indigo-400" /> },
+    { value: "this_month", label: "Due This Month", icon: <Clock className="h-3.5 w-3.5 text-purple-400" /> },
+    { value: "overdue", label: "Overdue", icon: <AlertCircle className="h-3.5 w-3.5 text-red-500" /> },
+    { value: "no_due_date", label: "No Due Date", icon: <Circle className="h-3.5 w-3.5 text-gray-400" /> },
+  ], []);
+
+  const createdDateFilterOptions: DropdownOption[] = useMemo(() => [
+    { value: "__all", label: "All Created Dates", icon: <Plus className="h-3.5 w-3.5 opacity-40" /> },
+    { value: "today", label: "Created Today", icon: <Plus className="h-3.5 w-3.5 text-green-400" /> },
+    { value: "this_week", label: "Created This Week", icon: <Plus className="h-3.5 w-3.5 text-teal-400" /> },
+    { value: "this_month", label: "Created This Month", icon: <Plus className="h-3.5 w-3.5 text-sky-400" /> },
+  ], []);
+
+  const sortByOptions: DropdownOption[] = useMemo(() => [
+    { value: "latest_updated", label: "Sort: Latest Updated" },
+    { value: "priority", label: "Sort: Priority (High to Low)" },
+    { value: "due_date", label: "Sort: Due Date (Earliest first)" },
+    { value: "created_date", label: "Sort: Created Date (Newest first)" },
+  ], []);
+
 
   const projectLinkItems = useMemo(() => {
     return tasks
@@ -1530,9 +1686,21 @@ export default function ProjectsPage({
     };
 
   const renderSubtaskRows = (nodes: HierarchyTaskNode[], rootTask: Task, depth = 0): React.ReactNode[] => {
-    return nodes.flatMap((subtask) => {
+    // Filter nodes if search query is active
+    let visibleNodes = nodes;
+    if (searchQuery) {
+      visibleNodes = nodes.filter(node => {
+        const matchesThis = matchesTask(node, searchQuery, employees);
+        const matchesAnyDescendant = (children: HierarchyTaskNode[]): boolean => {
+          return children.some(child => matchesTask(child, searchQuery, employees) || matchesAnyDescendant(child.children));
+        };
+        return matchesThis || matchesAnyDescendant(node.children);
+      });
+    }
+
+    return visibleNodes.flatMap((subtask) => {
       const hasChildren = subtask.children.length > 0;
-      const isExpanded = expandedSubtasks.has(subtask.id);
+      const isExpanded = searchQuery ? true : expandedSubtasks.has(subtask.id);
       const warningState = getTaskWarningState(subtask, taskWarningSettings);
       const row = (
         <tr
@@ -1570,7 +1738,7 @@ export default function ProjectsPage({
             {subtask.public_id ? (
               <div className="flex items-center gap-1">
                 <span className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400">
-                  {subtask.public_id}
+                  {highlightText(subtask.public_id, searchQuery)}
                 </span>
                 <button onClick={(e) => handleCopyRefId(e, subtask.public_id)} className="text-muted-foreground hover:text-purple-400 transition-colors p-0.5">
                   <Copy size={11} />
@@ -1583,7 +1751,7 @@ export default function ProjectsPage({
               <span className="pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-y-1/2 bg-primary/30 dark:bg-primary/45" />
               <span className="pointer-events-none absolute left-3 top-0 h-full w-px bg-primary/20 dark:bg-primary/35" />
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-card-foreground">{subtask.title}</span>
+                <span className="font-medium text-card-foreground">{highlightText(subtask.title, searchQuery)}</span>
                 {warningState.isWarning && (
                   <button
                     type="button"
@@ -1604,7 +1772,7 @@ export default function ProjectsPage({
                   </button>
                 }
               </div>
-              {subtask.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{subtask.description}</p>}
+              {subtask.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{highlightText(subtask.description, searchQuery)}</p>}
               {warningState.isWarning && warningState.reason && (
                 <p className="text-[10px] text-red-500/90 mt-0.5 line-clamp-1">{warningState.reason}</p>
               )}
@@ -1631,7 +1799,7 @@ export default function ProjectsPage({
                   </div>
                 ) : (
                   <span className="text-sm font-medium text-card-foreground">
-                    {subtask.assignee_name || "Unassigned"}
+                    {highlightText(subtask.assignee_name || "Unassigned", searchQuery)}
                     {subtask.assigned_to === user?.id && (
                       <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
                     )}
@@ -1646,7 +1814,7 @@ export default function ProjectsPage({
                     style={{ backgroundColor: subtask.workspace_color || rootTask.workspace_color || "#6b7280" }}
                   />
                   <span>{subtask.workspace_icon || rootTask.workspace_icon || "•"}</span>
-                  <span>{subtask.workspace_name || rootTask.workspace_name || "Inherited"}</span>
+                  <span>{highlightText(subtask.workspace_name || rootTask.workspace_name || "Inherited", searchQuery)}</span>
                 </div>
               </div>
             )}
@@ -1719,47 +1887,7 @@ export default function ProjectsPage({
           <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
             {getTaskUpdatedDate(subtask)}
           </td>
-          <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>
-            {(() => {
-              const nestedItems = flattenNestedSubtasks(subtask.children || []);
-              const weeklyProgress = getLastWeekProgress(subtask, nestedItems);
-              return (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openSubtaskPanel(subtask, rootTask);
-                  }}
-                  disabled={weeklyProgress.doneCount === 0}
-                  className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-default"
-                  title={weeklyProgress.doneCount > 0 ? "Open recent completed updates" : "No completed updates in last 7 days"}
-                >
-                  <span>{weeklyProgress.percent}%</span>
-                  <span className="text-[10px] text-emerald-400/90">({weeklyProgress.doneCount}/{weeklyProgress.totalCount})</span>
-                </button>
-              );
-            })()}
-          </td>
-          <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>
-            {(() => {
-              const nestedItems = flattenNestedSubtasks(subtask.children || []);
-              const weeklyActivity = getLastWeekActivity(subtask, nestedItems);
-              return (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    router.push(`/project-management/${rootTask.id}#updates-section`);
-                  }}
-                  disabled={weeklyActivity === 0}
-                  className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-500 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-default"
-                  title={weeklyActivity > 0 ? "Open subtask updates" : "No updates in last 7 days"}
-                >
-                  {weeklyActivity} updates
-                </button>
-              );
-            })()}
-          </td>
+
           <td className={`py-3.5 px-4 min-w-[220px] ${showAssigneeDefaultSlot ? "" : "hidden"}`}>
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>
@@ -1780,7 +1908,7 @@ export default function ProjectsPage({
                 </div>
               ) : (
                 <span className="text-sm font-medium text-card-foreground">
-                  {subtask.assignee_name || "Unassigned"}
+                  {highlightText(subtask.assignee_name || "Unassigned", searchQuery)}
                   {subtask.assigned_to === user?.id && (
                     <span className="ml-1.5 text-[10px] font-semibold text-primary">(You)</span>
                   )}
@@ -1815,6 +1943,7 @@ export default function ProjectsPage({
       return [row, ...renderSubtaskRows(subtask.children, rootTask, depth + 1)];
     });
   };
+
 
   const handleCopyRefId = (e: React.MouseEvent, refId: string) => {
     e.stopPropagation();
@@ -2062,42 +2191,159 @@ export default function ProjectsPage({
     }
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    if (projectFilter === "__subtasks__") {
-      if ((taskChildren[t.id] || []).length === 0) return false;
-    } else if (projectFilter !== "__all") {
-      const parsedProjectFilter = Number(projectFilter);
-      if (!Number.isNaN(parsedProjectFilter) && t.id !== parsedProjectFilter) return false;
+  // Auto-expand parent tasks when their children match the search query
+  useEffect(() => {
+    if (!searchQuery) return;
+    const toExpand = new Set<number>();
+    tasks.forEach((t) => {
+      const children = taskChildren[t.id] || [];
+      if (children.some(child => matchesTask(child, searchQuery, employees))) {
+        toExpand.add(t.id);
+      }
+    });
+    if (toExpand.size > 0) {
+      setExpandedTasks(prev => {
+        const next = new Set(prev);
+        toExpand.forEach(id => next.add(id));
+        return next;
+      });
     }
+  }, [searchQuery, tasks, taskChildren, employees]);
 
-    const matchesSearch =
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.public_id?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredTasks = useMemo(() => {
+    let result = tasks.filter((t) => {
+      if (projectFilter === "__subtasks__") {
+        if ((taskChildren[t.id] || []).length === 0) return false;
+      } else if (projectFilter !== "__all") {
+        const parsedProjectFilter = Number(projectFilter);
+        if (!Number.isNaN(parsedProjectFilter) && t.id !== parsedProjectFilter) return false;
+      }
 
-    if (!matchesSearch) return false;
+      const matchesSearch =
+        matchesTask(t, searchQuery, employees) ||
+        (taskChildren[t.id] || []).some((child) => matchesTask(child, searchQuery, employees));
 
-    if (statusFilter === "new" || statusFilter === "todo") return t.status === "todo";
-    if (statusFilter === "completed") return t.status === "approved";
-    if (statusFilter === "in_progress") return t.status === "in_progress";
-    if (statusFilter === "submitted") return t.status === "submitted";
-    if (statusFilter === "reviewing") return t.status === "reviewing";
-    if (statusFilter === "approved") return t.status === "approved";
-    if (statusFilter === "rejected") return t.status === "rejected";
+      if (!matchesSearch) return false;
 
-    const warningState = getTaskWarningState(t, taskWarningSettings, new Date(), getTaskLatestActivityAt(t));
-    if (statusFilter === "warning") return warningState.isWarning;
+      // Status filter
+      if (statusFilter === "new" || statusFilter === "todo") {
+        if (t.status !== "todo") return false;
+      } else if (statusFilter === "completed") {
+        if (t.status !== "approved") return false;
+      } else if (statusFilter === "in_progress" || statusFilter === "submitted" || statusFilter === "reviewing" || statusFilter === "approved" || statusFilter === "rejected") {
+        if (t.status !== statusFilter) return false;
+      } else if (statusFilter === "warning") {
+        const warningState = getTaskWarningState(t, taskWarningSettings, new Date(), getTaskLatestActivityAt(t));
+        if (!warningState.isWarning) return false;
+      } else if (statusFilter === "overdue") {
+        if (!t.due_date || t.status === "approved") return false;
+        const dueDate = new Date(t.due_date);
+        if (Number.isNaN(dueDate.getTime())) return false;
+        const today = new Date();
+        dueDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        if (dueDate >= today) return false;
+      }
 
-    if (statusFilter !== "overdue") return true;
-    if (!t.due_date || t.status === "approved") return false;
+      // Priority filter
+      if (priorityFilter !== "__all" && t.priority !== priorityFilter) return false;
 
-    const dueDate = new Date(t.due_date);
-    if (Number.isNaN(dueDate.getTime())) return false;
-    const today = new Date();
-    dueDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  });
+      // Due date filter
+      if (dueDateFilter !== "__all") {
+        if (!t.due_date) {
+          if (dueDateFilter !== "no_due_date") return false;
+        } else {
+          const dueDate = new Date(t.due_date);
+          if (Number.isNaN(dueDate.getTime())) return false;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startOfWeek = new Date(today);
+          startOfWeek.setDate(today.getDate() - today.getDay());
+          const endOfWeek = new Date(startOfWeek);
+          endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+          const compDate = new Date(dueDate);
+          compDate.setHours(0, 0, 0, 0);
+
+          if (dueDateFilter === "today") {
+            if (compDate.getTime() !== today.getTime()) return false;
+          } else if (dueDateFilter === "this_week") {
+            if (compDate < startOfWeek || compDate > endOfWeek) return false;
+          } else if (dueDateFilter === "this_month") {
+            if (compDate.getFullYear() !== today.getFullYear() || compDate.getMonth() !== today.getMonth()) return false;
+          } else if (dueDateFilter === "overdue") {
+            if (compDate >= today || t.status === "approved") return false;
+          } else if (dueDateFilter === "no_due_date") {
+            return false;
+          }
+        }
+      }
+
+      // Created date filter
+      if (createdDateFilter !== "__all") {
+        if (!t.created_at) return false;
+        const createdDate = new Date(t.created_at);
+        if (Number.isNaN(createdDate.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+        const compDate = new Date(createdDate);
+        compDate.setHours(0, 0, 0, 0);
+
+        if (createdDateFilter === "today") {
+          if (compDate.getTime() !== today.getTime()) return false;
+        } else if (createdDateFilter === "this_week") {
+          if (compDate < startOfWeek || compDate > endOfWeek) return false;
+        } else if (createdDateFilter === "this_month") {
+          if (compDate.getFullYear() !== today.getFullYear() || compDate.getMonth() !== today.getMonth()) return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Sorting logic
+    const priorityWeights: Record<string, number> = { high: 3, medium: 2, low: 1 };
+    return [...result].sort((a, b) => {
+      if (sortBy === "latest_updated") {
+        const tA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const tB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return tB - tA;
+      } else if (sortBy === "priority") {
+        const wA = priorityWeights[a.priority || "low"] || 0;
+        const wB = priorityWeights[b.priority || "low"] || 0;
+        return wB - wA;
+      } else if (sortBy === "due_date") {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        const dA = new Date(a.due_date).getTime();
+        const dB = new Date(b.due_date).getTime();
+        return dA - dB;
+      } else if (sortBy === "created_date") {
+        const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return cB - cA;
+      }
+      return 0;
+    });
+  }, [
+    tasks,
+    projectFilter,
+    taskChildren,
+    searchQuery,
+    employees,
+    statusFilter,
+    taskWarningSettings,
+    priorityFilter,
+    dueDateFilter,
+    createdDateFilter,
+    sortBy
+  ]);
+
 
   const warningLinkItems = useMemo(() => {
     const items: Array<{
@@ -2154,63 +2400,7 @@ export default function ProjectsPage({
     return effectiveTs ? new Date(effectiveTs).toLocaleDateString("en-IN") : "--";
   };
 
-  const isLast7Days = (value?: string | null) => {
-    if (!value) return false;
-    const ts = Date.parse(value);
-    if (Number.isNaN(ts)) return false;
-    return Date.now() - ts <= 7 * 24 * 60 * 60 * 1000;
-  };
 
-  const flattenNestedSubtasks = (nodes: any[]): Task[] => {
-    const items: Task[] = [];
-    const walk = (list: any[]) => {
-      list.forEach((node) => {
-        items.push(node as Task);
-        if (node.children?.length) {
-          walk(node.children);
-        }
-      });
-    };
-    walk(nodes);
-    return items;
-  };
-
-  const isDoneStatus = (status?: string | null) => {
-    return status === "approved" || status === "completed" || status === "submitted";
-  };
-
-  const getLastWeekProgress = (task: Task, relatedItems: Task[] = []) => {
-    if (relatedItems.length === 0) {
-      const completed = isDoneStatus(task.status) && isLast7Days(task.completed_at || task.updated_at || task.created_at);
-      return {
-        percent: completed ? 100 : 0,
-        doneCount: completed ? 1 : 0,
-        totalCount: 1,
-      };
-    }
-
-    const doneCount = relatedItems.filter((item) => {
-      if (!isDoneStatus(item.status)) return false;
-      return isLast7Days(item.completed_at || item.updated_at || item.created_at);
-    }).length;
-
-    const totalCount = relatedItems.length;
-    return {
-      percent: totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0,
-      doneCount,
-      totalCount,
-    };
-  };
-
-  const getLastWeekActivity = (task: Task, relatedItems: Task[] = []) => {
-    const rootTouched = isLast7Days(task.updated_at || task.created_at) ? 1 : 0;
-    const relatedTouched = relatedItems.filter((item) => isLast7Days(item.updated_at || item.created_at)).length;
-    return rootTouched + relatedTouched;
-  };
-
-  const openWeeklyUpdates = (task: Task) => {
-    router.push(`/project-management/${task.id}#updates-section`);
-  };
 
   const getReporterName = (task: Task) => {
     if (task.assigned_by_name) return task.assigned_by_name;
@@ -2279,16 +2469,25 @@ export default function ProjectsPage({
     <ProjectShell headerAction={newProjectBtn} activeWorkspaceId={workspaceQuery || null}>
       <div className="space-y-4">
         {/* Filters */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 flex-wrap">
           <div className="relative w-full lg:flex-1 lg:max-w-sm">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search tasks or Ref ID (e.g. A7X9K2)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchQueryInput}
+              onChange={(e) => setSearchQueryInput(e.target.value)}
               className="w-full rounded-lg glass-input py-2 pl-9 pr-9 text-sm"
             />
+            {searchQueryInput && (
+              <button
+                type="button"
+                onClick={() => setSearchQueryInput("")}
+                className="absolute right-8 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X size={14} />
+              </button>
+            )}
             {isSearchingById && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-purple-500" />}
           </div>
           <DropdownMenu
@@ -2296,7 +2495,7 @@ export default function ProjectsPage({
             onValueChange={(value) => setStatusFilter(value === "__all" ? "" : value)}
             options={statusFilterOptions}
             placeholder="All Status"
-            triggerClassName="w-full lg:w-52"
+            triggerClassName="w-full lg:w-44"
           />
           {!workspaceScopedView && (
             <DropdownMenu
@@ -2304,7 +2503,7 @@ export default function ProjectsPage({
               onValueChange={(value) => setWorkspaceFilter(value === "__all" ? undefined : Number(value))}
               options={workspaceFilterOptions}
               placeholder="All Workspaces"
-              triggerClassName="w-full lg:w-56"
+              triggerClassName="w-full lg:w-48"
             />
           )}
           <DropdownMenu
@@ -2312,15 +2511,44 @@ export default function ProjectsPage({
             onValueChange={(value) => setAssigneeFilter(value === "__all" ? undefined : Number(value))}
             options={assigneeFilterOptions}
             placeholder="All Users"
-            triggerClassName="w-full lg:w-52"
+            triggerClassName="w-full lg:w-44"
           />
           <DropdownMenu
             value={projectFilter}
             onValueChange={(value) => setProjectFilter(value)}
             options={projectFilterOptions}
             placeholder="All Projects"
+            triggerClassName="w-full lg:w-44"
+          />
+          <DropdownMenu
+            value={priorityFilter}
+            onValueChange={(value) => setPriorityFilter(value)}
+            options={priorityFilterOptions}
+            placeholder="All Priorities"
+            triggerClassName="w-full lg:w-44"
+          />
+          <DropdownMenu
+            value={dueDateFilter}
+            onValueChange={(value) => setDueDateFilter(value)}
+            options={dueDateFilterOptions}
+            placeholder="All Due Dates"
+            triggerClassName="w-full lg:w-44"
+          />
+          <DropdownMenu
+            value={createdDateFilter}
+            onValueChange={(value) => setCreatedDateFilter(value)}
+            options={createdDateFilterOptions}
+            placeholder="All Created Dates"
+            triggerClassName="w-full lg:w-48"
+          />
+          <DropdownMenu
+            value={sortBy}
+            onValueChange={(value) => setSortBy(value)}
+            options={sortByOptions}
+            placeholder="Sort By"
             triggerClassName="w-full lg:w-56"
           />
+
           <div className="relative w-full lg:w-auto">
             <button
               type="button"
@@ -2588,8 +2816,6 @@ export default function ProjectsPage({
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("createdDate") ? "" : "hidden"}`}>Created Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("startDate") ? "" : "hidden"}`}>Start Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>Updated Date</th>
-                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>Last 7D Progress</th>
-                  <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>Last 7D Activity</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${showAssigneeDefaultSlot ? "" : "hidden"}`}>Assignee</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${isColumnVisible("dueDate") ? "" : "hidden"}`}>Due Date</th>
                   <th className={`py-3 px-4 text-center font-semibold whitespace-nowrap ${canManageTasks && isColumnVisible("actions") ? "" : "hidden"}`}>Actions</th>
@@ -2598,8 +2824,7 @@ export default function ProjectsPage({
               <tbody className="divide-y" style={{ borderColor: "#DFB6B2" }}>
                 {filteredTasks.map((task) => {
                   const warningState = getTaskWarningState(task, taskWarningSettings, new Date(), getTaskLatestActivityAt(task));
-                  const weeklyProgress = getLastWeekProgress(task, taskChildren[task.id] || []);
-                  const weeklyActivity = getLastWeekActivity(task, taskChildren[task.id] || []);
+
                   return (
                     <React.Fragment key={task.id}>
                       <tr
@@ -2627,7 +2852,7 @@ export default function ProjectsPage({
                                 className="font-mono text-[11px] font-semibold px-2 py-1 rounded-md tracking-wider select-all bg-gradient-to-r from-purple-500/15 to-pink-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors cursor-pointer"
                                 title="Open project details"
                               >
-                                {task.public_id}
+                                {highlightText(task.public_id, searchQuery)}
                               </button>
                               <button onClick={(e) => handleCopyRefId(e, task.public_id)} className="text-muted-foreground hover:text-purple-400 transition-colors p-0.5">
                                 <Copy size={11} />
@@ -2638,7 +2863,7 @@ export default function ProjectsPage({
                         <td className={`py-3.5 px-4 min-w-[280px] ${isColumnVisible("task") ? "" : "hidden"}`}>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-card-foreground">{task.title}</span>
+                              <span className="font-medium text-card-foreground">{highlightText(task.title, searchQuery)}</span>
                               {task.is_recurring && (
                                 <span className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400" title="Recurring task">
                                   <Repeat size={10} /> Recurring
@@ -2673,7 +2898,7 @@ export default function ProjectsPage({
                             {warningState.isWarning && warningState.reason && (
                               <p className="mt-0.5 text-[10px] text-red-500/90 line-clamp-1">{warningState.reason}</p>
                             )}
-                            {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>}
+                            {task.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{highlightText(task.description, searchQuery)}</p>}
                             <div className="mt-1.5 flex items-center gap-2">
                               <button
                                 type="button"
@@ -2765,7 +2990,7 @@ export default function ProjectsPage({
                                     style={{ backgroundColor: task.workspace_color || "#6b7280" }}
                                   />
                                   <span>{task.workspace_icon || "•"}</span>
-                                  <span>{task.workspace_name || "Unassigned"}</span>
+                                  <span>{task.workspace_name ? highlightText(task.workspace_name, searchQuery) : "Unassigned"}</span>
                                 </button>
                               )}
                             </>
@@ -2830,35 +3055,7 @@ export default function ProjectsPage({
                         <td className={`py-3.5 px-4 text-card-foreground text-xs font-medium whitespace-nowrap ${isColumnVisible("updatedDate") ? "" : "hidden"}`}>
                           {getTaskUpdatedDate(task)}
                         </td>
-                        <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekProgress") ? "" : "hidden"}`}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWeeklyUpdates(task);
-                            }}
-                            disabled={weeklyProgress.doneCount === 0}
-                            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-default"
-                            title={weeklyProgress.doneCount > 0 ? "Open recent completed updates" : "No completed updates in last 7 days"}
-                          >
-                            <span>{weeklyProgress.percent}%</span>
-                            <span className="text-[10px] text-emerald-400/90">({weeklyProgress.doneCount}/{weeklyProgress.totalCount})</span>
-                          </button>
-                        </td>
-                        <td className={`py-3.5 px-4 text-xs whitespace-nowrap ${isColumnVisible("weekActivity") ? "" : "hidden"}`}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWeeklyUpdates(task);
-                            }}
-                            disabled={weeklyActivity === 0}
-                            className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-500 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-default"
-                            title={weeklyActivity > 0 ? "Open latest updates" : "No updates in last 7 days"}
-                          >
-                            {weeklyActivity} updates
-                          </button>
-                        </td>
+
                         <td className={`py-3.5 px-4 min-w-[220px] ${showAssigneeDefaultSlot ? "" : "hidden"}`}>
                           <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold shrink-0" style={{ background: "hsl(289 36% 26% / 0.12)", color: "#522B5B", border: "1px solid hsl(289 36% 26% / 0.2)" }}>

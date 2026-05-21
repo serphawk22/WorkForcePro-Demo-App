@@ -42,16 +42,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     icon: "🗼"
   },
   {
-    id: "feat_3",
-    title: "Weekly Progress",
-    subtitle: "View and submit weekly reports",
-    type: "Feature",
-    keywords: ["weekly", "progress", "report", "update"],
-    route: "/weekly-progress",
-    priority_score: 90,
-    icon: "📈"
-  },
-  {
     id: "feat_4",
     title: "Learning Canvas",
     subtitle: "Educational resources and paths",

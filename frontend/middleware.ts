@@ -159,7 +159,6 @@ export async function middleware(request: NextRequest) {
     "/reports",
     "/payroll",
     "/profile",
-    "/weekly-progress",
     "/project-management",
     "/my-space",
     "/my-day",
