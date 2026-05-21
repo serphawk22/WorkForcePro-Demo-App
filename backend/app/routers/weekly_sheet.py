@@ -19,6 +19,7 @@ from app.models import (
     TaskInstance,
     TaskInstanceStatus,
     Attendance,
+    TaskSheet,
     LighthouseWeeklySheet,
     LighthouseWeeklySheetCreate,
     LighthouseWeeklySheetRead,
@@ -45,13 +46,76 @@ def _task_status_value(task: dict) -> str:
     return str(getattr(status_value, "value", status_value) or "").lower()
 
 
+def _format_sheet_lines(sheets: List[dict], field: str, empty_message: str) -> str:
+    lines = []
+    for sheet in sheets:
+        value = (sheet.get(field) or "").strip()
+        if value:
+            lines.append(f"- {sheet.get('date')}: {value}")
+    return "\n".join(lines) if lines else empty_message
+
+
 def build_weekly_sheet_fallback(
     week_start: DateType,
     week_end: DateType,
     attendance_data: dict,
     task_data: List[dict],
+    task_sheet_data: Optional[List[dict]] = None,
 ) -> dict:
     """Build a useful weekly sheet when the AI provider is unavailable."""
+    task_sheet_data = task_sheet_data or []
+    if task_sheet_data:
+        total_attendance_hours = attendance_data.get("total_hours") or 0
+        days_logged = attendance_data.get("days_logged") or 0
+        dates = ", ".join(sheet["date"] for sheet in task_sheet_data)
+        time_entries = [
+            f"{sheet['date']}: {sheet['time_taken']}"
+            for sheet in task_sheet_data
+            if (sheet.get("time_taken") or "").strip()
+        ]
+        repo_links = [
+            f"{sheet['date']}: {sheet['repo_link']}"
+            for sheet in task_sheet_data
+            if (sheet.get("repo_link") or "").strip()
+        ]
+
+        return {
+            "weekly_summary": (
+                f"For the week of {week_start} to {week_end}, this sheet was generated from "
+                f"{len(task_sheet_data)} submitted daily task sheet(s): {dates}. The work summary "
+                "below reflects the tasks, impact, and time entered in those task sheets."
+            ),
+            "major_accomplishments": _format_sheet_lines(
+                task_sheet_data,
+                "work_impact",
+                "No work impact was recorded in this week's task sheets."
+            ),
+            "tasks_completed": _format_sheet_lines(
+                task_sheet_data,
+                "tasks_completed",
+                "No completed task details were recorded in this week's task sheets."
+            ),
+            "pending_tasks": (
+                "No pending tasks were recorded in this week's task sheets. "
+                "Add pending items to the daily task sheet if they should appear here."
+            ),
+            "blockers": "No blockers were recorded in this week's task sheets.",
+            "productivity_insights": (
+                f"The submitted task sheets cover {len(task_sheet_data)} day(s), with attendance showing "
+                f"{total_attendance_hours:.2f} logged hours across {days_logged} day(s). "
+                f"Recorded task-sheet time: {'; '.join(time_entries) if time_entries else 'not specified'}."
+            ),
+            "time_utilization": (
+                f"Attendance logged this week: {total_attendance_hours:.2f} hours. "
+                f"Task sheet time entries: {'; '.join(time_entries) if time_entries else 'not specified'}."
+            ),
+            "suggested_priorities": (
+                "Review the completed task sheet entries, carry forward any unfinished follow-ups, "
+                "and keep daily task sheets updated for the next reporting week."
+                + (f"\nRepository references: {'; '.join(repo_links)}" if repo_links else "")
+            ),
+        }
+
     completed_tasks = [
         task for task in task_data
         if task.get("completed") or _task_status_value(task) in {"submitted", "reviewing", "approved", "done", "completed"}
@@ -122,11 +186,12 @@ async def generate_weekly_sheet_content(
     week_end: DateType,
     attendance_data: dict,
     task_data: List[dict],
+    task_sheet_data: Optional[List[dict]] = None,
 ) -> dict:
     try:
         ai_result = await call_openai_for_weekly_sheet(payload)
         return {
-            **build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data),
+            **build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data, task_sheet_data),
             **{key: value for key, value in ai_result.items() if value},
         }
     except HTTPException as exc:
@@ -134,14 +199,16 @@ async def generate_weekly_sheet_content(
     except Exception as exc:
         logger.warning("Weekly sheet AI generation failed; using fallback content: %s", exc)
 
-    return build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data)
+    return build_weekly_sheet_fallback(week_start, week_end, attendance_data, task_data, task_sheet_data)
 
 # ─── OpenAI helper ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are an AI assistant for a workforce management system called WorkForce Pro.
 Your job is to generate a professional Weekly Work Summary Sheet based on the provided data of a single employee.
 
-Given the JSON data of tasks, attendances, and logs for the week, generate a JSON response summarizing their work.
+Given the JSON data of daily task sheets, optional assigned tasks, attendances, and logs for the week, generate a JSON response summarizing their work.
+Daily task sheets are the primary source of truth for what the employee actually reported on each date.
+When daily task sheets are present, use them instead of assigned task names for completed work, accomplishments, insights, and priorities.
 Do not hallucinate any accomplishments not present in the provided data.
 
 Return ONLY a valid JSON object matching exactly this schema, without markdown formatting or code blocks:
@@ -267,13 +334,36 @@ async def generate_weekly_sheet(
         "days_logged": len(attendances),
         "total_hours": total_hours
     }
+
+    task_sheets = session.exec(
+        select(TaskSheet).where(
+            TaskSheet.user_id == current_user.id,
+            TaskSheet.date >= week_start,
+            TaskSheet.date <= week_end,
+        ).order_by(TaskSheet.date)
+    ).all()
+
+    task_sheet_data = [
+        {
+            "date": str(sheet.date),
+            "tasks_completed": sheet.tasks_completed,
+            "work_impact": sheet.work_impact,
+            "time_taken": sheet.time_taken,
+            "repo_link": sheet.repo_link,
+        }
+        for sheet in task_sheets
+    ]
     
-    payload = json.dumps({
+    payload_data = {
         "week_start": str(week_start),
         "week_end": str(week_end),
         "attendance": attendance_data,
-        "tasks": task_data
-    })
+        "task_sheets": task_sheet_data,
+    }
+    if not task_sheet_data:
+        payload_data["assigned_tasks"] = task_data
+
+    payload = json.dumps(payload_data)
     
     ai_result = await generate_weekly_sheet_content(
         payload,
@@ -281,6 +371,7 @@ async def generate_weekly_sheet(
         week_end,
         attendance_data,
         task_data,
+        task_sheet_data,
     )
     
     # Check if a draft exists

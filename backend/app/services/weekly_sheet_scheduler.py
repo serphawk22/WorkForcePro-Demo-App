@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone, timedelta, date as DateType
 import json
 import logging
@@ -12,12 +11,13 @@ from app.models import (
     User,
     Task,
     Attendance,
+    TaskSheet,
     LighthouseWeeklySheet,
     WeeklySheetStatus,
     NotificationType,
 )
 from app.routers.notifications import create_notification
-from app.routers.weekly_sheet import call_openai_for_weekly_sheet, monday_of_week
+from app.routers.weekly_sheet import generate_weekly_sheet_content, monday_of_week
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +67,36 @@ def generate_weekly_sheets_job():
                     "days_logged": len(attendances),
                     "total_hours": total_hours
                 }
-                
-                payload = json.dumps({
+
+                task_sheets = session.exec(
+                    select(TaskSheet).where(
+                        TaskSheet.user_id == user.id,
+                        TaskSheet.date >= week_start,
+                        TaskSheet.date <= week_end,
+                    ).order_by(TaskSheet.date)
+                ).all()
+
+                task_sheet_data = [
+                    {
+                        "date": str(sheet.date),
+                        "tasks_completed": sheet.tasks_completed,
+                        "work_impact": sheet.work_impact,
+                        "time_taken": sheet.time_taken,
+                        "repo_link": sheet.repo_link,
+                    }
+                    for sheet in task_sheets
+                ]
+
+                payload_data = {
                     "week_start": str(week_start),
                     "week_end": str(week_end),
                     "attendance": attendance_data,
-                    "tasks": task_data
-                })
+                    "task_sheets": task_sheet_data,
+                }
+                if not task_sheet_data:
+                    payload_data["assigned_tasks"] = task_data
+
+                payload = json.dumps(payload_data)
                 
                 # Check if draft already exists
                 existing = session.exec(
@@ -87,43 +110,18 @@ def generate_weekly_sheets_job():
                 if existing:
                     continue  # Skip if already exists so we don't overwrite manual edits
                 
-                # We need to run the async call in a synchronous context, or just use httpx synchronously?
-                # Actually, apscheduler can use AsyncIOScheduler or we can use asyncio.run
                 import asyncio
-                
-                # This could block, but since it's a background job it's fine. 
-                # Better to use asyncio.run but if event loop is running, we might need a separate thread.
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = None
-                    
-                if loop and loop.is_running():
-                    # Just skip or use nest_asyncio. We can't easily block. Let's use a new thread or loop.
-                    # Or we just use a synchronous openai call. Let's use sync OpenAI call.
-                    from openai import OpenAI
-                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
-                    
-                    from app.routers.weekly_sheet import SYSTEM_PROMPT
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": f"Here is the employee's week data:\n{payload}"},
-                        ],
-                        temperature=0.3,
-                        max_tokens=1000,
+
+                ai_result = asyncio.run(
+                    generate_weekly_sheet_content(
+                        payload,
+                        week_start,
+                        week_end,
+                        attendance_data,
+                        task_data,
+                        task_sheet_data,
                     )
-                    content = response.choices[0].message.content.strip()
-                    if content.startswith("```"):
-                        content = content.split("\\n", 1)[1] if "\\n" in content else content[3:]
-                        if content.endswith("```"):
-                            content = content[:-3]
-                        content = content.strip()
-                    ai_result = json.loads(content)
-                else:
-                    # Not standard in fastapi apps, but fallback
-                    ai_result = asyncio.run(call_openai_for_weekly_sheet(payload))
+                )
                 
                 # Save new sheet
                 now = datetime.now(timezone.utc)
