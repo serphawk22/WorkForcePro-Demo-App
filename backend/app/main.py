@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, weekly_progress, workspaces, organizations, search, admin_queries
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
 
 load_dotenv()
 
@@ -68,12 +68,7 @@ async def lifespan(app: FastAPI):
                     """))
                 except Exception:
                     pass  # Enum value may already exist or not applicable
-                try:
-                    conn.execute(text("""
-                        ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'WEEKLY_PROGRESS_COMMENT';
-                    """))
-                except Exception:
-                    pass
+
                 try:
                     conn.execute(text("""
                         ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'ADMIN_QUERY_RAISED';
@@ -126,8 +121,6 @@ async def lifespan(app: FastAPI):
             logo VARCHAR(1000),
             theme VARCHAR(64),
             timezone VARCHAR(64) DEFAULT 'UTC',
-            weekly_progress_enabled_for_admin BOOLEAN DEFAULT TRUE,
-            weekly_progress_enabled_for_employee BOOLEAN DEFAULT TRUE,
             task_warning_stage_days INTEGER DEFAULT 3,
             task_warning_comment_days INTEGER DEFAULT 2,
             created_by INTEGER,
@@ -160,13 +153,10 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS organization_id INTEGER',
         'ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS organization_id INTEGER',
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS organization_id INTEGER',
-        'ALTER TABLE weekly_progress ADD COLUMN IF NOT EXISTS organization_id INTEGER',
         # Organization settings columns
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo VARCHAR(1000)',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS theme VARCHAR(64)',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT \'UTC\'',
-        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_admin BOOLEAN DEFAULT TRUE',
-        'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS weekly_progress_enabled_for_employee BOOLEAN DEFAULT TRUE',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS task_warning_stage_days INTEGER DEFAULT 3',
         'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS task_warning_comment_days INTEGER DEFAULT 2',
         # Leave request document attachment columns
@@ -328,7 +318,6 @@ async def lifespan(app: FastAPI):
             ("fk_payrolls_organization_id", "payrolls", "organization_id", "organizations"),
             ("fk_leave_requests_organization_id", "leave_requests", "organization_id", "organizations"),
             ("fk_task_sheets_organization_id", "task_sheets", "organization_id", "organizations"),
-            ("fk_weekly_progress_organization_id", "weekly_progress", "organization_id", "organizations"),
         ]
         for constraint_name, table_name, col_name, ref_table in org_fk_sql:
             try:
@@ -374,44 +363,6 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[WARNING] task_instances migration note: {e}")
 
-        # weekly_progress + weekly_comments + notifications.weekly_progress_id
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS weekly_progress (
-                        id SERIAL PRIMARY KEY,
-                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                        week_start_date DATE NOT NULL,
-                        description TEXT NOT NULL,
-                        github_link VARCHAR(500),
-                        deployed_link VARCHAR(500),
-                        last_seen_comments_at TIMESTAMP WITH TIME ZONE,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-                    );
-                """))
-                conn.execute(text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS uix_weekly_progress_user_week ON weekly_progress (user_id, week_start_date);"
-                ))
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS weekly_comments (
-                        id SERIAL PRIMARY KEY,
-                        weekly_progress_id INTEGER NOT NULL REFERENCES weekly_progress(id) ON DELETE CASCADE,
-                        admin_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                        comment TEXT NOT NULL,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-                    );
-                """))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_weekly_comments_progress ON weekly_comments (weekly_progress_id);"
-                ))
-                conn.execute(text(
-                    "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS weekly_progress_id INTEGER REFERENCES weekly_progress(id) ON DELETE SET NULL;"
-                ))
-                conn.commit()
-            print("[SUCCESS] weekly_progress tables ready")
-        except Exception as e:
-            print(f"[WARNING] weekly_progress migration note: {e}")
     
     # Seed default admin account
     from app.models import User, UserRole, Workspace, Organization
@@ -494,8 +445,7 @@ async def lifespan(app: FastAPI):
                 session.commit()
                 session.refresh(default_workspace)
 
-        # Backfill multi-tenant organization_id on core tables.
-        from app.models import Task, Subtask, Attendance, Payroll, LeaveRequest, TaskSheet, WeeklyProgress
+        from app.models import Task, Subtask, Attendance, Payroll, LeaveRequest, TaskSheet
 
         for ws in session.exec(select(Workspace).where(Workspace.organization_id.is_(None))).all():
             creator = session.exec(select(User).where(User.id == ws.created_by)).first()
@@ -532,10 +482,6 @@ async def lifespan(app: FastAPI):
             ts.organization_id = usr.organization_id if usr else default_org.id
             session.add(ts)
 
-        for wp in session.exec(select(WeeklyProgress).where(WeeklyProgress.organization_id.is_(None))).all():
-            usr = session.exec(select(User).where(User.id == wp.user_id)).first()
-            wp.organization_id = usr.organization_id if usr else default_org.id
-            session.add(wp)
 
         try:
             session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
@@ -637,10 +583,10 @@ app.include_router(myspace.router)
 app.include_router(chatbot.router)
 app.include_router(teams.router)
 app.include_router(ai_assistant.router)
-app.include_router(weekly_progress.router)
 app.include_router(workspaces.router)
 app.include_router(organizations.router)
 app.include_router(search.router)
+app.include_router(weekly_sheet.router)
 
 
 @app.get("/")

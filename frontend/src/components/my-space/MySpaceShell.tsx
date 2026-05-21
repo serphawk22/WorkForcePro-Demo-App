@@ -11,6 +11,7 @@ const TABS = [
   { label: "Happy Sheet", path: "/my-space/happy-sheet" },
   { label: "Visionary Canvas", path: "/my-space/visionary-canvas" },
   { label: "Learning Canvas", path: "/my-space/learning-canvas" },
+  { label: "Weekly Sheet", path: "/my-space/weekly-sheet" },
 ];
 
 interface MySpaceShellProps {

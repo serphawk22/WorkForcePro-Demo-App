@@ -67,13 +67,11 @@ const adminLinks = [
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
   { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },
-  { label: "Weekly Progress", icon: ClipboardList, path: "/admin/weekly-progress" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
   { label: "My Day", icon: Zap, path: "/my-day" },
-  { label: "Weekly Progress", icon: ClipboardList, path: "/weekly-progress" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },

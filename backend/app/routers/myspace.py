@@ -34,8 +34,6 @@ from app.models import (
     HappySheetAiInsights,
     DailyHappySheetReportRow,
     DailyTaskSheetReportRow,
-    WeeklyProgressReportRow,
-    WeeklyProgress,
     DreamProject,
     DreamProjectCreate,
     DreamProjectWithUser,
@@ -1381,37 +1379,3 @@ async def get_daily_task_sheet_report(
         for user, sheet in results
     ]
 
-
-@router.get("/weekly-progress/admin/report", response_model=List[WeeklyProgressReportRow])
-async def get_weekly_progress_report(
-    week_start_date: str,
-    session: Session = Depends(get_session),
-    admin: User = Depends(get_current_admin_user),
-):
-    """Get all employees with their weekly progress entry for the selected week (admin only)."""
-    try:
-        target_week = DateType.fromisoformat(week_start_date)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
-
-    results = session.exec(
-        select(User, WeeklyProgress)
-        .outerjoin(
-            WeeklyProgress,
-            and_(WeeklyProgress.user_id == User.id, WeeklyProgress.week_start_date == target_week),
-        )
-        .order_by(User.name.asc())
-    ).all()
-
-    return [
-        WeeklyProgressReportRow(
-            user_id=user.id,
-            user_name=user.name,
-            user_email=user.email,
-            week_start_date=target_week,
-            description=progress.description if progress else None,
-            github_link=progress.github_link if progress else None,
-            deployed_link=progress.deployed_link if progress else None,
-        )
-        for user, progress in results
-    ]

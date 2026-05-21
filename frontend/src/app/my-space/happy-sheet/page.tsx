@@ -31,6 +31,8 @@ import {
   getHappySheetWeeklyHighlights,
   getHappySheetWeeklyLeaderboard,
 } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Eye } from "lucide-react";
 
 const AVATAR_COLORS = [
   "#522B5B", "#854F6C", "#2B124C", "#7C3D6B", "#9C4E7A",
@@ -83,8 +85,10 @@ export default function HappySheetPage() {
   const [streakByUser, setStreakByUser] = useState<Record<number, HappySheetStreakEntry>>({});
   const [weeklyHighlights, setWeeklyHighlights] = useState<HappySheetWeeklyHighlightEntry[]>([]);
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState<HappySheetLeaderboardEntry[]>([]);
-
   const [isExportingPng, setIsExportingPng] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState<HappySheetEntry | null>(null);
   const [isDeletingEntry, setIsDeletingEntry] = useState(false);
 
@@ -574,6 +578,28 @@ export default function HappySheetPage() {
     }
   };
 
+  const handlePreviewReport = async () => {
+    if (user?.role !== "admin") return;
+    setIsPreviewLoading(true);
+    try {
+      const reportDate = logFilterDate || selectedDate;
+      const reportRes = await getAdminDailyHappySheetReport(reportDate);
+      if (!reportRes.data) {
+        throw new Error(reportRes.error || "Failed to load daily report data.");
+      }
+
+      const canvas = buildReportCanvas(reportDate, reportRes.data);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      setPreviewImage(dataUrl);
+      setIsPreviewOpen(true);
+    } catch (err: any) {
+      console.error("Preview failed", err);
+      showFloatingToast({ type: "error", message: err?.message || "Failed to generate preview." });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -699,7 +725,24 @@ export default function HappySheetPage() {
               />
               <div className="w-px h-5 bg-[#854F6C]/20" />
               {user.role === "admin" && (
-                <button
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePreviewReport}
+                    disabled={isPreviewLoading}
+                    className="h-8 px-2 flex items-center justify-center gap-1 rounded-lg border border-[#854F6C]/30 text-[#522B5B] dark:text-purple-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                    title="Preview daily happy sheet report"
+                  >
+                    {isPreviewLoading ? (
+                      <div className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    ) : (
+                      <>
+                        <Eye size={14} />
+                        <span className="hidden sm:inline">Preview</span>
+                      </>
+                    )}
+                  </button>
+                  <button
                   type="button"
                   onClick={handleDownloadPng}
                   disabled={isExportingPng}
@@ -715,6 +758,7 @@ export default function HappySheetPage() {
                     </>
                   )}
                 </button>
+                </>
               )}
             </div>
           </div>
@@ -1046,6 +1090,23 @@ export default function HappySheetPage() {
           </div>
         </div>
       )}
+
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className="max-w-5xl w-[90vw] h-[90vh] flex flex-col p-0 overflow-hidden bg-slate-50 dark:bg-slate-900 border-none">
+            <DialogHeader className="p-4 border-b bg-white dark:bg-black/40 shadow-sm flex-shrink-0">
+              <DialogTitle className="text-xl font-bold">Daily Happy Sheet Preview</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto p-4 flex justify-center bg-slate-100 dark:bg-black/20">
+              {previewImage && (
+                <img
+                  src={previewImage}
+                  alt="Report Preview"
+                  className="max-w-full h-auto object-contain shadow-lg rounded border border-slate-200 dark:border-slate-800"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
     </MySpaceShell>
   );
 }

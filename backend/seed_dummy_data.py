@@ -7,7 +7,7 @@ from app.database import engine
 from app.models import (
     User, UserRole, UserStatus, Organization, Workspace,
     Attendance, Task, Subtask, LeaveRequest, LeaveStatus,
-    Payroll, TaskSheet, HappySheet, WeeklyProgress,
+    Payroll, TaskSheet, HappySheet,
     DreamProject, LearningFocus, PersonalProject,
     TaskStatus, SubtaskStatus, TaskPriority
 )
@@ -190,9 +190,6 @@ def seed_data():
             if not session.exec(select(TaskSheet).where(TaskSheet.user_id == emp.id, TaskSheet.date == day)).first():
                 session.add(TaskSheet(user_id=emp.id, date=day, achievements="Completed major tasks", organization_id=org.id))
 
-            monday = date.today() - timedelta(days=date.today().weekday())
-            if not session.exec(select(WeeklyProgress).where(WeeklyProgress.user_id == emp.id, WeeklyProgress.week_start_date == monday)).first():
-                session.add(WeeklyProgress(user_id=emp.id, week_start_date=monday, description="Solid week of work.", organization_id=org.id))
 
         session.commit()
         print("All dummy data for 4 employees seeded successfully!")

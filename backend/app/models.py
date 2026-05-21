@@ -89,7 +89,6 @@ class NotificationType(str, Enum):
     NEW_REGISTRATION = "new_registration"
     USER_APPROVED = "user_approved"
     USER_REJECTED = "user_rejected"
-    WEEKLY_PROGRESS_COMMENT = "weekly_progress_comment"
     ADMIN_QUERY_RAISED = "admin_query_raised"
 
 
@@ -102,8 +101,6 @@ class OrganizationBase(SQLModel):
     logo: Optional[str] = Field(default=None, max_length=1000)
     theme: Optional[str] = Field(default=None, max_length=64)
     timezone: Optional[str] = Field(default="UTC", max_length=64)
-    weekly_progress_enabled_for_admin: bool = Field(default=True)
-    weekly_progress_enabled_for_employee: bool = Field(default=True)
     task_warning_stage_days: int = Field(default=3, ge=1, le=30)
     task_warning_comment_days: int = Field(default=2, ge=1, le=30)
 
@@ -124,8 +121,6 @@ class OrganizationUpdate(SQLModel):
     logo: Optional[str] = Field(default=None, max_length=1000)
     theme: Optional[str] = Field(default=None, max_length=64)
     timezone: Optional[str] = Field(default=None, max_length=64)
-    weekly_progress_enabled_for_admin: Optional[bool] = None
-    weekly_progress_enabled_for_employee: Optional[bool] = None
     task_warning_stage_days: Optional[int] = Field(default=None, ge=1, le=30)
     task_warning_comment_days: Optional[int] = Field(default=None, ge=1, le=30)
 
@@ -442,6 +437,8 @@ class TaskWithAssignee(TaskRead):
     flagged_by_name: Optional[str] = None  # Who flagged the project
     progress: Optional[int] = None  # Task completion progress (0-100)
     subtask_count: Optional[int] = None
+    comments: Optional[List[str]] = None
+
 
 
 class TaskInstance(SQLModel, table=True):
@@ -686,7 +683,6 @@ class Notification(SQLModel, table=True):
     type: NotificationType = Field(default=NotificationType.TASK_ASSIGNED)
     message: str = Field(max_length=500)
     task_id: Optional[int] = Field(default=None, foreign_key="tasks.id")
-    weekly_progress_id: Optional[int] = Field(default=None, foreign_key="weekly_progress.id")
     is_read: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -698,7 +694,6 @@ class NotificationRead(SQLModel):
     type: str
     message: str
     task_id: Optional[int]
-    weekly_progress_id: Optional[int] = None
     is_read: bool
     created_at: datetime
 
@@ -709,77 +704,79 @@ class NotificationCreate(SQLModel):
     type: NotificationType
     message: str
     task_id: Optional[int] = None
-    weekly_progress_id: Optional[int] = None
 
 
-# ==================== WEEKLY PROGRESS ====================
+# ==================== LIGHTHOUSE WEEKLY SHEET ====================
 
-class WeeklyProgress(SQLModel, table=True):
-    """One weekly status update per employee per week (week anchored on Monday)."""
-    __tablename__ = "weekly_progress"
+class WeeklySheetStatus(str, Enum):
+    draft = "draft"
+    submitted = "submitted"
+
+
+class LighthouseWeeklySheet(SQLModel, table=True):
+    """AI-generated Weekly Sheet for Lighthouse."""
+    __tablename__ = "lighthouse_weekly_sheets"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     week_start_date: DateType = Field(index=True)  # Monday of the ISO week
-    description: str = Field(sa_column=Column(Text, nullable=False))
-    github_link: Optional[str] = Field(default=None, max_length=500)
-    deployed_link: Optional[str] = Field(default=None, max_length=500)
-    last_seen_comments_at: Optional[datetime] = Field(default=None)
+    status: WeeklySheetStatus = Field(default=WeeklySheetStatus.draft)
+    
+    weekly_summary: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    major_accomplishments: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    tasks_completed: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    pending_tasks: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    blockers: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    productivity_insights: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    time_utilization: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    suggested_priorities: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class WeeklyComment(SQLModel, table=True):
-    """Admin feedback on a weekly progress entry."""
-    __tablename__ = "weekly_comments"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    weekly_progress_id: int = Field(foreign_key="weekly_progress.id", index=True)
-    admin_id: int = Field(foreign_key="users.id", index=True)
-    comment: str = Field(sa_column=Column(Text, nullable=False))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class WeeklyProgressCreate(SQLModel):
+class LighthouseWeeklySheetCreate(SQLModel):
     week_start_date: DateType
-    description: str = Field(min_length=10, max_length=8000)
-    github_link: Optional[str] = None
-    deployed_link: Optional[str] = None
+    status: WeeklySheetStatus = WeeklySheetStatus.draft
+    weekly_summary: Optional[str] = None
+    major_accomplishments: Optional[str] = None
+    tasks_completed: Optional[str] = None
+    pending_tasks: Optional[str] = None
+    blockers: Optional[str] = None
+    productivity_insights: Optional[str] = None
+    time_utilization: Optional[str] = None
+    suggested_priorities: Optional[str] = None
 
 
-class WeeklyProgressUpdate(SQLModel):
-    description: Optional[str] = Field(default=None, min_length=10, max_length=8000)
-    github_link: Optional[str] = None
-    deployed_link: Optional[str] = None
+class LighthouseWeeklySheetUpdate(SQLModel):
+    status: Optional[WeeklySheetStatus] = None
+    weekly_summary: Optional[str] = None
+    major_accomplishments: Optional[str] = None
+    tasks_completed: Optional[str] = None
+    pending_tasks: Optional[str] = None
+    blockers: Optional[str] = None
+    productivity_insights: Optional[str] = None
+    time_utilization: Optional[str] = None
+    suggested_priorities: Optional[str] = None
 
 
-class WeeklyCommentCreate(SQLModel):
-    comment: str = Field(min_length=1, max_length=4000)
-
-
-class WeeklyCommentRead(SQLModel):
-    id: int
-    weekly_progress_id: int
-    admin_id: int
-    comment: str
-    created_at: datetime
-    admin_name: Optional[str] = None
-
-
-class WeeklyProgressRead(SQLModel):
+class LighthouseWeeklySheetRead(SQLModel):
     id: int
     organization_id: Optional[int] = None
     user_id: int
     week_start_date: DateType
-    description: str
-    github_link: Optional[str] = None
-    deployed_link: Optional[str] = None
-    last_seen_comments_at: Optional[datetime] = None
+    status: WeeklySheetStatus
+    weekly_summary: Optional[str] = None
+    major_accomplishments: Optional[str] = None
+    tasks_completed: Optional[str] = None
+    pending_tasks: Optional[str] = None
+    blockers: Optional[str] = None
+    productivity_insights: Optional[str] = None
+    time_utilization: Optional[str] = None
+    suggested_priorities: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    comments: List["WeeklyCommentRead"] = Field(default_factory=list)
-    has_unread_comments: bool = False
     employee_name: Optional[str] = None
     employee_email: Optional[str] = None
 
@@ -1299,16 +1296,6 @@ class DailyTaskSheetReportRow(SQLModel):
     time_taken: Optional[str] = None
     repo_link: Optional[str] = None
 
-
-class WeeklyProgressReportRow(SQLModel):
-    """Admin weekly progress row with nullable entry fields for missing submissions."""
-    user_id: int
-    user_name: str
-    user_email: str
-    week_start_date: DateType
-    description: Optional[str] = None
-    github_link: Optional[str] = None
-    deployed_link: Optional[str] = None
 
 
 class DreamProject(SQLModel, table=True):

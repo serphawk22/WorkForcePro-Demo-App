@@ -63,7 +63,6 @@ def create_notification(
     type: NotificationType,
     message: str,
     task_id: int = None,
-    weekly_progress_id: int = None,
 ):
     """Helper function to create a notification."""
     notification = Notification(
@@ -71,7 +70,6 @@ def create_notification(
         type=type,
         message=message,
         task_id=task_id,
-        weekly_progress_id=weekly_progress_id,
     )
     session.add(notification)
     session.commit()
@@ -98,7 +96,6 @@ async def get_notifications(
             type=str(n.type.value if hasattr(n.type, "value") else n.type),
             message=n.message,
             task_id=n.task_id,
-            weekly_progress_id=n.weekly_progress_id,
             is_read=n.is_read,
             created_at=n.created_at,
         )

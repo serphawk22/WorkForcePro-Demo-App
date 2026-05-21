@@ -203,6 +203,7 @@ def _task_to_with_assignee(
     session: Session,
     task: Task,
     latest_comment_at: Optional[datetime] = None,
+    comments: Optional[List[str]] = None,
 ) -> TaskWithAssignee:
     assignee = None
     if task.assigned_to:
@@ -218,6 +219,10 @@ def _task_to_with_assignee(
     if task.assigned_by:
         assigner_stmt = select(User).where(User.id == task.assigned_by)
         assigner = session.exec(assigner_stmt).first()
+
+    if comments is None:
+        comments_stmt = select(TaskComment.comment).where(TaskComment.task_id == task.id)
+        comments = list(session.exec(comments_stmt).all())
 
     return TaskWithAssignee(
         id=task.id,
@@ -248,7 +253,9 @@ def _task_to_with_assignee(
         assigned_by_name=assigner.name if assigner else None,
         progress=calculate_task_progress(task, session),
         **_recurrence_kwargs(task),
+        comments=comments,
     )
+
 
 
 def _legacy_subtask_status_to_task_status(status: SubtaskStatus) -> TaskStatus:
@@ -324,7 +331,9 @@ def _legacy_subtask_to_task_with_assignee(
         recurrence_start_date=None,
         recurrence_end_date=None,
         monthly_day=None,
+        comments=[],
     )
+
 
 
 # Helper function to calculate task progress
@@ -1259,6 +1268,14 @@ async def get_all_tasks(
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
     
+    comments_by_task = {}
+    task_ids = [t.id for t in tasks]
+    if task_ids:
+        comments_stmt = select(TaskComment).where(TaskComment.task_id.in_(task_ids))
+        comments_list = session.exec(comments_stmt).all()
+        for c in comments_list:
+            comments_by_task.setdefault(c.task_id, []).append(c.comment)
+
     result = []
     for task in tasks:
         assignee = None
@@ -1304,9 +1321,11 @@ async def get_all_tasks(
             assigned_by_name=assigner.name if assigner else None,
             progress=calculate_task_progress(task, session),
             **_recurrence_kwargs(task),
+            comments=comments_by_task.get(task.id, []),
         ))
     
     return result
+
 
 
 @router.get("/{task_id}/children", response_model=List[TaskWithAssignee])
@@ -1348,14 +1367,30 @@ async def get_task_children(
     ).all()
 
     latest_comment_lookup = _latest_comment_map(session, [child.id for child in children])
+    
+    # Batch-fetch comments for child tasks
+    child_ids = [child.id for child in children]
+    comments_by_child = {}
+    if child_ids:
+        comments_stmt = select(TaskComment).where(TaskComment.task_id.in_(child_ids))
+        comments_list = session.exec(comments_stmt).all()
+        for c in comments_list:
+            comments_by_child.setdefault(c.task_id, []).append(c.comment)
+
     task_children_payload = [
-        _task_to_with_assignee(session, child, latest_comment_lookup.get(child.id))
+        _task_to_with_assignee(
+            session=session,
+            task=child,
+            latest_comment_at=latest_comment_lookup.get(child.id),
+            comments=comments_by_child.get(child.id, []),
+        )
         for child in children
     ]
     legacy_children_payload = [
         _legacy_subtask_to_task_with_assignee(session, subtask, task_id, workspace)
         for subtask in legacy_subtasks
     ]
+
 
     return task_children_payload + legacy_children_payload
 

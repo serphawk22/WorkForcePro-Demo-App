@@ -114,11 +114,6 @@ export function NotificationDropdown() {
       return;
     }
 
-    if (notificationType === "weekly_progress_comment") {
-      router.push(user?.role === "admin" ? "/admin/weekly-progress" : "/weekly-progress");
-      return;
-    }
-
     if (notificationType === "salary_paid") {
       router.push(user?.role === "admin" ? "/payroll" : "/profile");
       return;
