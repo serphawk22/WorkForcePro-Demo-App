@@ -10,7 +10,6 @@ from app.database import engine
 from app.models import (
     User,
     Task,
-    Attendance,
     TaskSheet,
     LighthouseWeeklySheet,
     WeeklySheetStatus,
@@ -48,25 +47,9 @@ def generate_weekly_sheets_job():
                     task_data.append({
                         "title": t.title,
                         "status": t.status,
-                        "estimated_hours": t.estimated_hours,
-                        "actual_hours": t.actual_hours,
                         "due_date": str(t.due_date) if t.due_date else None,
                         "completed": t.done_by_employee
                     })
-                    
-                attendances = session.exec(
-                    select(Attendance).where(
-                        Attendance.user_id == user.id,
-                        Attendance.date >= week_start,
-                        Attendance.date <= week_end
-                    )
-                ).all()
-                
-                total_hours = sum([a.total_hours for a in attendances if a.total_hours])
-                attendance_data = {
-                    "days_logged": len(attendances),
-                    "total_hours": total_hours
-                }
 
                 task_sheets = session.exec(
                     select(TaskSheet).where(
@@ -78,11 +61,9 @@ def generate_weekly_sheets_job():
 
                 task_sheet_data = [
                     {
-                        "date": str(sheet.date),
+                        "day": sheet.date.strftime("%A"),
                         "tasks_completed": sheet.tasks_completed,
                         "work_impact": sheet.work_impact,
-                        "time_taken": sheet.time_taken,
-                        "repo_link": sheet.repo_link,
                     }
                     for sheet in task_sheets
                 ]
@@ -90,7 +71,6 @@ def generate_weekly_sheets_job():
                 payload_data = {
                     "week_start": str(week_start),
                     "week_end": str(week_end),
-                    "attendance": attendance_data,
                     "task_sheets": task_sheet_data,
                 }
                 if not task_sheet_data:
@@ -117,7 +97,6 @@ def generate_weekly_sheets_job():
                         payload,
                         week_start,
                         week_end,
-                        attendance_data,
                         task_data,
                         task_sheet_data,
                     )

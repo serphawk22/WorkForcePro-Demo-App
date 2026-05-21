@@ -145,7 +145,7 @@ export default function WeeklySheetGenerator() {
       { Field: "Pending Tasks", Content: sheet.pending_tasks },
       { Field: "Blockers", Content: sheet.blockers },
       { Field: "Productivity Insights", Content: sheet.productivity_insights },
-      { Field: "Time Utilization", Content: sheet.time_utilization },
+      { Field: "Days Covered", Content: sheet.time_utilization },
       { Field: "Suggested Priorities", Content: sheet.suggested_priorities },
     ];
     const ws = XLSX.utils.json_to_sheet(data);
@@ -179,7 +179,7 @@ export default function WeeklySheetGenerator() {
         </div>
         <h2 className="text-2xl font-semibold">No Weekly Sheet Generated Yet</h2>
         <p className="text-muted-foreground max-w-md">
-          Use the power of AI to automatically generate your weekly sheet based on your tasks, attendance, and activity for the week.
+          Use the power of AI to automatically generate your weekly sheet from the task sheets submitted that week.
         </p>
         <Button onClick={generateSheet} disabled={generating} size="lg" className="mt-4">
           {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -308,7 +308,7 @@ export default function WeeklySheetGenerator() {
 
             <Card className="border-none shadow-none bg-teal-50/50 dark:bg-teal-900/10">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-teal-700 dark:text-teal-400 uppercase tracking-wider">Time Utilization</CardTitle>
+                <CardTitle className="text-sm text-teal-700 dark:text-teal-400 uppercase tracking-wider">Days Covered</CardTitle>
               </CardHeader>
               <CardContent>
                 <Textarea 
