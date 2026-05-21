@@ -6,6 +6,7 @@ import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
+import { buildWeeklyDescription } from "@/lib/weeklyProgress";
 import {
   deleteTaskSheetEntry,
   getAllTaskSheets,
@@ -14,6 +15,7 @@ import {
   TaskSheetEntry,
   updateTaskSheetEntry,
   getAdminDailyTaskSheetReport,
+  upsertMyWeeklyProgress,
   DailyTaskSheetReportRow,
 } from "@/lib/api";
 
@@ -69,6 +71,121 @@ export default function TaskSheetPage() {
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState<TaskSheetEntry | null>(null);
   const [isDeletingEntry, setIsDeletingEntry] = useState(false);
   const [isExportingPng, setIsExportingPng] = useState(false);
+  const [weeklyDraftOpen, setWeeklyDraftOpen] = useState(false);
+  const [draftDescription, setDraftDescription] = useState("");
+  const [draftGithubLink, setDraftGithubLink] = useState("");
+  const [draftDeployedLink, setDraftDeployedLink] = useState("");
+  const [draftWeekStart, setDraftWeekStart] = useState("");
+  const [isDraftSending, setIsDraftSending] = useState(false);
+
+  const getWeekRange = (dateString: string) => {
+    const d = new Date(`${dateString}T12:00:00`);
+    const day = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((day + 6) % 7));
+    monday.setHours(0, 0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    return { monday, sunday };
+  };
+
+  const formatWeekRange = (monday: Date, sunday: Date) => {
+    return `${monday.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${sunday.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  };
+
+  const buildWeeklySheetDraftFromTaskLogs = (dateString: string) => {
+    const { monday, sunday } = getWeekRange(dateString);
+    const weekEntries = myEntries
+      .filter((entry) => {
+        const entryDate = new Date(`${entry.date}T12:00:00`);
+        return entryDate >= monday && entryDate <= sunday;
+      })
+      .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime());
+
+    const weekLabel = formatWeekRange(monday, sunday);
+    const entryLines = weekEntries.length > 0
+      ? weekEntries.map((entry) => {
+          const dayLabel = new Date(`${entry.date}T12:00:00`).toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
+          return `- ${dayLabel}: ${entry.tasks_completed.trim()} Impact: ${entry.work_impact.trim()} Time: ${entry.time_taken.trim()}`;
+        }).join("\n")
+      : "- No daily task sheet entries were recorded for this week.";
+
+    const weeklyEntry = `Weekly overview for week of ${weekLabel}:\n${entryLines}`;
+    const highlights = weekEntries.length > 0
+      ? weekEntries.slice(0, 3).map((entry) => {
+          const dayLabel = new Date(`${entry.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+          const summary = entry.work_impact.trim().split(".")[0] || entry.tasks_completed.trim();
+          return `- ${dayLabel}: ${summary}`;
+        }).join("\n")
+      : "- No highlights available yet.";
+
+    const difficultyMatches = weekEntries
+      .filter((entry) => /delay|blocked|issue|failed|bug|error|challenge/i.test(`${entry.tasks_completed} ${entry.work_impact}`));
+    const difficulties = difficultyMatches.length > 0
+      ? difficultyMatches.map((entry) => {
+          const dayLabel = new Date(`${entry.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+          return `- ${dayLabel}: ${entry.work_impact.trim() || entry.tasks_completed.trim()}`;
+        }).join("\n")
+      : "- No major difficulties were logged this week.";
+
+    const draft = buildWeeklyDescription(weeklyEntry, highlights, difficulties);
+    const latestRepo = [...weekEntries].reverse().find((entry) => entry.repo_link)?.repo_link || "";
+
+    return {
+      draft,
+      weekStart: monday.toISOString().slice(0, 10),
+      githubLink: latestRepo,
+      deployedLink: "",
+    };
+  };
+
+  const handleGenerateWeeklyDraft = () => {
+    const draftData = buildWeeklySheetDraftFromTaskLogs(selectedDate);
+    setDraftDescription(draftData.draft);
+    setDraftGithubLink(draftData.githubLink);
+    setDraftDeployedLink(draftData.deployedLink);
+    setDraftWeekStart(draftData.weekStart);
+    setWeeklyDraftOpen(true);
+    showFloatingToast({ type: "success", message: "Weekly sheet draft generated. Edit it and send when ready." });
+  };
+
+  const handleSendWeeklyDraft = async () => {
+    if (!draftDescription.trim()) {
+      showFloatingToast({ type: "error", message: "Draft content is empty. Generate a draft first." });
+      return;
+    }
+    setIsDraftSending(true);
+    try {
+      const res = await upsertMyWeeklyProgress({
+        week_start_date: draftWeekStart || getWeekRange(selectedDate).monday.toISOString().slice(0, 10),
+        description: draftDescription.trim(),
+        github_link: draftGithubLink.trim() || undefined,
+        deployed_link: draftDeployedLink.trim() || undefined,
+      });
+      if (res.error) {
+        showFloatingToast({ type: "error", message: res.error });
+      } else {
+        showFloatingToast({ type: "success", message: "Weekly sheet draft saved to history." });
+        setWeeklyDraftOpen(false);
+      }
+    } catch (err: any) {
+      showFloatingToast({ type: "error", message: err?.message || "Failed to save weekly sheet." });
+    } finally {
+      setIsDraftSending(false);
+    }
+  };
+
+  const buildWeekLabel = (dateString: string) => {
+    const { monday, sunday } = getWeekRange(dateString);
+    return formatWeekRange(monday, sunday);
+  };
 
   const loadTaskSheets = useCallback(async () => {
     if (!user) return;
@@ -442,6 +559,14 @@ export default function TaskSheetPage() {
                 )}
               </button>
 
+              <button
+                type="button"
+                onClick={handleGenerateWeeklyDraft}
+                className="h-11 px-4 border border-slate-300/70 dark:border-white/10 text-[#522B5B] dark:text-purple-300 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-sm"
+              >
+                Generate Weekly Sheet Draft
+              </button>
+
               {(editingEntryId || isUpdate || tasksCompleted || workImpact || timeTaken || repoLink) && (
                 <button
                   type="button"
@@ -460,6 +585,75 @@ export default function TaskSheetPage() {
               )}
             </div>
           </form>
+
+          {weeklyDraftOpen && (
+            <div className="mt-6 rounded-2xl p-6 border border-dashed border-slate-300/70 bg-slate-50 dark:bg-slate-900 dark:border-slate-700">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-[#2B124C] dark:text-purple-100">Weekly Sheet Draft</p>
+                  <p className="text-xs text-[#854F6C] dark:text-purple-300">Review and edit before sending to Weekly Progress history.</p>
+                </div>
+                <div className="text-xs text-muted-foreground">Week: {buildWeekLabel(selectedDate)}</div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Draft Description</label>
+                  <textarea
+                    value={draftDescription}
+                    onChange={(e) => setDraftDescription(e.target.value)}
+                    rows={10}
+                    className="w-full p-3 rounded-lg text-sm focus:outline-none transition-all resize-y lighthouse-input"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">GitHub Link</label>
+                    <input
+                      type="url"
+                      value={draftGithubLink}
+                      onChange={(e) => setDraftGithubLink(e.target.value)}
+                      placeholder="https://github.com/..."
+                      className="w-full h-11 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-[#522B5B] dark:text-purple-300">Deployed Link</label>
+                    <input
+                      type="url"
+                      value={draftDeployedLink}
+                      onChange={(e) => setDraftDeployedLink(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full h-11 px-3 rounded-lg text-sm focus:outline-none transition-all lighthouse-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSendWeeklyDraft}
+                    disabled={isDraftSending}
+                    className="flex-1 h-11 bg-emerald-600 text-white font-semibold rounded-lg transition-all hover:bg-emerald-500 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isDraftSending ? (
+                      <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    ) : (
+                      <>Send Weekly Sheet</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeeklyDraftOpen(false)}
+                    className="h-11 px-4 border border-slate-300/70 dark:border-white/10 text-[#522B5B] dark:text-purple-300 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-sm"
+                  >
+                    Close Draft
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Timeline History - Grouped by Date */}
