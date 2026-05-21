@@ -29,8 +29,38 @@ from app.models import (
 )
 from app.auth import get_current_user, get_current_admin_user, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
+from app.services.email_service import (
+    build_subtask_assignment_email,
+    get_employee_delivery_email,
+    send_email,
+)
 
 router = APIRouter(prefix="/tasks", tags=["Subtasks"])
+
+
+def _send_subtask_assignment_email(
+    user: User,
+    subtask: Subtask,
+    parent_task: Task,
+    assigner_name: str,
+) -> None:
+    recipient = get_employee_delivery_email(user)
+    if not recipient:
+        print(f"[EMAIL] subtask assignment skipped; no mapped email for {user.name}")
+        return
+    try:
+        subject, body = build_subtask_assignment_email(
+            user_name=user.name,
+            subtask_id=subtask.id,
+            subtask_title=subtask.title,
+            parent_task_id=parent_task.id,
+            parent_task_title=parent_task.title,
+            assigner_name=assigner_name,
+            due_date=subtask.due_date,
+        )
+        send_email(recipient, subject, body)
+    except Exception as exc:
+        print(f"[EMAIL] subtask assignment email failed for {recipient}: {exc}")
 
 
 @router.post("/subtasks/{subtask_id}/comments", response_model=SubtaskCommentRead, status_code=status.HTTP_201_CREATED)
@@ -146,7 +176,7 @@ async def create_subtask(
         )
 
     requested_assignee_id = subtask_data.assigned_to
-    requested_reporter_id = subtask_data.assigned_by
+    requested_reporter_id = subtask_data.assigned_by or current_user.id
 
     reporter_stmt = select(User).where(User.id == requested_reporter_id)
     reporter = session.exec(reporter_stmt).first()
@@ -162,14 +192,6 @@ async def create_subtask(
             detail="Only admins can choose a different reporter"
         )
 
-    assignment_alert_message = None
-    if task.assigned_to and requested_assignee_id != task.assigned_to:
-        requested_assignee_id = task.assigned_to
-        assignment_alert_message = (
-            f"Assignment corrected automatically for subtask '{subtask_data.title}'. "
-            f"Because it belongs to task #{task.id}, it was assigned to that task's assignee."
-        )
-    
     # Assignee is mandatory for subtask creation.
     assignee_stmt = select(User).where(User.id == requested_assignee_id)
     assignee = session.exec(assignee_stmt).first()
@@ -224,16 +246,13 @@ async def create_subtask(
             message=f"{current_user.name} assigned you a subtask: '{subtask.title}' under task #{task.id}",
             task_id=task.id
         )
-
-    if assignment_alert_message:
-        create_notification(
-            session=session,
-            user_id=current_user.id,
-            type=NotificationType.TASK_COMMENT,
-            message=assignment_alert_message,
-            task_id=task.id,
+        _send_subtask_assignment_email(
+            assignee,
+            subtask,
+            task,
+            reporter.name if reporter else current_user.name,
         )
-    
+
     return subtask
 
 
@@ -545,6 +564,9 @@ async def update_subtask(
             message=f"New subtask assigned: '{subtask.title}' (Reassigned by {current_user.name})",
             task_id=subtask.parent_task_id
         )
+        new_assignee = session.get(User, subtask.assigned_to)
+        if new_assignee:
+            _send_subtask_assignment_email(new_assignee, subtask, parent_task, current_user.name)
 
     # Reload and refresh to ensure all fields are correctly populated for response
     session.refresh(subtask)

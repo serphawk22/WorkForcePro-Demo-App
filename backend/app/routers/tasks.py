@@ -37,7 +37,13 @@ from app.models import (
 )
 from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
+from app.services.email_service import (
+    build_task_assignment_email,
+    get_employee_delivery_email,
+    send_email,
+)
 from app.services.recurring_tasks import ensure_instances_for_task, materialize_all_recurring_tasks
+from app.services.sheet_reminder_service import send_missing_sheet_reminders
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -75,6 +81,23 @@ def _clear_actionable_task_notifications(session: Session, task_id: int) -> None
     notifications = session.exec(statement).all()
     for notification in notifications:
         session.delete(notification)
+
+
+def _send_task_assignment_email(user: User, task: Task, assigner_name: Optional[str]) -> None:
+    recipient = get_employee_delivery_email(user)
+    if not recipient:
+        return
+    try:
+        subject, body = build_task_assignment_email(
+            user_name=user.name,
+            task_id=task.id,
+            task_title=task.title,
+            assigner_name=assigner_name,
+            due_date=task.due_date,
+        )
+        send_email(recipient, subject, body)
+    except Exception as exc:
+        print(f"[EMAIL] task assignment email failed for {recipient}: {exc}")
 
 
 def _resolve_voice_content_type(raw_content_type: str, filename: Optional[str]) -> str:
@@ -690,6 +713,22 @@ async def materialize_recurring_instances(
     return {"materialized_new_rows": n, "message": "Recurring instances ensured"}
 
 
+@router.post("/cron/reminders")
+async def send_task_and_happy_sheet_reminders(
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    x_cron_secret: Optional[str] = Header(default=None, alias="X-Cron-Secret"),
+):
+    """Send email reminders to users who have not submitted task sheet or happy sheet today."""
+    secret = os.getenv("CRON_SECRET", "")
+    cron_ok = bool(secret and x_cron_secret == secret)
+    admin_ok = current_user is not None and is_admin_user(current_user)
+    if not cron_ok and not admin_ok:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return send_missing_sheet_reminders(session, target_date=date.today())
+
+
 @router.patch("/{task_id}/status", response_model=TaskRead)
 async def update_task_status(
     task_id: int,
@@ -1226,6 +1265,7 @@ async def create_task(
             message=f"New task assigned: Task #{task.id} - {task.title}",
             task_id=task.id
         )
+        _send_task_assignment_email(assignee, task, reporter.name if reporter else admin.name)
 
     if assignment_alert_message:
         create_notification(
@@ -1709,6 +1749,9 @@ async def update_task(
             message=f"New task assigned: Task #{task.id} - {task.title} (Reassigned by {admin.name})",
             task_id=task.id
         )
+        new_assignee = session.get(User, task.assigned_to)
+        if new_assignee:
+            _send_task_assignment_email(new_assignee, task, admin.name)
 
     if assignment_alert_message:
         create_notification(

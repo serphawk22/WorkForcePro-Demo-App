@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
 from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
-from app.services.weekly_sheet_scheduler import start_scheduler, stop_scheduler
+from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
 
@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup: Create database tables
     create_db_and_tables()
+    sheet_reminder_scheduler = start_sheet_reminder_scheduler()
 
     is_sqlite = engine.url.drivername == "sqlite"
 
@@ -35,7 +36,10 @@ async def lifespan(app: FastAPI):
 
     if skip_startup_bootstrap == "1":
         print("[startup] SKIP_STARTUP_BOOTSTRAP=1 -> core tables ready, skipping heavy startup bootstrap")
-        yield
+        try:
+            yield
+        finally:
+            await stop_sheet_reminder_scheduler(sheet_reminder_scheduler)
         return
 
     if is_sqlite:
@@ -502,10 +506,10 @@ async def lifespan(app: FastAPI):
             if orphan_tasks:
                 session.commit()
     
-    start_scheduler()
-    yield
-    # Shutdown: cleanup if needed
-    stop_scheduler()
+    try:
+        yield
+    finally:
+        await stop_sheet_reminder_scheduler(sheet_reminder_scheduler)
 
 
 app = FastAPI(
