@@ -10,6 +10,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface WeeklySheet {
   id?: number;
@@ -41,7 +42,7 @@ export default function WeeklySheetGenerator() {
   const fetchCurrentSheet = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/current", {
+      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/current`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -60,7 +61,7 @@ export default function WeeklySheetGenerator() {
   const generateSheet = async () => {
     setGenerating(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/generate", {
+      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/generate`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -82,7 +83,7 @@ export default function WeeklySheetGenerator() {
     if (!sheet) return;
     setSaving(true);
     try {
-      const res = await fetch("http://localhost:8000/api/my-space/weekly-sheet/save", {
+      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/save`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
