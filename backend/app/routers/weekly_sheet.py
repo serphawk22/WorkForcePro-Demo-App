@@ -55,6 +55,15 @@ def _format_sheet_lines(sheets: List[dict], field: str, empty_message: str) -> s
     return "\n".join(lines) if lines else empty_message
 
 
+def _join_sheet_details(sheets: List[dict], field: str) -> str:
+    details = [
+        f"{sheet.get('date')}: {(sheet.get(field) or '').strip()}"
+        for sheet in sheets
+        if (sheet.get(field) or "").strip()
+    ]
+    return "; ".join(details) if details else "not specified"
+
+
 def build_weekly_sheet_fallback(
     week_start: DateType,
     week_end: DateType,
@@ -68,6 +77,8 @@ def build_weekly_sheet_fallback(
         total_attendance_hours = attendance_data.get("total_hours") or 0
         days_logged = attendance_data.get("days_logged") or 0
         dates = ", ".join(sheet["date"] for sheet in task_sheet_data)
+        completed_details = _join_sheet_details(task_sheet_data, "tasks_completed")
+        impact_details = _join_sheet_details(task_sheet_data, "work_impact")
         time_entries = [
             f"{sheet['date']}: {sheet['time_taken']}"
             for sheet in task_sheet_data
@@ -81,9 +92,14 @@ def build_weekly_sheet_fallback(
 
         return {
             "weekly_summary": (
-                f"For the week of {week_start} to {week_end}, this sheet was generated from "
-                f"{len(task_sheet_data)} submitted daily task sheet(s): {dates}. The work summary "
-                "below reflects the tasks, impact, and time entered in those task sheets."
+                f"For the week of {week_start} to {week_end}, this summary is based on "
+                f"{len(task_sheet_data)} submitted daily task sheet(s) covering {dates}. "
+                f"The reported work for the week included {completed_details}. "
+                f"The stated impact of this work was {impact_details}. "
+                f"Attendance records show {total_attendance_hours:.2f} logged hours across {days_logged} day(s), "
+                f"while the task sheets recorded time as {'; '.join(time_entries) if time_entries else 'not specified'}. "
+                "Overall, the week reflects the employee's submitted daily progress, the value they reported creating, "
+                "and the time context available from attendance and task-sheet entries."
             ),
             "major_accomplishments": _format_sheet_lines(
                 task_sheet_data,
@@ -133,14 +149,19 @@ def build_weekly_sheet_fallback(
 
     if task_data:
         summary = (
-            f"For the week of {week_start} to {week_end}, this sheet was prepared from the "
-            f"available task and attendance records. {len(completed_tasks)} of {len(task_data)} "
-            f"assigned tasks are marked complete, with {len(pending_tasks)} still pending."
+            f"For the week of {week_start} to {week_end}, no daily task sheet entries were found, "
+            "so this draft was prepared from assigned task and attendance records. "
+            f"{len(completed_tasks)} of {len(task_data)} assigned task(s) are marked complete, "
+            f"with {len(pending_tasks)} still pending. "
+            f"Attendance records show {total_attendance_hours:.2f} logged hours across {days_logged} day(s). "
+            "The summary should be reviewed and edited with any missing context from the employee's actual daily work."
         )
     else:
         summary = (
             f"For the week of {week_start} to {week_end}, no assigned task records were found. "
-            "This draft was created from the available attendance data and can be edited before submission."
+            f"Attendance records show {total_attendance_hours:.2f} logged hours across {days_logged} day(s). "
+            "This draft was created from the available attendance data and should be completed with the employee's "
+            "actual weekly work details before submission."
         )
 
     blockers = (
@@ -213,7 +234,7 @@ Do not hallucinate any accomplishments not present in the provided data.
 
 Return ONLY a valid JSON object matching exactly this schema, without markdown formatting or code blocks:
 {
-    "weekly_summary": "A 2-4 sentence high-level summary of the week's overall performance.",
+    "weekly_summary": "A detailed 4-6 sentence narrative summary of the week. Mention the covered task sheet dates, the main reported work, the value or impact created, and the time/attendance context. Keep it factual and based only on the supplied data.",
     "major_accomplishments": "List major wins or deliverables completed. Use bullet points (text based, e.g., •).",
     "tasks_completed": "List of the tasks completed this week.",
     "pending_tasks": "List of tasks still in progress or not started.",
