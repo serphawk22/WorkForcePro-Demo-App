@@ -4,8 +4,9 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download } from "lucide-react";
+import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download, Eye } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { buildWeeklyDescription } from "@/lib/weeklyProgress";
 import {
   deleteTaskSheetEntry,
@@ -77,6 +78,9 @@ export default function TaskSheetPage() {
   const [draftDeployedLink, setDraftDeployedLink] = useState("");
   const [draftWeekStart, setDraftWeekStart] = useState("");
   const [isDraftSending, setIsDraftSending] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const getWeekRange = (dateString: string) => {
     const d = new Date(`${dateString}T12:00:00`);
@@ -465,6 +469,28 @@ export default function TaskSheetPage() {
     }
   };
 
+  const handlePreviewReport = async () => {
+    if (user?.role !== "admin") return;
+    setIsPreviewLoading(true);
+    try {
+      const reportDate = logFilterDate;
+      const reportRes = await getAdminDailyTaskSheetReport(reportDate);
+      if (!reportRes.data) {
+        throw new Error(reportRes.error || "Failed to load daily task sheet report data.");
+      }
+
+      const canvas = buildReportCanvas(reportDate, reportRes.data);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      setPreviewImage(dataUrl);
+      setIsPreviewOpen(true);
+    } catch (err: any) {
+      console.error("Preview failed", err);
+      showFloatingToast({ type: "error", message: err?.message || "Failed to generate preview." });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   const filteredEntries = useMemo(() => {
     return [...timelineEntries]
       .filter((entry) => entry.date === logFilterDate)
@@ -671,20 +697,36 @@ export default function TaskSheetPage() {
                 className="h-8 px-2 rounded-lg text-sm focus:outline-none lighthouse-input-white"
               />
               {user?.role === "admin" && (
-                <button
-                  type="button"
-                  onClick={handleDownloadPng}
-                  disabled={isExportingPng}
-                  className="h-8 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Download daily task sheet JPEG"
-                >
-                  {isExportingPng ? (
-                    <div className="h-3 w-3 rounded-full border-2 border-[#522B5B]/30 dark:border-white/20 border-t-[#522B5B] dark:border-t-white animate-spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  <span className="hidden sm:inline">{isExportingPng ? "Exporting..." : "Download Report"}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePreviewReport}
+                    disabled={isPreviewLoading}
+                    className="h-8 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Preview daily task sheet report"
+                  >
+                    {isPreviewLoading ? (
+                      <div className="h-3 w-3 rounded-full border-2 border-[#522B5B]/30 dark:border-white/20 border-t-[#522B5B] dark:border-t-white animate-spin" />
+                    ) : (
+                      <Eye size={14} />
+                    )}
+                    <span className="hidden sm:inline">{isPreviewLoading ? "Loading..." : "Preview"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadPng}
+                    disabled={isExportingPng}
+                    className="h-8 px-3 rounded-lg border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 hover:bg-slate-200/70 dark:hover:bg-white/10 inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Download daily task sheet JPEG"
+                  >
+                    {isExportingPng ? (
+                      <div className="h-3 w-3 rounded-full border-2 border-[#522B5B]/30 dark:border-white/20 border-t-[#522B5B] dark:border-t-white animate-spin" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    <span className="hidden sm:inline">{isExportingPng ? "Exporting..." : "Download Report"}</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -818,6 +860,23 @@ export default function TaskSheetPage() {
             </div>
           </div>
         )}
+
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className="max-w-5xl w-[90vw] h-[90vh] flex flex-col p-0 overflow-hidden bg-slate-50 dark:bg-slate-900 border-none">
+            <DialogHeader className="p-4 border-b bg-white dark:bg-black/40 shadow-sm flex-shrink-0">
+              <DialogTitle className="text-xl font-bold">Daily Task Sheet Preview</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto p-4 flex justify-center bg-slate-100 dark:bg-black/20">
+              {previewImage && (
+                <img
+                  src={previewImage}
+                  alt="Report Preview"
+                  className="max-w-full h-auto object-contain shadow-lg rounded border border-slate-200 dark:border-slate-800"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </MySpaceShell>
   );
