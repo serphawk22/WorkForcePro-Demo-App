@@ -7,7 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download, Eye } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { buildWeeklyDescription } from "@/lib/weeklyProgress";
+import { buildWeeklyDescription } from "@/lib/htmlUtils";
 import {
   deleteTaskSheetEntry,
   getAllTaskSheets,
