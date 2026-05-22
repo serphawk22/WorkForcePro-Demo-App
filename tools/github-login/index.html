@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GitHub Local Login Helper</title>
+  <style>
+    body{font-family:Segoe UI,Roboto,Arial;margin:20px;background:#f7f9fc;color:#0b1220}
+    .card{background:#fff;border-radius:8px;padding:18px;max-width:760px;margin:auto;box-shadow:0 6px 18px rgba(12,24,40,.08)}
+    label{display:block;margin-top:12px;font-weight:600}
+    input,textarea,select{width:100%;padding:10px;border:1px solid #dbe7f0;border-radius:6px;margin-top:6px}
+    button{margin-top:12px;padding:10px 14px;border-radius:6px;border:0;background:#0b5cff;color:#fff;font-weight:600}
+    .small{font-size:13px;color:#475569}
+    pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:6px;overflow:auto}
+    .row{display:flex;gap:10px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>GitHub Local Login Helper</h2>
+    <p class="small">This tool helps you build the exact `gh auth login` command to run locally. The token you type is never sent anywhere — it stays in your browser page and is used only to build a command you can copy to the terminal.</p>
+
+    <label>GitHub username (for reference)</label>
+    <input id="username" placeholder="your-github-username" />
+
+    <label>Personal Access Token (PAT)</label>
+    <input id="token" type="password" placeholder="ghp_..." autocomplete="new-password" />
+
+    <label>Repository (owner/repo)</label>
+    <input id="repo" placeholder="serphawk22/WorkForcePro-Demo-App" />
+
+    <label>Branch to push</label>
+    <input id="branch" value="main" />
+
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <button id="gen">Generate Commands</button>
+      <button id="open" type="button">Open GitHub Login Page</button>
+    </div>
+
+    <div id="out" style="margin-top:14px;display:none">
+      <h3>Commands</h3>
+      <p class="small">Copy & run the appropriate command for your terminal.</p>
+
+      <label>PowerShell</label>
+      <pre id="cmd-pwsh"></pre>
+      <div class="row"><button data-copy="pwsh">Copy PowerShell</button></div>
+
+      <label>cmd.exe</label>
+      <pre id="cmd-cmd"></pre>
+      <div class="row"><button data-copy="cmd">Copy cmd</button></div>
+
+      <label>Bash (Git Bash / WSL / macOS / Linux)</label>
+      <pre id="cmd-bash"></pre>
+      <div class="row"><button data-copy="bash">Copy Bash</button></div>
+
+      <h4 style="margin-top:14px">Set remote (optional)</h4>
+      <pre id="cmd-remote"></pre>
+      <div class="row"><button data-copy="remote">Copy remote + push</button></div>
+
+      <p class="small" style="margin-top:12px">After running the auth command, verify with <code>gh auth status</code>. Then run the push command to upload your commit.</p>
+
+      <p class="small" style="margin-top:6px;color:#7b8794">Note: Avoid pasting your token into unknown websites. This page runs locally in your browser and does not transmit the token.</p>
+    </div>
+  </div>
+
+  <script>
+    const el = id => document.getElementById(id)
+    const escape = s => (s||"").replace(/\\/g,"\\\\").replace(/'/g,"'\\"'\").replace(/"/g,'\"')
+    document.getElementById('open').addEventListener('click', ()=>{
+      window.open('https://github.com/login', '_blank')
+    })
+
+    document.getElementById('gen').addEventListener('click', ()=>{
+      const token = el('token').value.trim()
+      const repo = el('repo').value.trim() || 'serphawk22/WorkForcePro-Demo-App'
+      const branch = el('branch').value.trim() || 'main'
+      if(!token){alert('Please enter your Personal Access Token (PAT).');return}
+
+      // PowerShell: pipe token into gh
+      const pwsh = "$token = '" + token.replace(/'/g, "'\"'\"'") + "'\n$token | gh auth login --with-token"
+
+      // cmd.exe
+      const cmd = "echo " + token + " | gh auth login --with-token"
+
+      // bash
+      const bash = "echo '" + token.replace(/'/g, "'\\'\"'\"") + "' | gh auth login --with-token"
+
+      const remote = `git remote set-url origin https://github.com/${repo}.git\n git push -u origin ${branch}`
+
+      el('cmd-pwsh').textContent = pwsh
+      el('cmd-cmd').textContent = cmd
+      el('cmd-bash').textContent = bash
+      el('cmd-remote').textContent = remote
+
+      document.getElementById('out').style.display = 'block'
+    })
+
+    document.body.addEventListener('click', (e)=>{
+      const target = e.target
+      const key = target.getAttribute('data-copy')
+      if(!key) return
+      let txt = ''
+      if(key==='pwsh') txt = el('cmd-pwsh').textContent
+      if(key==='cmd') txt = el('cmd-cmd').textContent
+      if(key==='bash') txt = el('cmd-bash').textContent
+      if(key==='remote') txt = el('cmd-remote').textContent
+      if(!txt) return
+      navigator.clipboard.writeText(txt).then(()=>{
+        const old = target.textContent
+        target.textContent = 'Copied'
+        setTimeout(()=> target.textContent = old,1500)
+      })
+    })
+  </script>
+</body>
+</html>

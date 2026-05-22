@@ -75,7 +75,7 @@ export default function WeeklySheetGenerator() {
       if (!res.ok) throw new Error("Failed to generate weekly sheet");
       const data = await res.json();
       setSheet(data);
-      toast.success("AI generated your weekly sheet!");
+      toast.success("Weekly sheet created. Please fill in all sections.");
     } catch (error) {
       toast.error("Error generating weekly sheet");
       console.error(error);
@@ -177,13 +177,13 @@ export default function WeeklySheetGenerator() {
         <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
           <RefreshCw className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-2xl font-semibold">No Weekly Sheet Generated Yet</h2>
+        <h2 className="text-2xl font-semibold">Create Your Weekly Sheet</h2>
         <p className="text-muted-foreground max-w-md">
-          Use the power of AI to automatically generate your weekly sheet from the task sheets submitted that week.
+          Start creating your weekly summary. Fill in all sections with your accomplishments, tasks, blockers, and priorities for the week.
         </p>
         <Button onClick={generateSheet} disabled={generating} size="lg" className="mt-4">
           {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Generate AI Weekly Sheet
+          Create New Weekly Sheet
         </Button>
       </div>
     );
@@ -214,7 +214,7 @@ export default function WeeklySheetGenerator() {
           </Button>
           <Button variant="outline" size="sm" onClick={generateSheet} disabled={generating}>
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Regenerate
+            Create New
           </Button>
         </div>
       </div>

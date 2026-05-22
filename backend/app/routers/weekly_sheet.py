@@ -334,23 +334,17 @@ async def generate_weekly_sheet(
         for sheet in task_sheets
     ]
     
-    payload_data = {
-        "week_start": str(week_start),
-        "week_end": str(week_end),
-        "task_sheets": task_sheet_data,
+    # Create empty sheet for manual entry - no AI generation
+    ai_result = {
+        "weekly_summary": None,
+        "major_accomplishments": None,
+        "tasks_completed": None,
+        "pending_tasks": None,
+        "blockers": None,
+        "productivity_insights": None,
+        "time_utilization": None,
+        "suggested_priorities": None,
     }
-    if not task_sheet_data:
-        payload_data["assigned_tasks"] = task_data
-
-    payload = json.dumps(payload_data)
-    
-    ai_result = await generate_weekly_sheet_content(
-        payload,
-        week_start,
-        week_end,
-        task_data,
-        task_sheet_data,
-    )
     
     # Check if a draft exists
     existing = session.exec(
