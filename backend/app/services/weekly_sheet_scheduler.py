@@ -16,7 +16,7 @@ from app.models import (
     NotificationType,
 )
 from app.routers.notifications import create_notification
-from app.routers.weekly_sheet import generate_weekly_sheet_content, monday_of_week
+from app.routers.weekly_sheet import monday_of_week
 
 logger = logging.getLogger(__name__)
 
@@ -90,33 +90,21 @@ def generate_weekly_sheets_job():
                 if existing:
                     continue  # Skip if already exists so we don't overwrite manual edits
                 
-                import asyncio
-
-                ai_result = asyncio.run(
-                    generate_weekly_sheet_content(
-                        payload,
-                        week_start,
-                        week_end,
-                        task_data,
-                        task_sheet_data,
-                    )
-                )
-                
-                # Save new sheet
+                # Create empty sheet for manual entry - no AI generation
                 now = datetime.now(timezone.utc)
                 sheet = LighthouseWeeklySheet(
                     organization_id=user.organization_id,
                     user_id=user.id,
                     week_start_date=week_start,
                     status=WeeklySheetStatus.draft,
-                    weekly_summary=ai_result.get("weekly_summary"),
-                    major_accomplishments=ai_result.get("major_accomplishments"),
-                    tasks_completed=ai_result.get("tasks_completed"),
-                    pending_tasks=ai_result.get("pending_tasks"),
-                    blockers=ai_result.get("blockers"),
-                    productivity_insights=ai_result.get("productivity_insights"),
-                    time_utilization=ai_result.get("time_utilization"),
-                    suggested_priorities=ai_result.get("suggested_priorities"),
+                    weekly_summary=None,
+                    major_accomplishments=None,
+                    tasks_completed=None,
+                    pending_tasks=None,
+                    blockers=None,
+                    productivity_insights=None,
+                    time_utilization=None,
+                    suggested_priorities=None,
                     created_at=now,
                     updated_at=now
                 )
@@ -128,7 +116,7 @@ def generate_weekly_sheets_job():
                     session=session,
                     user_id=user.id,
                     type=NotificationType.SYSTEM,
-                    message="Your Weekly Sheet has been auto-generated. Please review before submission."
+                    message="Your Weekly Sheet has been created. Please fill in all sections and submit before the deadline."
                 )
                 
             except Exception as e:
