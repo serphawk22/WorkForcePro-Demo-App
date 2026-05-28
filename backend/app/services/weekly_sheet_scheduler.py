@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone, timedelta, date as DateType
 import json
 import logging
@@ -11,17 +10,13 @@ from app.database import engine
 from app.models import (
     User,
     Task,
-    Attendance,
+    TaskSheet,
     LighthouseWeeklySheet,
     WeeklySheetStatus,
     NotificationType,
 )
 from app.routers.notifications import create_notification
-from app.routers.weekly_sheet import (
-    build_weekly_sheet_fallback,
-    call_openai_for_weekly_sheet,
-    monday_of_week,
-)
+from app.routers.weekly_sheet import monday_of_week
 
 logger = logging.getLogger(__name__)
 
@@ -52,32 +47,36 @@ def generate_weekly_sheets_job():
                     task_data.append({
                         "title": t.title,
                         "status": t.status,
-                        "estimated_hours": t.estimated_hours,
-                        "actual_hours": t.actual_hours,
                         "due_date": str(t.due_date) if t.due_date else None,
                         "completed": t.done_by_employee
                     })
-                    
-                attendances = session.exec(
-                    select(Attendance).where(
-                        Attendance.user_id == user.id,
-                        Attendance.date >= week_start,
-                        Attendance.date <= week_end
-                    )
+
+                task_sheets = session.exec(
+                    select(TaskSheet).where(
+                        TaskSheet.user_id == user.id,
+                        TaskSheet.date >= week_start,
+                        TaskSheet.date <= week_end,
+                    ).order_by(TaskSheet.date)
                 ).all()
-                
-                total_hours = sum([a.total_hours for a in attendances if a.total_hours])
-                attendance_data = {
-                    "days_logged": len(attendances),
-                    "total_hours": total_hours
-                }
-                
-                payload = json.dumps({
+
+                task_sheet_data = [
+                    {
+                        "day": sheet.date.strftime("%A"),
+                        "tasks_completed": sheet.tasks_completed,
+                        "work_impact": sheet.work_impact,
+                    }
+                    for sheet in task_sheets
+                ]
+
+                payload_data = {
                     "week_start": str(week_start),
                     "week_end": str(week_end),
-                    "attendance": attendance_data,
-                    "tasks": task_data
-                })
+                    "task_sheets": task_sheet_data,
+                }
+                if not task_sheet_data:
+                    payload_data["assigned_tasks"] = task_data
+
+                payload = json.dumps(payload_data)
                 
                 # Check if draft already exists
                 existing = session.exec(
@@ -91,37 +90,21 @@ def generate_weekly_sheets_job():
                 if existing:
                     continue  # Skip if already exists so we don't overwrite manual edits
                 
-                # We need to run the async call in a synchronous context, or just use httpx synchronously?
-                # Actually, apscheduler can use AsyncIOScheduler or we can use asyncio.run
-                import asyncio
-                
-                # This could block, but since it's a background job it's fine. 
-                # Better to use asyncio.run but if event loop is running, we might need a separate thread.
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = None
-                    
-                if loop and loop.is_running():
-                    ai_result = build_weekly_sheet_fallback(payload)
-                else:
-                    ai_result = asyncio.run(call_openai_for_weekly_sheet(payload))
-                
-                # Save new sheet
+                # Create empty sheet for manual entry - no AI generation
                 now = datetime.now(timezone.utc)
                 sheet = LighthouseWeeklySheet(
                     organization_id=user.organization_id,
                     user_id=user.id,
                     week_start_date=week_start,
                     status=WeeklySheetStatus.draft,
-                    weekly_summary=ai_result.get("weekly_summary"),
-                    major_accomplishments=ai_result.get("major_accomplishments"),
-                    tasks_completed=ai_result.get("tasks_completed"),
-                    pending_tasks=ai_result.get("pending_tasks"),
-                    blockers=ai_result.get("blockers"),
-                    productivity_insights=ai_result.get("productivity_insights"),
-                    time_utilization=ai_result.get("time_utilization"),
-                    suggested_priorities=ai_result.get("suggested_priorities"),
+                    weekly_summary=None,
+                    major_accomplishments=None,
+                    tasks_completed=None,
+                    pending_tasks=None,
+                    blockers=None,
+                    productivity_insights=None,
+                    time_utilization=None,
+                    suggested_priorities=None,
                     created_at=now,
                     updated_at=now
                 )
@@ -133,7 +116,7 @@ def generate_weekly_sheets_job():
                     session=session,
                     user_id=user.id,
                     type=NotificationType.SYSTEM,
-                    message="Your Weekly Sheet has been auto-generated. Please review before submission."
+                    message="Your Weekly Sheet has been created. Please fill in all sections and submit before the deadline."
                 )
                 
             except Exception as e:

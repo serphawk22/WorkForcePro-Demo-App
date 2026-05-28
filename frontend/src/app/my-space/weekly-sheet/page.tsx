@@ -13,7 +13,7 @@ export default function WeeklySheetPage() {
         <div>
           <h2 className="text-xl font-bold text-foreground">Weekly Sheet</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Review, edit, and submit your AI-generated weekly work summary.
+            Fill in your weekly work summary manually. Enter your accomplishments, tasks, blockers, and priorities.
           </p>
         </div>
         

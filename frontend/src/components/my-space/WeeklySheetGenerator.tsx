@@ -10,7 +10,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getApiBaseUrl, getToken } from "@/lib/api";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface WeeklySheet {
   id?: number;
@@ -24,6 +24,11 @@ interface WeeklySheet {
   time_utilization: string;
   suggested_priorities: string;
 }
+
+// This backend router is mounted at /api/my-space/weekly-sheet. In the browser,
+// getApiBaseUrl() returns the Next proxy prefix (/api), so both segments are needed.
+const weeklySheetEndpoint = (path: string) =>
+  `${getApiBaseUrl()}/api/my-space/weekly-sheet${path}`;
 
 export default function WeeklySheetGenerator() {
   const [sheet, setSheet] = useState<WeeklySheet | null>(null);
@@ -42,7 +47,7 @@ export default function WeeklySheetGenerator() {
   const fetchCurrentSheet = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/current`, {
+      const res = await fetch(weeklySheetEndpoint("/current"), {
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },
@@ -64,10 +69,7 @@ export default function WeeklySheetGenerator() {
   const generateSheet = async () => {
     setGenerating(true);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for Railway cold starts + OpenAI
-
-      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/generate`, {
+      const res = await fetch(weeklySheetEndpoint("/generate"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${getToken()}`,
@@ -94,14 +96,10 @@ export default function WeeklySheetGenerator() {
       }
       const data = await res.json();
       setSheet(data);
-      toast.success("AI generated your weekly sheet!");
-    } catch (error: any) {
-      if (error?.name === "AbortError") {
-        toast.error("Request timed out. The server may be starting up — please try again in a moment.");
-      } else {
-        toast.error("Network error — could not reach server. Please check your connection.");
-      }
-      console.error("[WeeklySheet] Generate error:", error);
+      toast.success("Weekly sheet created. Please fill in all sections.");
+    } catch (error) {
+      toast.error("Error generating weekly sheet");
+      console.error(error);
     } finally {
       setGenerating(false);
     }
@@ -111,7 +109,7 @@ export default function WeeklySheetGenerator() {
     if (!sheet) return;
     setSaving(true);
     try {
-      const res = await fetch(`${getApiBaseUrl()}/my-space/weekly-sheet/save`, {
+      const res = await fetch(weeklySheetEndpoint("/save"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -181,7 +179,7 @@ export default function WeeklySheetGenerator() {
       { Field: "Pending Tasks", Content: sheet.pending_tasks },
       { Field: "Blockers", Content: sheet.blockers },
       { Field: "Productivity Insights", Content: sheet.productivity_insights },
-      { Field: "Time Utilization", Content: sheet.time_utilization },
+      { Field: "Days Covered", Content: sheet.time_utilization },
       { Field: "Suggested Priorities", Content: sheet.suggested_priorities },
     ];
     const ws = XLSX.utils.json_to_sheet(data);
@@ -213,13 +211,13 @@ export default function WeeklySheetGenerator() {
         <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
           <RefreshCw className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-2xl font-semibold">No Weekly Sheet Generated Yet</h2>
+        <h2 className="text-2xl font-semibold">Create Your Weekly Sheet</h2>
         <p className="text-muted-foreground max-w-md">
-          Use the power of AI to automatically generate your weekly sheet based on your tasks, attendance, and activity for the week.
+          Start creating your weekly summary. Fill in all sections with your accomplishments, tasks, blockers, and priorities for the week.
         </p>
         <Button onClick={generateSheet} disabled={generating} size="lg" className="mt-4">
           {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Generate AI Weekly Sheet
+          Create New Weekly Sheet
         </Button>
       </div>
     );
@@ -250,7 +248,7 @@ export default function WeeklySheetGenerator() {
           </Button>
           <Button variant="outline" size="sm" onClick={generateSheet} disabled={generating}>
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Regenerate
+            Create New
           </Button>
         </div>
       </div>
@@ -344,7 +342,7 @@ export default function WeeklySheetGenerator() {
 
             <Card className="border-none shadow-none bg-teal-50/50 dark:bg-teal-900/10">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-teal-700 dark:text-teal-400 uppercase tracking-wider">Time Utilization</CardTitle>
+                <CardTitle className="text-sm text-teal-700 dark:text-teal-400 uppercase tracking-wider">Days Covered</CardTitle>
               </CardHeader>
               <CardContent>
                 <Textarea 
