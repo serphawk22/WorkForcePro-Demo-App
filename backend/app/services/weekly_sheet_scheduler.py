@@ -17,7 +17,11 @@ from app.models import (
     NotificationType,
 )
 from app.routers.notifications import create_notification
-from app.routers.weekly_sheet import call_openai_for_weekly_sheet, monday_of_week
+from app.routers.weekly_sheet import (
+    build_weekly_sheet_fallback,
+    call_openai_for_weekly_sheet,
+    monday_of_week,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,30 +103,8 @@ def generate_weekly_sheets_job():
                     loop = None
                     
                 if loop and loop.is_running():
-                    # Just skip or use nest_asyncio. We can't easily block. Let's use a new thread or loop.
-                    # Or we just use a synchronous openai call. Let's use sync OpenAI call.
-                    from openai import OpenAI
-                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
-                    
-                    from app.routers.weekly_sheet import SYSTEM_PROMPT
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": f"Here is the employee's week data:\n{payload}"},
-                        ],
-                        temperature=0.3,
-                        max_tokens=1000,
-                    )
-                    content = response.choices[0].message.content.strip()
-                    if content.startswith("```"):
-                        content = content.split("\\n", 1)[1] if "\\n" in content else content[3:]
-                        if content.endswith("```"):
-                            content = content[:-3]
-                        content = content.strip()
-                    ai_result = json.loads(content)
+                    ai_result = build_weekly_sheet_fallback(payload)
                 else:
-                    # Not standard in fastapi apps, but fallback
                     ai_result = asyncio.run(call_openai_for_weekly_sheet(payload))
                 
                 # Save new sheet

@@ -8,14 +8,15 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
 
 const ALL_TABS = [
-  { label: "Global",   path: "/project-management" },
+  { label: "Global",    path: "/project-management" },
   { label: "Workspace", path: "/project-management/workspaces" },
-  { label: "Summary",  path: "/project-management/summary" },
-  { label: "Board",    path: "/project-management/board" },
-  { label: "Projects", path: "/project-management/projects" },
-  { label: "Calendar", path: "/project-management/calendar" },
-  { label: "Timeline", path: "/project-management/timeline" },
-  { label: "Reports",  path: "/project-management/reports" },
+  { label: "Summary",   path: "/project-management/summary" },
+  { label: "Board",     path: "/project-management/board" },
+  { label: "Projects",  path: "/project-management/projects" },
+  { label: "Your Team", path: "/project-management/team" },
+  { label: "Calendar",  path: "/project-management/calendar" },
+  { label: "Timeline",  path: "/project-management/timeline" },
+  { label: "Reports",   path: "/project-management/reports" },
 ];
 
 interface ProjectShellProps {

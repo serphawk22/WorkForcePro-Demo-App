@@ -1,890 +1,782 @@
 """
-Deterministic AI Chatbot router for WorkForce Pro.
-Provides contextual page explanations and quick navigation actions.
+WorkBot Backend Router for WorkForce Pro.
+Provides RAG conversational endpoints, auditing, role-based security, and pgvector-style semantic caching.
 """
-import os
 import json
-import re
-from datetime import datetime
-from typing import Optional, List
+import random
+from typing import Optional, List, Dict, Any
+from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlmodel import Session, select, text
 from pydantic import BaseModel
-from sqlmodel import Session, select
 
 from app.auth import get_current_user
-from app.models import User, UserRole, Task, Workspace
+from app.models import (
+    User, Task, Workspace, LeaveRequest, Attendance, Payroll, LeaveStatus, TaskStatus, TaskPriority, UserRole,
+    WorkBotConversation, WorkBotMessage, WorkBotApiCall, WorkBotQACache
+)
 from app.database import get_session
+from app.services.rag_service import retrieve_relevant_context, cosine_similarity, get_embeddings_batch
+from app.services.nlu_service import NLUService, INTENT_DEFINITIONS
 
-router = APIRouter(prefix="/api/chatbot", tags=["Chatbot"])
+router = APIRouter(prefix="/chatbot", tags=["WorkBot Chatbot"])
 
-# --- OpenAI Integration ---
 
-AI_SYSTEM_PROMPT = """You are a helpful AI Assistant for WorkForce Pro — an HR & Project Management platform.
-You can help with navigation, task creation, subtask creation, leave requests, and product Q&A.
+# ============================================================================
+# Schemas and Models
+# ============================================================================
 
-CONVERSATION CONTEXT:
-Always maintain context from previous messages. If the user refers to "it", "this", or "that", use the context to determine what they mean.
-Example: If the user previously mentioned a task, "assign it" refers to that task.
-
-─── NAVIGATION ────────────────────────────────────────────────
-When the user asks to open / go to / take me to / show / navigate to any section, ALWAYS set navigate_to.
-Never say "you don't have access" unless the section is admin-only AND the user is an employee.
-
-Routes available to EVERYONE (admin + employee):
-  attendance            → /attendance
-  project management    → /project-management/projects
-  projects              → /project-management/projects
-  tasks / my tasks      → /tasks
-  requests / leave      → /requests
-  profile               → /profile
-  my space              → /my-space/task-sheet
-  task sheet            → /my-space/task-sheet
-  learning canvas       → /my-space/learning-canvas
-  happy sheet           → /my-space/happy-sheet
-  visionary canvas      → /my-space/visionary-canvas
-
-Routes available to ADMIN only:
-  dashboard / home      → /dashboard
-  admin dashboard       → /dashboard
-  payroll               → /payroll
-  employees             → /employees
-
-Routes available to EMPLOYEE only:
-  dashboard / home      → /employee-dashboard
-  employee dashboard    → /employee-dashboard
-
-If an employee asks for an admin-only route (payroll, employees), politely explain it is admin-only
-and do NOT set navigate_to.
-
-If the user mentions a section that does not exist in the app at all, say so — do not fabricate routes.
-
-─── TASK/SUBTASK PERMISSIONS ─────────────────────────────────
-1. ADMINS: Can create MAIN TASKS and SUBTASKS.
-2. EMPLOYEES: Can ONLY create SUBTASKS. They CANNOT create main tasks.
-   - If an employee tries to create a main task, politely explain they can only create subtasks.
-   - If they say "create a subtask for [Project]", set is_subtask_intent=true.
-3. BOTH ADMINS AND EMPLOYEES: Can submit leave requests.
-
-─── LEAVE REQUEST HANDLING ───────────────────────────────────
-When a user wants to apply for leave / request time off / take sick leave / go on vacation:
-- Set is_leave_intent=true
-- Extract leave_data: reason, start_date (YYYY-MM-DD), end_date (YYYY-MM-DD), leave_type
-- leave_type must be one of: "sick", "personal", "vacation", "other"
-- If start_date or end_date is missing, set needs_clarification=true and ask for the missing dates.
-- Use today's date as reference for relative expressions like "tomorrow", "next Monday", "this Friday".
-- If the user says "take a day off tomorrow", set both start_date and end_date to tomorrow's date.
-- Reason can be inferred if not given (e.g. "not feeling well" → reason = "Sick leave").
-
-─── SMART FLOW ───────────────────────────────────────────────
-- Do NOT ask repetitive questions.
-- If you have 70% confidence in a field (title, assignee, deadline), fill it automatically.
-- Default priority to 'medium' if not specified.
-- If a user says "create a subtask for [Task Name]", set is_subtask_intent=true and parent_task_name=[Task Name].
-- If they follow up with "assign it to [Name] by [Date]", update task_data while KEEPING parent_task_name.
-- If task_draft is provided in context, merge it with the new user message and only update fields that changed.
-
-─── FORM-FILL PRIORITY (MY SPACE) ───────────────────────────
-If the user is on a My Space form page (task sheet, happy sheet, learning canvas, visionary canvas)
-and asks to fill/log/write/submit content, DO NOT convert it into task/subtask creation.
-In those cases:
-- is_task_intent=false
-- is_subtask_intent=false
-- task_data=null
-- needs_clarification=false (unless user asked a direct question)
-Only return a concise reply focused on the user-requested form content.
-Treat task/subtask as intent ONLY when user explicitly says create/add/assign task or subtask.
-
-─── REQUIRED FIELDS FOR MAIN TASK CREATION ───────────────────
-For main tasks (is_task_intent=true), ensure task_data tracks these fields:
-- title
-- workspace_name
-- recurrence_preference_set (true only when user explicitly says normal/non-recurring OR recurring)
-- is_recurring (true/false based on user choice)
-- assignee_name
-- deadline
-- priority
-
-If any required field is missing, set needs_clarification=true and ask only for missing items.
-Always ask whether it is a normal task or recurring task until that preference is explicit.
-
-─── WEBSITE Q&A KNOWLEDGE ─────────────────────────────────────
-Answer feature questions using the provided page map and route catalog.
-Do not hallucinate pages or capabilities. If unknown, say so clearly and suggest the closest valid section.
-When a user asks "where can I do X", include the relevant page name and route in a concise answer.
-
-─── RESPONSE FORMAT ──────────────────────────────────────────
-Return a JSON object:
-{
-  "reply": "A friendly, concise response.",
-  "navigate_to": "/exact-route-from-table-above" or null,
-  "is_task_intent": true/false,
-  "is_subtask_intent": true/false,
-  "is_leave_intent": true/false,
-  "task_data": {
-    "title": "...",
-    "description": "...",
-        "workspace_name": "..." or null,
-        "workspace_id": 123 or null,
-    "assignee_name": "...",
-        "assignee_id": 456 or null,
-    "priority": "low|medium|high",
-    "deadline": "YYYY-MM-DD or null",
-    "parent_task_name": "..." or null,
-        "recurrence_preference_set": true/false,
-    "is_recurring": false,
-    "recurrence_type": "daily|weekly|monthly or null",
-    "recurrence_interval": 1,
-    "repeat_days": [0-6] or null,
-    "recurrence_start_date": "YYYY-MM-DD or null",
-    "recurrence_end_date": "YYYY-MM-DD or null",
-    "monthly_day": null
-  } or null,
-  "leave_data": {
-    "reason": "...",
-    "start_date": "YYYY-MM-DD",
-    "end_date": "YYYY-MM-DD",
-    "leave_type": "sick|personal|vacation|other"
-  } or null,
-  "needs_clarification": true/false,
-  "clarification_question": "..." or null,
-  "suggestions": ["...", "..."] or null
-}
-"""
-
-class ChatMessage(BaseModel):
-    role: str # "user" or "assistant"
+class ChatMessageCreate(BaseModel):
+    """Payload to send a message."""
     content: str
 
-async def call_openai_for_chatbot(
-    message: str, 
-    role: str, 
-    current_page: str, 
-    employees: List[dict] = None,
-    workspaces: List[dict] = None,
-    task_draft: Optional[dict] = None,
-    history: List[ChatMessage] = []
-) -> dict:
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key:
-        return None
 
+class ConversationCreate(BaseModel):
+    """Payload to create a chat conversation."""
+    title: str
+
+
+class ChatbotResponse(BaseModel):
+    """Final premium chatbot response."""
+    response_text: str
+    intent: str
+    parameters: Dict[str, Any] = {}
+    navigation_url: Optional[str] = None
+    suggested_actions: List[Dict[str, Any]] = []
+    context_sources: List[str] = []
+    confidence: float
+    cached: bool = False
+
+
+class ConversationRead(BaseModel):
+    """Conversation metadata response."""
+    id: int
+    user_id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageRead(BaseModel):
+    """Chat message response."""
+    id: int
+    conversation_id: int
+    sender_role: str
+    content: str
+    intent: Optional[str] = None
+    navigation_url: Optional[str] = None
+    created_at: datetime
+
+
+class ChatbotContextRequest(BaseModel):
+    """Request for page-specific context."""
+    current_page: str
+    user_role: str
+
+
+class ChatbotContextResponse(BaseModel):
+    """Context for chatbot suggestions on a page."""
+    page: str
+    suggestions: List[str]
+    quick_actions: List[Dict[str, str]]
+
+
+# ============================================================================
+# Database Auditing Helpers
+# ============================================================================
+
+def audit_api_call(session: Session, user_id: int, endpoint: str, method: str, 
+                   request: Any, response: Any, status_code: int, conversation_id: Optional[int] = None):
+    """Helper to log all chatbot API activity to the database."""
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-    except Exception as e:
-        print(f"OpenAI client init error: {e}")
-        return None
-
-    employee_list_str = ""
-    if employees:
-        employee_list_str = "Available employees: " + ", ".join([f"{e['name']} (id={e['id']})" for e in employees])
-
-    workspace_list_str = ""
-    if workspaces:
-        workspace_list_str = "Available workspaces: " + ", ".join([f"{w['name']} (id={w['id']})" for w in workspaces])
-
-    serialized_task_draft = json.dumps(task_draft or {}, ensure_ascii=True)
-
-    # Format history for OpenAI
-    openai_messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
-    for msg in history[-10:]: # Last 10 messages for context
-        openai_messages.append({"role": msg.role, "content": msg.content})
-    
-    user_prompt = f"""
-    User Role: {role}
-    Current Page: {current_page}
-    {employee_list_str}
-    {workspace_list_str}
-    Current Date: {datetime.now().strftime("%Y-%m-%d")}
-    Current Task Draft: {serialized_task_draft}
-    User Message: {message}
-    """
-    openai_messages.append({"role": "user", "content": user_prompt})
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=openai_messages,
-            response_format={"type": "json_object"},
-            temperature=0.2
+        api_log = WorkBotApiCall(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            api_endpoint=endpoint,
+            method=method,
+            request_payload=json.dumps(request) if request else None,
+            response_payload=json.dumps(response) if response else None,
+            status_code=status_code
         )
-        return json.loads(response.choices[0].message.content)
+        session.add(api_log)
+        session.commit()
     except Exception as e:
-        print(f"OpenAI error: {e}")
-        return None
+        print(f"Auditing error: {e}")
+        session.rollback()
 
 
-# ---------------------------------------------------------------------------
-# Data definitions
-# ---------------------------------------------------------------------------
+# ============================================================================
+# Endpoints
+# ============================================================================
 
-PAGE_EXPLANATIONS: dict[str, str] = {
-    "dashboard": (
-        "You are on the Dashboard — your central command centre. "
-        "Here you can see a live snapshot of workforce activity: active employees, "
-        "attendance rates, pending leave requests, open tasks, and recent notifications."
-    ),
-    "admin/dashboard": (
-        "You are on the Admin Dashboard. "
-        "Here you can monitor team performance, review workforce KPIs, "
-        "manage pending approvals, and access all administrative functions."
-    ),
-    "attendance": (
-        "This is the Attendance page. "
-        "You can view daily punch-in / punch-out records, track work hours, "
-        "identify late arrivals or absences, and export attendance reports."
-    ),
-    "payroll": (
-        "This is the Payroll section. "
-        "Admins can view salary records, employee payroll summaries, payment statuses, "
-        "and generate or export payroll reports for any pay period."
-    ),
-    "project-management": (
-        "This is Project Management. "
-        "Here you can create and manage projects, assign tasks to team members, "
-        "track progress on boards or timelines, and view project reports."
-    ),
-    "requests": (
-        "This is the Requests page. "
-        "Employees submit leave or time-off requests here. "
-        "Admins can review, approve, or reject pending requests."
-    ),
-    "employees": (
-        "This is the Employees directory. "
-        "Browse all employee profiles, view their roles and departments, "
-        "manage accounts, and access individual performance data."
-    ),
-    "tasks": (
-        "This is the Tasks page. "
-        "View and manage all tasks assigned to you or your team. "
-        "You can update status, add comments, and track deadlines."
-    ),
-    "profile": (
-        "This is your Profile page. "
-        "Update your personal information, change your password, "
-        "and manage your notification preferences."
-    ),
-    "my-space": (
-        "This is My Space — your personal productivity hub. "
-        "Access your task sheet, learning canvas, visionary canvas, "
-        "and happiness tracker all in one place."
-    ),
-    "my-space/task-sheet": (
-        "This is your Task Sheet inside My Space. "
-        "Manage your personal to-do list, set priorities, and track progress on individual tasks."
-    ),
-    "my-space/learning-canvas": (
-        "This is the Learning Canvas inside My Space. "
-        "Log your learning goals, track courses, and record professional development milestones."
-    ),
-    "my-space/happy-sheet": (
-        "This is the Happy Sheet inside My Space. "
-        "Share how you're feeling at work and provide periodic well-being feedback."
-    ),
-    "my-space/visionary-canvas": (
-        "This is the Visionary Canvas inside My Space. "
-        "Set long-term career goals, define your vision, and track progress over time."
-    ),
-    "employee-dashboard": (
-        "You are on your Employee Dashboard. "
-        "Here you can see your upcoming tasks, leave balance, attendance record, "
-        "and recent notifications — all at a glance."
-    ),
-}
-
-# Quick navigation actions per page, per role
-# Format: {"label": str, "route": str}
-ADMIN_ACTIONS: dict[str, list[dict]] = {
-    "dashboard": [
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Manage Employees", "route": "/employees"},
-        {"label": "Open Payroll", "route": "/payroll"},
-        {"label": "Project Management", "route": "/project-management"},
-    ],
-    "admin/dashboard": [
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Manage Employees", "route": "/employees"},
-        {"label": "Open Payroll", "route": "/payroll"},
-        {"label": "Project Management", "route": "/project-management"},
-    ],
-    "attendance": [
-        {"label": "View Employees", "route": "/employees"},
-        {"label": "Open Payroll", "route": "/payroll"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "payroll": [
-        {"label": "View Employee Profiles", "route": "/employees"},
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "project-management": [
-        {"label": "View Employees", "route": "/employees"},
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "requests": [
-        {"label": "View Employees", "route": "/employees"},
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "employees": [
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Open Payroll", "route": "/payroll"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "tasks": [
-        {"label": "View Employees", "route": "/employees"},
-        {"label": "Project Management", "route": "/project-management"},
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-    ],
-    "profile": [
-        {"label": "Back to Dashboard", "route": "/dashboard"},
-        {"label": "View Employees", "route": "/employees"},
-    ],
-}
-
-EMPLOYEE_ACTIONS: dict[str, list[dict]] = {
-    "employee-dashboard": [
-        {"label": "My Tasks", "route": "/tasks"},
-        {"label": "My Space", "route": "/my-space/task-sheet"},
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Submit Request", "route": "/requests"},
-        {"label": "Project Management", "route": "/project-management"},
-    ],
-    "attendance": [
-        {"label": "My Tasks", "route": "/tasks"},
-        {"label": "Submit Request", "route": "/requests"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "tasks": [
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Project Management", "route": "/project-management"},
-        {"label": "My Space", "route": "/my-space/task-sheet"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "project-management": [
-        {"label": "My Tasks", "route": "/tasks"},
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "requests": [
-        {"label": "View Attendance", "route": "/attendance"},
-        {"label": "My Tasks", "route": "/tasks"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "profile": [
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-        {"label": "My Tasks", "route": "/tasks"},
-    ],
-    "my-space": [
-        {"label": "Task Sheet", "route": "/my-space/task-sheet"},
-        {"label": "Learning Canvas", "route": "/my-space/learning-canvas"},
-        {"label": "Happy Sheet", "route": "/my-space/happy-sheet"},
-        {"label": "Visionary Canvas", "route": "/my-space/visionary-canvas"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "my-space/task-sheet": [
-        {"label": "Learning Canvas", "route": "/my-space/learning-canvas"},
-        {"label": "Happy Sheet", "route": "/my-space/happy-sheet"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "my-space/learning-canvas": [
-        {"label": "Task Sheet", "route": "/my-space/task-sheet"},
-        {"label": "Happy Sheet", "route": "/my-space/happy-sheet"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "my-space/happy-sheet": [
-        {"label": "Task Sheet", "route": "/my-space/task-sheet"},
-        {"label": "Visionary Canvas", "route": "/my-space/visionary-canvas"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-    "my-space/visionary-canvas": [
-        {"label": "Task Sheet", "route": "/my-space/task-sheet"},
-        {"label": "Happy Sheet", "route": "/my-space/happy-sheet"},
-        {"label": "Back to Dashboard", "route": "/employee-dashboard"},
-    ],
-}
-
-# Allow employees to access these shared pages
-SHARED_EMPLOYEE_ROUTES = {
-    "attendance", "tasks", "project-management", "requests", "profile",
-    "my-space", "my-space/task-sheet", "my-space/learning-canvas",
-    "my-space/happy-sheet", "my-space/visionary-canvas",
-}
-
-# Command aliases → page key that they map to
-NAV_COMMANDS: list[tuple[list[str], str]] = [
-    (["dashboard", "home", "go to dashboard", "back to dashboard", "open dashboard",
-      "take me to dashboard", "show dashboard"], "dashboard"),
-    (["admin dashboard", "go to admin", "admin panel", "take me to admin"], "admin/dashboard"),
-    (["attendance", "go to attendance", "view attendance", "open attendance", "show attendance",
-      "open the attendance", "take me to attendance", "attendance section", "attendance page"], "attendance"),
-    (["payroll", "go to payroll", "open payroll", "view payroll", "show payroll", "generate payroll",
-      "open the payroll", "take me to payroll", "payroll section", "payroll page"], "payroll"),
-    (["project", "projects", "project management", "go to projects", "open projects", "show projects",
-      "open project management", "project-management", "take me to projects", "take me to project management",
-      "project section", "project management section", "projects section", "project page"], "project-management"),
-    (["requests", "go to requests", "open requests", "leave request", "submit request",
-      "open the requests", "take me to requests", "request section", "requests section",
-      "leave requests", "leave section", "request page", "requests page"], "requests"),
-    (["employees", "go to employees", "view employees", "open employees", "show employees",
-      "manage employees", "employee list", "take me to employees", "employees section",
-      "employee section", "employee directory"], "employees"),
-    (["tasks", "my tasks", "go to tasks", "view tasks", "open tasks", "show tasks",
-      "open the tasks", "take me to tasks", "task section", "tasks section", "task page"], "tasks"),
-    (["profile", "my profile", "go to profile", "open profile", "take me to profile",
-      "profile section", "profile page"], "profile"),
-    (["my space", "my-space", "go to my space", "open my space", "take me to my space",
-      "myspace", "my space section"], "my-space/task-sheet"),
-    (["task sheet", "task-sheet", "go to task sheet", "open task sheet"], "my-space/task-sheet"),
-    (["learning canvas", "go to learning", "learning-canvas", "open learning canvas"], "my-space/learning-canvas"),
-    (["happy sheet", "happy-sheet", "how am i feeling", "open happy sheet"], "my-space/happy-sheet"),
-    (["visionary canvas", "visionary-canvas", "my vision", "open visionary canvas"], "my-space/visionary-canvas"),
-    (["employee dashboard", "employee-dashboard", "my dashboard", "take me to employee dashboard",
-      "take me home", "go home"], "employee-dashboard"),
-]
-
-# RBAC: admin-only pages
-ADMIN_ONLY_ROUTES = {"payroll", "employees", "admin/dashboard"}
+@router.get("/conversations", response_model=List[ConversationRead])
+async def list_conversations(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """List all chatbot conversations for the active user."""
+    stmt = select(WorkBotConversation).where(WorkBotConversation.user_id == current_user.id).order_by(WorkBotConversation.updated_at.desc())
+    conversations = session.exec(stmt).all()
+    return conversations
 
 
-def _normalise_page(pathname: str) -> str:
-    """Strip leading slash and lowercase the pathname."""
-    return pathname.strip("/").lower()
-
-
-def _get_explanation(page_key: str) -> str:
-    return PAGE_EXPLANATIONS.get(
-        page_key,
-        f"You are on the {page_key.replace('-', ' ').replace('/', ' › ').title()} page. "
-        "Use the quick actions below to navigate to other sections of the platform.",
+@router.post("/conversations", response_model=ConversationRead)
+async def create_conversation(
+    payload: ConversationCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new conversation session."""
+    conversation = WorkBotConversation(
+        user_id=current_user.id,
+        organization_id=current_user.organization_id,
+        title=payload.title
     )
+    session.add(conversation)
+    session.commit()
+    session.refresh(conversation)
+    return conversation
 
 
-def _get_actions(page_key: str, role: str) -> list[dict]:
-    if role == "admin":
-        # Fall back to dashboard actions if page not found
-        return ADMIN_ACTIONS.get(page_key, ADMIN_ACTIONS.get("dashboard", []))
-    else:
-        # Employees
-        return EMPLOYEE_ACTIONS.get(page_key, EMPLOYEE_ACTIONS.get("employee-dashboard", []))
-
-
-def _resolve_nav_command(message: str) -> Optional[str]:
-    """Return a page key if the message is a navigation command, else None."""
-    msg = message.strip().lower()
-    for keywords, page_key in NAV_COMMANDS:
-        for kw in keywords:
-            if msg == kw or msg.startswith(kw + " ") or msg.endswith(" " + kw) or f" {kw} " in f" {msg} ":
-                return page_key
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    conversation_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a chatbot conversation session."""
+    stmt = select(WorkBotConversation).where(
+        WorkBotConversation.id == conversation_id,
+        WorkBotConversation.user_id == current_user.id
+    )
+    conversation = session.exec(stmt).first()
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found or access denied"
+        )
+    session.delete(conversation)
+    session.commit()
     return None
 
 
-def _route_for_role(page_key: str, role: str) -> str:
-    """Return the canonical frontend route for a page key, respecting RBAC."""
-    route_map = {
-        "dashboard": "/dashboard",
-        "admin/dashboard": "/admin/dashboard",
-        "attendance": "/attendance",
-        "payroll": "/payroll",
-        "project-management": "/project-management",
-        "requests": "/requests",
-        "employees": "/employees",
-        "tasks": "/tasks",
-        "profile": "/profile",
-        "my-space": "/my-space/task-sheet",
-        "my-space/task-sheet": "/my-space/task-sheet",
-        "my-space/learning-canvas": "/my-space/learning-canvas",
-        "my-space/happy-sheet": "/my-space/happy-sheet",
-        "my-space/visionary-canvas": "/my-space/visionary-canvas",
-        "employee-dashboard": "/employee-dashboard",
-    }
-    return route_map.get(page_key, f"/{page_key}")
-
-
-MY_SPACE_FORM_PAGES = {
-    "my-space/task-sheet",
-    "my-space/happy-sheet",
-    "my-space/learning-canvas",
-    "my-space/visionary-canvas",
-}
-
-FILL_INTENT_WORDS = (
-    "fill",
-    "log",
-    "write",
-    "submit",
-    "complete",
-    "update",
-)
-
-
-def _is_fill_request(message: str) -> bool:
-    msg = (message or "").lower()
-    return any(word in msg for word in FILL_INTENT_WORDS)
-
-
-def _has_explicit_task_creation_intent(message: str) -> bool:
-    msg = (message or "").lower()
-    return bool(
-        re.search(
-            r"\b(create|add|assign|make|open)\b.{0,24}\b(task|subtask)\b|\b(task|subtask)\b.{0,24}\b(create|add|assign|make)\b",
-            msg,
-        )
-    )
-
-
-# ---------------------------------------------------------------------------
-# Request / Response models
-# ---------------------------------------------------------------------------
-
-class ChatbotQueryRequest(BaseModel):
-    message: str
-    current_page: str  # raw pathname, e.g. "/payroll" or "payroll"
-    history: Optional[List[ChatMessage]] = []
-    task_draft: Optional[dict] = None
-
-
-class ChatAction(BaseModel):
-    label: str
-    route: str
-
-
-class ChatbotQueryResponse(BaseModel):
-    reply: str
-    actions: list[ChatAction]
-    navigate_to: Optional[str] = None
-    is_task_intent: bool = False
-    is_subtask_intent: bool = False
-    is_leave_intent: bool = False
-    task_data: Optional[dict] = None
-    leave_data: Optional[dict] = None
-    needs_clarification: bool = False
-    clarification_question: Optional[str] = None
-    suggestions: Optional[List[str]] = None
-
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-@router.post("/query", response_model=ChatbotQueryResponse)
-async def chatbot_query(
-    request: ChatbotQueryRequest,
-    current_user: User = Depends(get_current_user),
+@router.get("/conversations/{conversation_id}/messages", response_model=List[MessageRead])
+async def get_conversation_messages(
+    conversation_id: int,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
-    """
-    Enhanced chatbot endpoint with OpenAI support.
-    """
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    page_key = _normalise_page(request.current_page)
-    message = request.message.strip()
-
-    actions = _get_actions(page_key, role)
-
-    # Fetch all employees — needed for both admin task assignment AND employee subtask assignment
-    try:
-        employee_stmt = select(User).where(User.role == UserRole.employee)
-        employees = [{"id": e.id, "name": e.name} for e in session.exec(employee_stmt).all()]
-    except Exception as e:
-        print(f"Chatbot employee lookup error: {e}")
-        employees = []
-
-    try:
-        workspace_stmt = select(Workspace).where(Workspace.organization_id == current_user.organization_id)
-        workspaces = [{"id": w.id, "name": w.name} for w in session.exec(workspace_stmt).all()]
-    except Exception as e:
-        print(f"Chatbot workspace lookup error: {e}")
-        workspaces = []
-
-    # Try OpenAI first
-    try:
-        ai_response = await call_openai_for_chatbot(
-            message,
-            role,
-            page_key,
-            employees,
-            workspaces,
-            request.task_draft,
-            request.history or [],
+    """Retrieve chat history inside a conversation session."""
+    # Verify ownership
+    conv_stmt = select(WorkBotConversation).where(
+        WorkBotConversation.id == conversation_id,
+        WorkBotConversation.user_id == current_user.id
+    )
+    conversation = session.exec(conv_stmt).first()
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found or access denied"
         )
-    except Exception as e:
-        print(f"Chatbot OpenAI flow error: {e}")
-        ai_response = None
     
-    if ai_response:
-        # Keep My Space form-filling intents focused: do not force task/subtask flows
-        # unless user explicitly asks to create a task/subtask.
-        if (
-            page_key in MY_SPACE_FORM_PAGES
-            and _is_fill_request(message)
-            and not _has_explicit_task_creation_intent(message)
-        ):
-            ai_response["is_task_intent"] = False
-            ai_response["is_subtask_intent"] = False
-            ai_response["task_data"] = None
-            ai_response["needs_clarification"] = False
-            ai_response["clarification_question"] = None
-            ai_response["suggestions"] = ai_response.get("suggestions")
-
-        # Resolve assignee_id and parent_task_id if needed
-        if (ai_response.get("is_task_intent") or ai_response.get("is_subtask_intent")) and ai_response.get("task_data"):
-            task_data = ai_response["task_data"]
-
-            # Non-admin users are restricted to subtask creation only.
-            if role != "admin" and ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
-                ai_response["is_task_intent"] = False
-                ai_response["task_data"] = None
-                ai_response["needs_clarification"] = False
-                ai_response["clarification_question"] = None
-                ai_response["reply"] = "You can create subtasks, but only admins can create main tasks. Tell me which parent task to add your subtask under."
-
-            if ai_response.get("task_data") is None:
-                return ChatbotQueryResponse(
-                    reply=ai_response.get("reply", "How can I help you?"),
-                    actions=[ChatAction(**a) for a in actions],
-                    navigate_to=ai_response.get("navigate_to"),
-                    is_task_intent=False,
-                    is_subtask_intent=False,
-                    is_leave_intent=ai_response.get("is_leave_intent", False),
-                    task_data=None,
-                    leave_data=ai_response.get("leave_data"),
-                    needs_clarification=ai_response.get("needs_clarification", False),
-                    clarification_question=ai_response.get("clarification_question"),
-                    suggestions=ai_response.get("suggestions"),
-                )
-
-            assignee_name = task_data.get("assignee_name")
-            found_emp = False
-            if assignee_name:
-                for emp in employees:
-                    if emp["name"].lower() == assignee_name.lower() or assignee_name.lower() in emp["name"].lower() or emp["name"].lower() in assignee_name.lower():
-                        task_data["assignee_id"] = emp["id"]
-                        task_data["assignee_name"] = emp["name"]
-                        found_emp = True
-                        break
-            
-            # Subtask specific: find parent task ID
-            if ai_response.get("is_subtask_intent"):
-                parent_name = task_data.get("parent_task_name")
-                if parent_name:
-                    # Search for tasks matching this name
-                    task_stmt = select(Task).where(Task.title.ilike(f"%{parent_name}%"))
-                    # If employee, they can create subtasks for ANY task? 
-                    # User said: "Employees ARE allowed to create subtasks under existing tasks"
-                    # Usually they should see all tasks to create subtasks for them, 
-                    # but maybe restricted to those they can see. Let's allow matching any task for now.
-                    
-                    matched_tasks = session.exec(task_stmt).all()
-                    
-                    if len(matched_tasks) == 1:
-                        task_data["parent_task_id"] = matched_tasks[0].id
-                        task_data["parent_task_name"] = matched_tasks[0].title
-                        ai_response["needs_clarification"] = False
-                    elif len(matched_tasks) > 1:
-                        ai_response["needs_clarification"] = True
-                        ai_response["suggestions"] = [t.title for t in matched_tasks[:3]]
-                        ai_response["reply"] = f"I found multiple tasks matching '{parent_name}'. Which one did you mean?"
-                        ai_response["clarification_question"] = "Please select the correct parent task."
-                    else:
-                        # Fallback: find similar tasks
-                        fallback_stmt = select(Task).limit(3)
-                        similar_tasks = session.exec(fallback_stmt).all()
-                        ai_response["needs_clarification"] = True
-                        ai_response["suggestions"] = [t.title for t in similar_tasks]
-                        ai_response["reply"] = f"I couldn't find a task named '{parent_name}'."
-                        ai_response["clarification_question"] = "I couldn't find that task. Here are some active tasks you might be looking for:"
-
-            # Resolve workspace ID from workspace name for main task creation.
-            workspace_name = task_data.get("workspace_name")
-            found_workspace = False
-            if workspace_name:
-                for ws in workspaces:
-                    if ws["name"].lower() == workspace_name.lower() or workspace_name.lower() in ws["name"].lower() or ws["name"].lower() in workspace_name.lower():
-                        task_data["workspace_id"] = ws["id"]
-                        task_data["workspace_name"] = ws["name"]
-                        found_workspace = True
-                        break
-
-            if workspace_name and not found_workspace and ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
-                ai_response["needs_clarification"] = True
-                ai_response["clarification_question"] = f"I couldn't find a workspace named '{workspace_name}'. Which workspace should I use?"
-                ai_response["suggestions"] = [w["name"] for w in workspaces[:5]]
-                ai_response["reply"] = ai_response["clarification_question"]
-
-            # Clarify if the named assignee wasn't found — applies to both admin and employee
-            if assignee_name and not found_emp:
-                ai_response["needs_clarification"] = True
-                ai_response["is_task_intent"] = False
-                ai_response["is_subtask_intent"] = False
-                ai_response["clarification_question"] = f"I couldn't find an employee named '{assignee_name}'. Who should I assign this to?"
-                ai_response["suggestions"] = [e["name"] for e in employees[:5]]
-                ai_response["reply"] = ai_response["clarification_question"]
-
-            # Enforce required fields for main tasks.
-            if ai_response.get("is_task_intent") and not ai_response.get("is_subtask_intent"):
-                missing_fields: List[str] = []
-                if not task_data.get("title"):
-                    missing_fields.append("title")
-                if not task_data.get("workspace_id") and not task_data.get("workspace_name"):
-                    missing_fields.append("workspace")
-                if task_data.get("recurrence_preference_set") is not True:
-                    missing_fields.append("task_type")
-                if task_data.get("is_recurring") and not task_data.get("recurrence_type"):
-                    missing_fields.append("recurrence_type")
-                if not task_data.get("assignee_id") and not task_data.get("assignee_name"):
-                    missing_fields.append("assignee")
-                if not task_data.get("deadline"):
-                    missing_fields.append("due_date")
-                if not task_data.get("priority"):
-                    missing_fields.append("priority")
-
-                if missing_fields:
-                    ai_response["needs_clarification"] = True
-
-                    if "task_type" in missing_fields:
-                        ai_response["clarification_question"] = "Should this be a normal one-time task or a recurring task?"
-                        ai_response["suggestions"] = ["Normal task", "Recurring task"]
-                    else:
-                        label_map = {
-                            "workspace": "workspace",
-                            "assignee": "assignee",
-                            "due_date": "due date",
-                            "title": "title",
-                            "priority": "priority",
-                            "recurrence_type": "recurrence pattern",
-                        }
-                        friendly = [label_map.get(f, f.replace("_", " ")) for f in missing_fields]
-                        ai_response["clarification_question"] = "I still need: " + ", ".join(friendly) + "."
-                        if "workspace" in missing_fields:
-                            ai_response["suggestions"] = [w["name"] for w in workspaces[:5]]
-                        elif "assignee" in missing_fields:
-                            ai_response["suggestions"] = [e["name"] for e in employees[:5]]
-                        elif "priority" in missing_fields:
-                            ai_response["suggestions"] = ["low", "medium", "high"]
-                        elif "recurrence_type" in missing_fields:
-                            ai_response["suggestions"] = ["daily", "weekly", "monthly"]
-
-                    ai_response["reply"] = ai_response.get("clarification_question") or ai_response.get("reply", "Please provide the missing fields.")
-
-        # ── Navigation post-processing ──────────────────────────────
-        # 1. If OpenAI didn't set navigate_to, check deterministic nav commands as fallback
-        if not ai_response.get("navigate_to"):
-            nav_target = _resolve_nav_command(message)
-            if nav_target and (role == "admin" or nav_target not in ADMIN_ONLY_ROUTES):
-                ai_response["navigate_to"] = _route_for_role(nav_target, role)
-
-        # 2. RBAC: strip navigate_to if it points to an admin-only route for an employee
-        raw_nav = ai_response.get("navigate_to") or ""
-        if raw_nav and role != "admin":
-            nav_key = raw_nav.strip("/").lower()
-            if nav_key in ADMIN_ONLY_ROUTES:
-                ai_response["navigate_to"] = None
-                ai_response["reply"] = (
-                    "That section is only available to admins. "
-                    "You can access: Attendance, Project Management, Tasks, Requests, My Space, or your Profile."
-                )
-
-        # 3. Fix employee home-route: if AI set /dashboard for an employee, redirect to /employee-dashboard
-        if ai_response.get("navigate_to") in ("/dashboard",) and role != "admin":
-            ai_response["navigate_to"] = "/employee-dashboard"
-
-        return ChatbotQueryResponse(
-            reply=ai_response.get("reply", "How can I help you?"),
-            actions=[ChatAction(**a) for a in actions],
-            navigate_to=ai_response.get("navigate_to"),
-            is_task_intent=ai_response.get("is_task_intent", False),
-            is_subtask_intent=ai_response.get("is_subtask_intent", False),
-            is_leave_intent=ai_response.get("is_leave_intent", False),
-            task_data=ai_response.get("task_data"),
-            leave_data=ai_response.get("leave_data"),
-            needs_clarification=ai_response.get("needs_clarification", False),
-            clarification_question=ai_response.get("clarification_question"),
-            suggestions=ai_response.get("suggestions")
-        )
-
-    # --- Fallback to deterministic logic ---
-
-    # --- RBAC guard: employees must not access admin-only pages ---
-    if role != "admin" and page_key in ADMIN_ONLY_ROUTES:
-        page_key = "employee-dashboard"
-
-    # --- Check if message is a navigation command ---
-    nav_target = _resolve_nav_command(message)
-
-    if nav_target is not None:
-        # Enforce RBAC on navigation target
-        if role != "admin" and nav_target in ADMIN_ONLY_ROUTES:
-            reply = (
-                "Sorry, you don't have permission to access that section. "
-                "Here are the pages available to you:"
-            )
-            actions = _get_actions(page_key, role)
-            return ChatbotQueryResponse(reply=reply, actions=[ChatAction(**a) for a in actions])
-
-        route = _route_for_role(nav_target, role)
-        explanation = _get_explanation(nav_target)
-        actions = _get_actions(nav_target, role)
-        return ChatbotQueryResponse(
-            reply=f"Navigating you to {nav_target.replace('-', ' ').replace('/', ' › ').title()}. {explanation}",
-            actions=[ChatAction(**a) for a in actions],
-            navigate_to=route,
-        )
-
-    # --- Generic help / what / how questions ---
-    lower_msg = message.lower()
-    help_triggers = {"what", "how", "help", "explain", "tell me", "what can", "what is", "what are", "show me", "guide", "?"}
-    is_help_query = any(t in lower_msg for t in help_triggers) or lower_msg in {"hi", "hello", "hey", "start", ""}
-
-    if is_help_query or not message:
-        explanation = _get_explanation(page_key)
-        actions = _get_actions(page_key, role)
-        return ChatbotQueryResponse(
-            reply=explanation,
-            actions=[ChatAction(**a) for a in actions],
-        )
-
-    # --- Fallback: return page context ---
-    explanation = _get_explanation(page_key)
-    actions = _get_actions(page_key, role)
-    return ChatbotQueryResponse(
-        reply=(
-            f"I'm not sure about \"{message}\", but here's what I can tell you about the current page:\n\n"
-            f"{explanation}"
-        ),
-        actions=[ChatAction(**a) for a in actions],
-    )
+    stmt = select(WorkBotMessage).where(WorkBotMessage.conversation_id == conversation_id).order_by(WorkBotMessage.created_at.asc())
+    messages = session.exec(stmt).all()
+    return messages
 
 
-@router.post("/context", response_model=ChatbotQueryResponse)
-async def chatbot_context(
-    request: ChatbotQueryRequest,
-    current_user: User = Depends(get_current_user),
+@router.post("/conversations/{conversation_id}/messages", response_model=ChatbotResponse)
+async def send_message(
+    conversation_id: int,
+    payload: ChatMessageCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Return page context and quick actions without a user message.
-    Called automatically when the chatbot is first opened on a page.
+    Core WorkBot interaction endpoint.
+    Retrieves user messages, checks Q&A semantic cache, processes intents, triggers actions in DB,
+    generates contextual RAG responses, audits queries, and returns actions.
     """
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    page_key = _normalise_page(request.current_page)
+    user_query = payload.content.strip()
+    if not user_query:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty"
+        )
 
-    # RBAC guard
-    if role != "admin" and page_key in ADMIN_ONLY_ROUTES:
-        page_key = "employee-dashboard"
+    # 1. Verify conversation session
+    conv_stmt = select(WorkBotConversation).where(
+        WorkBotConversation.id == conversation_id,
+        WorkBotConversation.user_id == current_user.id
+    )
+    conversation = session.exec(conv_stmt).first()
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
 
-    page_display = page_key.replace("-", " ").replace("/", " › ").title()
-    explanation = _get_explanation(page_key)
-    actions = _get_actions(page_key, role)
+    # Save user message to database
+    user_msg_db = WorkBotMessage(
+        conversation_id=conversation_id,
+        sender_role="user",
+        content=user_query
+    )
+    session.add(user_msg_db)
+    session.commit()
 
-    reply = (
-        f"Hi! I can help you navigate this page.\n\n"
-        f"You are currently on: **{page_display}**\n\n"
-        f"{explanation}\n\n"
-        "I can also help you draft tasks. For task creation, tell me the workspace, whether it is a normal or recurring task, the assignee, due date, title, and priority."
+    # 2. SEMANTIC Q&A CACHE SEARCH (pgvector simulation/fallback)
+    query_vector = get_embeddings_batch([user_query])[0]
+    
+    cached_response = None
+    # Attempt pgvector search if extension works, else fallback to python cosine similarity
+    try:
+        # Check if pgvector column 'embedding' exists (it is created by migration when pgvector is available)
+        raw_sql = text("""
+            SELECT id, question, answer, intent, parameters_json, navigation_url, suggested_actions_json,
+                   embedding_json,
+                   1 as distance
+            FROM workbot_qa_cache
+            WHERE embedding_json IS NOT NULL
+            LIMIT 100;
+        """)
+        cache_rows = session.execute(raw_sql).fetchall()
+        best_sim = 0.0
+        best_match = None
+        for row in cache_rows:
+            try:
+                vec = json.loads(row.embedding_json)
+                if vec and len(vec) == len(query_vector):
+                    sim = cosine_similarity(query_vector, vec)
+                    if sim > 0.90 and sim > best_sim:
+                        best_sim = sim
+                        best_match = row
+            except Exception:
+                continue
+        if best_match:
+            cached_response = best_match
+    except Exception as e:
+        # Cosine Similarity Python fallback using ORM
+        all_cache = session.exec(select(WorkBotQACache)).all()
+        best_sim = 0.0
+        best_match = None
+        for cache in all_cache:
+            if cache.embedding_json:
+                try:
+                    vec = json.loads(cache.embedding_json)
+                    sim = cosine_similarity(query_vector, vec)
+                    if sim > 0.90 and sim > best_sim:
+                        best_sim = sim
+                        best_match = cache
+                except Exception:
+                    continue
+        if best_match:
+            cached_response = best_match
+
+    # If cached hit, skip LLM and return instantly!
+    if cached_response is not None:
+        c_answer = cached_response.answer
+        c_intent = cached_response.intent
+        c_params = json.loads(cached_response.parameters_json or "{}")
+        c_nav = cached_response.navigation_url
+        c_actions = json.loads(cached_response.suggested_actions_json or "[]")
+        
+        # Save assistant cached message
+        assistant_msg = WorkBotMessage(
+            conversation_id=conversation_id,
+            sender_role="assistant",
+            content=c_answer,
+            intent=c_intent,
+            parameters_json=json.dumps(c_params),
+            navigation_url=c_nav
+        )
+        session.add(assistant_msg)
+        
+        # Update conversation time
+        conversation.updated_at = datetime.now()
+        session.add(conversation)
+        session.commit()
+
+        # Audit log
+        audit_api_call(
+            session=session,
+            user_id=current_user.id,
+            endpoint=f"/chatbot/conversations/{conversation_id}/messages (CACHED)",
+            method="POST",
+            request={"content": user_query},
+            response={"response_text": c_answer, "intent": c_intent, "cached": True},
+            status_code=200,
+            conversation_id=conversation_id
+        )
+
+        return ChatbotResponse(
+            response_text=c_answer,
+            intent=c_intent,
+            parameters=c_params,
+            navigation_url=c_nav,
+            suggested_actions=c_actions,
+            confidence=0.99,
+            cached=True
+        )
+
+    # 3. SEMANTIC SEARCH (RAG Context Block)
+    rag_context = retrieve_relevant_context(session, current_user.organization_id, user_query)
+
+    # 4. NLU INTENT CLASSIFICATION
+    nlu_service = NLUService()
+    history_list = []
+    # Grab last 4 messages for conversational context
+    recent_msgs = session.exec(
+        select(WorkBotMessage).where(WorkBotMessage.conversation_id == conversation_id).order_by(WorkBotMessage.created_at.desc()).limit(5)
+    ).all()
+    for m in reversed(recent_msgs):
+        history_list.append({"sender_role": m.sender_role, "content": m.content})
+    
+    nlu_res = nlu_service.classify_intent(user_query, history_list)
+    intent = nlu_res.get("intent", "help")
+    parameters = nlu_res.get("parameters", {})
+    confidence = nlu_res.get("confidence", 0.5)
+    clarification_needed = nlu_res.get("clarification_needed", False)
+
+    if clarification_needed:
+        clarify_q = nlu_res.get("clarification_question", "Could you please specify what action you'd like to perform?")
+        # Save clarification response
+        assistant_msg = WorkBotMessage(
+            conversation_id=conversation_id,
+            sender_role="assistant",
+            content=clarify_q,
+            intent="clarification"
+        )
+        session.add(assistant_msg)
+        session.commit()
+        return ChatbotResponse(
+            response_text=clarify_q,
+            intent="clarification",
+            confidence=confidence
+        )
+
+    # 5. ACTION & LIVE QUERY DISPATCHING
+    database_data = {}
+    navigation_url = None
+    suggested_response_text = None
+
+    # Apply role restriction: Employee cannot approve or reject leaves
+    if intent in ["approve_leave", "reject_leave"] and current_user.role != UserRole.admin:
+        suggested_response_text = "🔒 **Access Denied**: Only administrators are authorized to approve or reject leave requests. Please contact your manager."
+        intent = "denied"
+    
+    elif intent == "clock_in":
+        # Action: Attendance Clock-in
+        existing = session.exec(
+            select(Attendance).where(
+                Attendance.user_id == current_user.id,
+                Attendance.date == date.today()
+            )
+        ).first()
+        if existing and existing.punch_in:
+            suggested_response_text = "You are already **clocked in** for today!"
+        else:
+            new_att = Attendance(
+                organization_id=current_user.organization_id,
+                user_id=current_user.id,
+                date=date.today(),
+                punch_in=datetime.now()
+            )
+            session.add(new_att)
+            session.commit()
+            suggested_response_text = f"🌞 **Successfully Clocked In!** Welcome to work. Your workday has officially started at {datetime.now().strftime('%I:%M %p')}."
+            navigation_url = "/attendance"
+
+    elif intent == "clock_out":
+        # Action: Attendance Clock-out
+        existing = session.exec(
+            select(Attendance).where(
+                Attendance.user_id == current_user.id,
+                Attendance.date == date.today()
+            )
+        ).first()
+        if not existing or not existing.punch_in:
+            suggested_response_text = "You cannot clock out since you haven't **clocked in** today yet!"
+        elif existing.punch_out:
+            suggested_response_text = "You are already **clocked out** for today!"
+        else:
+            existing.punch_out = datetime.now()
+            duration = (existing.punch_out - existing.punch_in).total_seconds() / 3600.0
+            existing.total_hours = round(duration, 2)
+            session.add(existing)
+            session.commit()
+            suggested_response_text = f"🌙 **Successfully Clocked Out!** You clocked out at {existing.punch_out.strftime('%I:%M %p')}. Total logged time today: **{existing.total_hours} hours**."
+            navigation_url = "/attendance"
+
+    elif intent == "create_task" and current_user.role == UserRole.admin:
+        # Action: Admin creates task
+        title = parameters.get("title", "New Task via Chatbot")
+        desc = parameters.get("description", "Assigned via chatbot assistant")
+        priority = parameters.get("priority", "medium")
+        assignee_email = parameters.get("assigned_to_email")
+        
+        assignee = current_user
+        if assignee_email:
+            assignee = session.exec(select(User).where(User.email == assignee_email)).first() or current_user
+
+        due_date_val = date.today() + timedelta(days=3)
+        if parameters.get("due_date"):
+            try:
+                due_date_val = datetime.strptime(parameters["due_date"], "%Y-%m-%d").date()
+            except Exception:
+                pass
+
+        public_id = "".join(random.choices("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=6))
+        
+        # Grab default workspace
+        workspace = session.exec(select(Workspace).where(Workspace.organization_id == current_user.organization_id)).first()
+        ws_id = workspace.id if workspace else 1
+
+        new_task = Task(
+            organization_id=current_user.organization_id,
+            title=title,
+            description=desc,
+            priority=TaskPriority(priority),
+            status=TaskStatus.todo,
+            assigned_to=assignee.id,
+            assigned_by=current_user.id,
+            due_date=due_date_val,
+            public_id=public_id,
+            workspace_id=ws_id
+        )
+        session.add(new_task)
+        session.commit()
+        suggested_response_text = f"✅ **Task Created Successfully!** \n\n* **Title**: {title}\n* **Assignee**: {assignee.name} ({assignee.email})\n* **Priority**: {priority.capitalize()}\n* **Due Date**: {due_date_val.strftime('%B %d, %Y')}\n\nThe task is now live in the system."
+        navigation_url = "/tasks"
+
+    elif intent == "request_leave":
+        # Action: Request a Leave
+        leave_type = parameters.get("leave_type", "personal")
+        reason = parameters.get("reason", "Requested via WorkBot")
+        
+        st_date = date.today() + timedelta(days=1)
+        en_date = date.today() + timedelta(days=2)
+        if parameters.get("start_date"):
+            try: st_date = datetime.strptime(parameters["start_date"], "%Y-%m-%d").date()
+            except Exception: pass
+        if parameters.get("end_date"):
+            try: en_date = datetime.strptime(parameters["end_date"], "%Y-%m-%d").date()
+            except Exception: pass
+
+        new_leave = LeaveRequest(
+            organization_id=current_user.organization_id,
+            user_id=current_user.id,
+            leave_type=leave_type,
+            start_date=st_date,
+            end_date=en_date,
+            reason=reason,
+            status=LeaveStatus.pending
+        )
+        session.add(new_leave)
+        session.commit()
+        suggested_response_text = f"📝 **Leave Request Submitted!**\n\n* **Type**: {leave_type.capitalize()}\n* **Dates**: {st_date.strftime('%Y-%m-%d')} to {en_date.strftime('%Y-%m-%d')}\n* **Reason**: {reason}\n\nYour request has been sent to your supervisor for review."
+        navigation_url = "/requests"
+
+    elif intent == "approve_leave" and current_user.role == UserRole.admin:
+        # Action: Approve Leave (Admin Only)
+        lr_id = parameters.get("leave_request_id")
+        if lr_id:
+            try:
+                lr_id = int(lr_id)
+                leave = session.exec(select(LeaveRequest).where(
+                    LeaveRequest.id == lr_id,
+                    LeaveRequest.organization_id == current_user.organization_id
+                )).first()
+                if leave:
+                    leave.status = LeaveStatus.approved
+                    leave.reviewed_by = current_user.id
+                    leave.reviewed_at = datetime.now()
+                    session.add(leave)
+                    session.commit()
+                    suggested_response_text = f"✅ Approved leave request **#{lr_id}**."
+                    navigation_url = "/requests"
+                else:
+                    suggested_response_text = f"Leave request **#{lr_id}** was not found."
+            except Exception:
+                suggested_response_text = "Could not parse leave request ID."
+        else:
+            suggested_response_text = "Please specify a leave request ID to approve."
+
+    elif intent == "reject_leave" and current_user.role == UserRole.admin:
+        # Action: Reject Leave (Admin Only)
+        lr_id = parameters.get("leave_request_id")
+        comment = parameters.get("admin_comment", "Rejected via AI Assistant")
+        if lr_id:
+            try:
+                lr_id = int(lr_id)
+                leave = session.exec(select(LeaveRequest).where(
+                    LeaveRequest.id == lr_id,
+                    LeaveRequest.organization_id == current_user.organization_id
+                )).first()
+                if leave:
+                    leave.status = LeaveStatus.rejected
+                    leave.reviewed_by = current_user.id
+                    leave.reviewed_at = datetime.now()
+                    leave.admin_comment = comment
+                    session.add(leave)
+                    session.commit()
+                    suggested_response_text = f"❌ Rejected leave request **#{lr_id}** with comment: *'{comment}'*."
+                    navigation_url = "/requests"
+                else:
+                    suggested_response_text = f"Leave request **#{lr_id}** was not found."
+            except Exception:
+                suggested_response_text = "Could not parse leave request ID."
+        else:
+            suggested_response_text = "Please specify a leave request ID to reject."
+
+    elif intent == "view_tasks":
+        # Querying Tasks
+        if current_user.role == UserRole.admin:
+            stmt = select(Task).where(Task.organization_id == current_user.organization_id)
+        else:
+            stmt = select(Task).where(Task.assigned_to == current_user.id)
+            
+        priority = parameters.get("priority")
+        if priority:
+            stmt = stmt.where(Task.priority == TaskPriority(priority))
+            
+        tasks_list = session.exec(stmt.order_by(Task.due_date.asc()).limit(5)).all()
+        database_data["tasks"] = [
+            {"id": t.id, "title": t.title, "priority": t.priority.value, "status": t.status.value, "due_date": str(t.due_date)}
+            for t in tasks_list
+        ]
+        navigation_url = "/tasks"
+
+    elif intent == "view_leaves":
+        # Querying Leaves
+        if current_user.role == UserRole.admin:
+            stmt = select(LeaveRequest).where(LeaveRequest.organization_id == current_user.organization_id)
+        else:
+            stmt = select(LeaveRequest).where(LeaveRequest.user_id == current_user.id)
+            
+        leaves_list = session.exec(stmt.order_by(LeaveRequest.created_at.desc()).limit(5)).all()
+        database_data["leaves"] = [
+            {"id": l.id, "leave_type": l.leave_type, "start": str(l.start_date), "end": str(l.end_date), "status": l.status.value}
+            for l in leaves_list
+        ]
+        navigation_url = "/requests"
+
+    elif intent == "view_attendance":
+        # Querying Attendance
+        stmt = select(Attendance).where(Attendance.user_id == current_user.id).order_by(Attendance.date.desc()).limit(5)
+        att_list = session.exec(stmt).all()
+        database_data["attendance"] = [
+            {"date": str(a.date), "punch_in": a.punch_in.strftime("%H:%M") if a.punch_in else None,
+             "punch_out": a.punch_out.strftime("%H:%M") if a.punch_out else None, "hours": a.total_hours}
+            for a in att_list
+        ]
+        navigation_url = "/attendance"
+
+    elif intent == "view_payroll":
+        # Querying Salary
+        stmt = select(Payroll).where(Payroll.employee_id == current_user.id).order_by(Payroll.year.desc(), Payroll.month.desc()).limit(5)
+        payroll_list = session.exec(stmt).all()
+        database_data["payroll"] = [
+            {"month": p.month, "year": p.year, "salary": p.salary, "status": p.status}
+            for p in payroll_list
+        ]
+        navigation_url = "/payroll"
+
+    elif intent == "view_employees":
+        # Querying Employee Directory
+        stmt = select(User).where(User.organization_id == current_user.organization_id).limit(10)
+        employees_list = session.exec(stmt).all()
+        database_data["employees"] = [
+            {"name": e.name, "email": e.email, "role": e.role.value, "department": e.department or "General"}
+            for e in employees_list
+        ]
+        navigation_url = "/employees"
+
+    elif intent == "navigate":
+        # Standard Navigation Redirects
+        section = parameters.get("section", "dashboard").lower()
+        nav_map = {
+            "tasks": "/tasks",
+            "projects": "/project-management/projects",
+            "attendance": "/attendance",
+            "leave": "/requests",
+            "requests": "/requests",
+            "profile": "/profile",
+            "payroll": "/payroll",
+            "dashboard": "/dashboard" if current_user.role == UserRole.admin else "/employee-dashboard"
+        }
+        navigation_url = nav_map.get(section, "/dashboard")
+        suggested_response_text = f"Sure! I am redirecting you to the **{section.capitalize()}** page now."
+
+    # 6. LLM RESPONSE GENERATION
+    if not suggested_response_text:
+        response_text = nlu_service.generate_response(
+            intent=intent,
+            parameters=parameters,
+            context=rag_context,
+            data=database_data
+        )
+    else:
+        response_text = suggested_response_text
+
+    # 7. ADD TO SEMANTIC CACHE FOR FUTURE QUERIES
+    try:
+        new_cache = WorkBotQACache(
+            question=user_query,
+            answer=response_text,
+            intent=intent,
+            parameters_json=json.dumps(parameters),
+            navigation_url=navigation_url,
+            suggested_actions_json=json.dumps(nlu_service.suggest_actions(intent, parameters, current_user.role.value)),
+            embedding_json=json.dumps(query_vector)
+        )
+        session.add(new_cache)
+        session.commit()
+    except Exception as e:
+        print(f"Error caching Q&A: {e}")
+        session.rollback()
+
+    # Save assistant message
+    assistant_msg = WorkBotMessage(
+        conversation_id=conversation_id,
+        sender_role="assistant",
+        content=response_text,
+        intent=intent,
+        parameters_json=json.dumps(parameters),
+        navigation_url=navigation_url
+    )
+    session.add(assistant_msg)
+    
+    # Update conversation time
+    conversation.updated_at = datetime.now()
+    session.add(conversation)
+    session.commit()
+
+    # Log audit
+    audit_api_call(
+        session=session,
+        user_id=current_user.id,
+        endpoint=f"/chatbot/conversations/{conversation_id}/messages",
+        method="POST",
+        request={"content": user_query},
+        response={"response_text": response_text, "intent": intent},
+        status_code=200,
+        conversation_id=conversation_id
     )
 
-    return ChatbotQueryResponse(
-        reply=reply,
-        actions=[ChatAction(**a) for a in actions],
+    return ChatbotResponse(
+        response_text=response_text,
+        intent=intent,
+        parameters=parameters,
+        navigation_url=navigation_url,
+        suggested_actions=nlu_service.suggest_actions(intent, parameters, current_user.role.value),
+        confidence=confidence
     )
+
+
+# ============================================================================
+# Page Contexts and Legacy compatibility
+# ============================================================================
+
+@router.post("/context", response_model=ChatbotContextResponse)
+async def chatbot_context(
+    request: ChatbotContextRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Provide context-aware suggestions and quick actions depending on the current page."""
+    page_suggestions = {
+        "/tasks": [
+            "Show my pending tasks",
+            "What tasks are due today?",
+            "Filter tasks by High priority"
+        ],
+        "/attendance": [
+            "Clock in",
+            "Clock out",
+            "Show my work hours"
+        ],
+        "/requests": [
+            "Apply for sick leave",
+            "Check my leave history",
+            "What is my leave status?"
+        ],
+        "/payroll": [
+            "What is my salary this month?",
+            "Show payroll slips"
+        ]
+    }
+    
+    quick_actions = {
+        "/tasks": [
+            {"label": "Show Tasks", "action": "Show my pending tasks"},
+            {"label": "Filter High", "action": "Filter tasks by High priority"}
+        ],
+        "/attendance": [
+            {"label": "Clock In", "action": "Clock in"},
+            {"label": "Clock Out", "action": "Clock out"}
+        ],
+        "/requests": [
+            {"label": "Request Leave", "action": "Apply for leave"}
+        ]
+    }
+
+    if current_user.role == UserRole.admin:
+        page_suggestions["/requests"].append("Show all pending leave requests")
+        quick_actions["/requests"].append({"label": "Pending Requests", "action": "Show pending leave requests"})
+        
+        page_suggestions["/tasks"].append("Create a new task")
+        quick_actions["/tasks"].append({"label": "Assign Task", "action": "Create a new task"})
+
+    page = request.current_page
+    suggestions = page_suggestions.get(page, [
+        "What tasks are assigned to me?",
+        "Check my salary details",
+        "How do I clock in?"
+    ])
+    actions = quick_actions.get(page, [
+        {"label": "My Tasks", "action": "Show my pending tasks"},
+        {"label": "Work Hours", "action": "Show my work hours"}
+    ])
+
+    return ChatbotContextResponse(
+        page=page,
+        suggestions=suggestions,
+        quick_actions=actions
+    )
+
+
+@router.post("/query", response_model=ChatbotResponse)
+async def chatbot_query_legacy(
+    request: ChatMessageCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Legacy backward-compatible endpoint that leverages a default chat conversation."""
+    # Find or create a 'Default Chat' conversation for the user
+    stmt = select(WorkBotConversation).where(
+        WorkBotConversation.user_id == current_user.id,
+        WorkBotConversation.title == "WorkBot Assistant"
+    ).order_by(WorkBotConversation.created_at.asc())
+    conversation = session.exec(stmt).first()
+    
+    if not conversation:
+        conversation = WorkBotConversation(
+            user_id=current_user.id,
+            organization_id=current_user.organization_id,
+            title="WorkBot Assistant"
+        )
+        session.add(conversation)
+        session.commit()
+        session.refresh(conversation)
+
+    return await send_message(
+        conversation_id=conversation.id,
+        payload=request,
+        session=session,
+        current_user=current_user
+    )
+
+
+@router.get("/intents", response_model=Dict[str, Any])
+async def get_available_intents():
+    """Get list of available chatbot intents and descriptions."""
+    return {"intents": INTENT_DEFINITIONS}

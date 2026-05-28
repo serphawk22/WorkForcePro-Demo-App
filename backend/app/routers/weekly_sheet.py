@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.auth import get_current_user
 
-router = APIRouter(prefix="/api/my-space/weekly-sheet", tags=["Lighthouse Weekly Sheet"])
+router = APIRouter(prefix="/my-space/weekly-sheet", tags=["Lighthouse Weekly Sheet"])
 
 def monday_of_week(d: DateType) -> DateType:
     return d - timedelta(days=d.weekday())
@@ -52,23 +52,101 @@ Return ONLY a valid JSON object matching exactly this schema, without markdown f
 }
 """
 
-async def call_openai_for_weekly_sheet(data_payload: str) -> dict:
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OpenAI API key not configured.",
+def _parse_week_payload(data_payload: str | dict) -> dict:
+    if isinstance(data_payload, dict):
+        return data_payload
+    return json.loads(data_payload)
+
+
+def build_weekly_sheet_fallback(data_payload: str | dict) -> dict:
+    """Build a weekly sheet from task/attendance data when OpenAI is unavailable."""
+    payload = _parse_week_payload(data_payload)
+    week_start = payload.get("week_start", "")
+    week_end = payload.get("week_end", "")
+    attendance = payload.get("attendance") or {}
+    tasks = payload.get("tasks") or []
+
+    completed_statuses = {"approved", "submitted", "reviewing"}
+    completed = [
+        t for t in tasks
+        if t.get("completed") or str(t.get("status", "")).lower() in completed_statuses
+    ]
+    pending = [t for t in tasks if t not in completed]
+
+    def bullet_lines(items: list, key: str = "title") -> str:
+        if not items:
+            return "• None recorded for this week."
+        return "\n".join(f"• {item.get(key) or 'Untitled task'}" for item in items)
+
+    days_logged = attendance.get("days_logged") or 0
+    total_hours = attendance.get("total_hours") or 0
+    total_tasks = len(tasks)
+
+    return {
+        "weekly_summary": (
+            f"Summary for {week_start} to {week_end}: {len(completed)} of {total_tasks} "
+            f"assigned task(s) marked complete. Attendance logged on {days_logged} day(s) "
+            f"({total_hours:.1f} total hours). "
+            "(Generated from your task and attendance data — AI was unavailable.)"
+        ),
+        "major_accomplishments": bullet_lines(completed),
+        "tasks_completed": bullet_lines(completed),
+        "pending_tasks": bullet_lines(pending),
+        "blockers": (
+            "• No blockers recorded."
+            if not pending
+            else "• Review pending tasks below and update status or due dates as needed."
+        ),
+        "productivity_insights": (
+            f"You logged {total_hours:.1f} hours across {days_logged} day(s) while tracking "
+            f"{total_tasks} assigned task(s)."
+        ),
+        "time_utilization": (
+            f"Total hours logged: {total_hours:.1f}. Completed tasks: {len(completed)}. "
+            f"Pending tasks: {len(pending)}."
+        ),
+        "suggested_priorities": bullet_lines(pending[:3]),
+    }
+
+
+def _should_use_ai_fallback(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in (
+            "insufficient_quota",
+            "rate limit",
+            "429",
+            "quota",
+            "api key",
+            "authentication",
+            "401",
+            "503",
+            "connection",
+            "timeout",
         )
-    
+    )
+
+
+async def call_openai_for_weekly_sheet(data_payload: str | dict) -> dict:
+    api_key = (os.getenv("OPENAI_API_KEY", "") or "").strip()
+    if not api_key or "REDACTED" in api_key.upper():
+        return build_weekly_sheet_fallback(data_payload)
+
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
+    payload_text = (
+        data_payload
+        if isinstance(data_payload, str)
+        else json.dumps(data_payload)
+    )
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Here is the employee's week data:\n{data_payload}"},
+                {"role": "user", "content": f"Here is the employee's week data:\n{payload_text}"},
             ],
             temperature=0.3,
             max_tokens=1000,
@@ -83,15 +161,13 @@ async def call_openai_for_weekly_sheet(data_payload: str) -> dict:
                 content = content[:-3]
             content = content.strip()
 
-        data = json.loads(content)
-        return data
+        return json.loads(content)
 
     except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI returned an invalid response.",
-        )
+        return build_weekly_sheet_fallback(data_payload)
     except Exception as e:
+        if _should_use_ai_fallback(e):
+            return build_weekly_sheet_fallback(data_payload)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI service error: {str(e)}",
