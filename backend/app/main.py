@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -256,94 +256,12 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS time_taken VARCHAR(100)',
         'ALTER TABLE task_sheets ALTER COLUMN achievements DROP NOT NULL',
 
-        # Vector database table for Natural Language Workspace RAG
-        '''
-        CREATE TABLE IF NOT EXISTS vector_embeddings (
-            id SERIAL PRIMARY KEY,
-            organization_id INTEGER,
-            content_id VARCHAR NOT NULL,
-            content_type VARCHAR NOT NULL,
-            text_content TEXT NOT NULL,
-            embedding_json TEXT NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
-        'CREATE INDEX IF NOT EXISTS ix_vector_embeddings_organization_id ON vector_embeddings(organization_id)',
-        'CREATE INDEX IF NOT EXISTS ix_vector_embeddings_content_id ON vector_embeddings(content_id)',
-        'CREATE INDEX IF NOT EXISTS ix_vector_embeddings_content_type ON vector_embeddings(content_type)',
-        'CREATE UNIQUE INDEX IF NOT EXISTS uq_vector_embeddings_org_content ON vector_embeddings(organization_id, content_id)',
-        
+
         # Backfill task_sheets so Pydantic doesn't crash on NULL values
         "UPDATE task_sheets SET tasks_completed = COALESCE(achievements, 'N/A') WHERE tasks_completed IS NULL",
         "UPDATE task_sheets SET work_impact = 'Migrated from legacy achievements' WHERE work_impact IS NULL",
         "UPDATE task_sheets SET time_taken = 'N/A' WHERE time_taken IS NULL",
-        # RAG Chatbot Conversations, Messages, API calls, and Q&A Cache tables
-        '''
-        CREATE TABLE IF NOT EXISTS workbot_conversations (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
-            title VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS workbot_messages (
-            id SERIAL PRIMARY KEY,
-            conversation_id INTEGER NOT NULL REFERENCES workbot_conversations(id) ON DELETE CASCADE,
-            sender_role VARCHAR(20) NOT NULL,
-            content TEXT NOT NULL,
-            intent VARCHAR(50),
-            parameters_json TEXT,
-            navigation_url VARCHAR(255),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS workbot_api_calls (
-            id SERIAL PRIMARY KEY,
-            conversation_id INTEGER REFERENCES workbot_conversations(id) ON DELETE SET NULL,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            api_endpoint VARCHAR(255) NOT NULL,
-            method VARCHAR(10) NOT NULL,
-            request_payload TEXT,
-            response_payload TEXT,
-            status_code INTEGER,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
-        # Try to enable vector extension if it's PostgreSQL
-        'CREATE EXTENSION IF NOT EXISTS vector',
-        # Try to create workbot_qa_cache using pgvector type
-        '''
-        CREATE TABLE IF NOT EXISTS workbot_qa_cache (
-            id SERIAL PRIMARY KEY,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            intent VARCHAR(50),
-            parameters_json TEXT,
-            navigation_url VARCHAR(255),
-            suggested_actions_json TEXT,
-            embedding vector(384),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
-        # Fallback table definition without pgvector (for SQLite or environments without pgvector)
-        '''
-        CREATE TABLE IF NOT EXISTS workbot_qa_cache (
-            id SERIAL PRIMARY KEY,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            intent VARCHAR(50),
-            parameters_json TEXT,
-            navigation_url VARCHAR(255),
-            suggested_actions_json TEXT,
-            embedding_json TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-        ''',
+
         ]
 
         for migration in additional_migrations:
@@ -671,7 +589,6 @@ app.include_router(dashboard.router)
 app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(myspace.router)
-app.include_router(chatbot.router)
 app.include_router(teams.router)
 app.include_router(ai_assistant.router)
 app.include_router(workspaces.router)
