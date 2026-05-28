@@ -24,7 +24,7 @@ from app.routers.notifications import create_notification
 from app.services.email_service import build_task_assignment_email, get_employee_delivery_email, send_email
 from app.services.recurring_tasks import ensure_instances_for_task
 
-router = APIRouter(prefix="/api/ai-assistant", tags=["AI Assistant"])
+router = APIRouter(prefix="/ai-assistant", tags=["AI Assistant"])
 
 # ─── Request / Response schemas ────────────────────────────────────────────────
 

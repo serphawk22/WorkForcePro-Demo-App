@@ -49,15 +49,18 @@ export default function WeeklySheetGenerator() {
     try {
       const res = await fetch(weeklySheetEndpoint("/current"), {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
       if (res.ok) {
         const data = await res.json();
         setSheet(data);
+      } else if (res.status !== 404) {
+        // 404 is expected when no sheet exists yet — only log other errors
+        console.warn("[WeeklySheet] Fetch current failed:", res.status);
       }
     } catch (error) {
-      console.error("Error fetching current sheet:", error);
+      console.error("[WeeklySheet] Fetch current error:", error);
     } finally {
       setLoading(false);
     }
@@ -69,10 +72,28 @@ export default function WeeklySheetGenerator() {
       const res = await fetch(weeklySheetEndpoint("/generate"), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
+        signal: controller.signal,
       });
-      if (!res.ok) throw new Error("Failed to generate weekly sheet");
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        // Parse backend error detail for actionable diagnostics
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const errData = await res.json();
+          if (errData.detail) {
+            errorMsg = typeof errData.detail === "string" ? errData.detail : JSON.stringify(errData.detail);
+          }
+        } catch {
+          // Response wasn't JSON — use status text
+          errorMsg = res.statusText || errorMsg;
+        }
+        console.error("[WeeklySheet] Generate failed:", res.status, errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
       const data = await res.json();
       setSheet(data);
       toast.success("Weekly sheet created. Please fill in all sections.");
@@ -92,16 +113,29 @@ export default function WeeklySheetGenerator() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({ ...sheet, status }),
       });
-      if (!res.ok) throw new Error("Failed to save weekly sheet");
+      if (!res.ok) {
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const errData = await res.json();
+          if (errData.detail) {
+            errorMsg = typeof errData.detail === "string" ? errData.detail : JSON.stringify(errData.detail);
+          }
+        } catch {
+          errorMsg = res.statusText || errorMsg;
+        }
+        toast.error(errorMsg);
+        return;
+      }
       const data = await res.json();
       setSheet(data);
       toast.success(status === "submitted" ? "Sheet submitted!" : "Draft saved!");
     } catch (error) {
-      toast.error("Error saving weekly sheet");
+      toast.error("Network error — could not save. Please try again.");
+      console.error("[WeeklySheet] Save error:", error);
     } finally {
       setSaving(false);
     }

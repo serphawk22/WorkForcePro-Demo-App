@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, chatbot, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -255,11 +255,13 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS work_impact TEXT',
         'ALTER TABLE task_sheets ADD COLUMN IF NOT EXISTS time_taken VARCHAR(100)',
         'ALTER TABLE task_sheets ALTER COLUMN achievements DROP NOT NULL',
-        
+
+
         # Backfill task_sheets so Pydantic doesn't crash on NULL values
         "UPDATE task_sheets SET tasks_completed = COALESCE(achievements, 'N/A') WHERE tasks_completed IS NULL",
         "UPDATE task_sheets SET work_impact = 'Migrated from legacy achievements' WHERE work_impact IS NULL",
         "UPDATE task_sheets SET time_taken = 'N/A' WHERE time_taken IS NULL",
+
         ]
 
         for migration in additional_migrations:
@@ -587,7 +589,6 @@ app.include_router(dashboard.router)
 app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(myspace.router)
-app.include_router(chatbot.router)
 app.include_router(teams.router)
 app.include_router(ai_assistant.router)
 app.include_router(workspaces.router)

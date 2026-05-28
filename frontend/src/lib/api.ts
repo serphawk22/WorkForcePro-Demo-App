@@ -784,11 +784,9 @@ async function apiFetch<T>(
     if (!response.ok) {
       if (response.status === 401) {
         console.error(`[API] 401 Unauthorized on ${endpoint}`);
-        // Clear auth and redirect to login
-        clearAuth();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        // Don't force-redirect here — let AuthProvider / ProtectedRoute handle
+        // navigation.  A hard redirect from apiFetch causes race conditions
+        // (e.g. chatbot opening triggers background calls that 401 and nuke the page).
         return { error: "Session expired. Please login again." };
       }
       if (response.status === 403) {
@@ -1446,8 +1444,6 @@ export async function uploadTaskVoiceNote(
 
       if (!response.ok) {
         if (response.status === 401) {
-          clearAuth();
-          if (typeof window !== "undefined") window.location.href = "/login";
           return { error: "Session expired. Please login again." };
         }
         if (response.status >= 500 && i < uploadUrls.length - 1) {
@@ -1515,8 +1511,6 @@ export async function summarizeTaskVoiceNote(
 
       if (!response.ok) {
         if (response.status === 401) {
-          clearAuth();
-          if (typeof window !== "undefined") window.location.href = "/login";
           return { error: "Session expired. Please login again." };
         }
         if (response.status >= 500 && i < summarizeUrls.length - 1) {
@@ -1701,7 +1695,6 @@ export async function createLeaveRequest(
     if (!response.ok) {
       if (response.status === 401) {
         clearAuth();
-        if (typeof window !== "undefined") window.location.href = "/login";
         return { error: "Session expired. Please login again." };
       }
       const detailMessage = Array.isArray(result.detail)
@@ -1895,9 +1888,6 @@ export async function uploadProfilePicture(
   if (!token) {
     console.error('[API] No token found, cannot upload');
     clearAuth();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
     return { error: 'Session expired. Please login again.' };
   }
 
@@ -1917,9 +1907,6 @@ export async function uploadProfilePicture(
       if (response.status === 401) {
         console.error('[API] 401 Unauthorized - clearing auth');
         clearAuth();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
         return { error: 'Session expired. Please login again.' };
       }
       const error = await response.json();
@@ -2172,7 +2159,6 @@ async function apiFetchPayrollWithFallback<T>(
     if (!response.ok) {
       if (response.status === 401) {
         clearAuth();
-        if (typeof window !== "undefined") window.location.href = "/login";
         return { error: "Session expired. Please login again." };
       }
       const detailMessage = Array.isArray(data.detail)
