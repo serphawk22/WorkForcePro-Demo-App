@@ -10,7 +10,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getApiBaseUrl } from "@/lib/api";
+import { getApiBaseUrl, getToken } from "@/lib/api";
 
 interface WeeklySheet {
   id?: number;
@@ -74,9 +74,7 @@ export default function WeeklySheetGenerator() {
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },
-        signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       if (!res.ok) {
         // Parse backend error detail for actionable diagnostics
