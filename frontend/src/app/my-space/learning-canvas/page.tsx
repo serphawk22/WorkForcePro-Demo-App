@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import NextImage from "next/image";
 import MySpaceShell from "@/components/my-space/MySpaceShell";
 import { useAuth } from "@/components/AuthProvider";
-import { Folder, Lightbulb, Users, Plus, X, Pencil, Trash2 } from "lucide-react";
-import { submitLearningFocus, getAllLearningFocuses, LearningFocusEntry, submitPersonalProject, getMyPersonalProjects, PersonalProjectEntry, updateLearningFocusEntry, deleteLearningFocusEntry, updatePersonalProjectEntry, deletePersonalProjectEntry } from "@/lib/api";
+import { Folder, Lightbulb, Users, Plus, X, Pencil, Trash2, Users2 } from "lucide-react";
+import { submitLearningFocus, getAllLearningFocuses, LearningFocusEntry, submitPersonalProject, getMyPersonalProjects, PersonalProjectEntry, updateLearningFocusEntry, deleteLearningFocusEntry, updatePersonalProjectEntry, deletePersonalProjectEntry, getMyTeams, getMySpaceUsers, TeamItem, User } from "@/lib/api";
 import { toast } from "sonner";
 
 function getInitials(name: string) { return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2); }
@@ -31,11 +31,22 @@ export default function LearningCanvasPage() {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [newWriteup, setNewWriteup] = useState("");
   const [isAddingProject, setIsAddingProject] = useState(false);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
   const loadFocuses = async () => { setIsLoadingFocuses(true); const r = await getAllLearningFocuses(50); if (r.data) setTeamFocuses(r.data); setIsLoadingFocuses(false); };
   const loadProjects = async () => { setIsLoadingProjects(true); const r = await getMyPersonalProjects(); if (r.data) setProjects(r.data); setIsLoadingProjects(false); };
+  const loadTeams = async () => {
+    setIsLoadingTeams(true);
+    const teamsResult = await getMyTeams();
+    const usersResult = await getMySpaceUsers();
+    if (teamsResult.data) setTeams(teamsResult.data);
+    if (usersResult.data) setTeamMembers(usersResult.data);
+    setIsLoadingTeams(false);
+  };
 
-  useEffect(() => { loadFocuses(); loadProjects(); }, []);
+  useEffect(() => { loadFocuses(); loadProjects(); loadTeams(); }, []);
 
   const handleSubmitFocus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,6 +285,113 @@ export default function LearningCanvasPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* My Team */}
+        <div className="rounded-2xl p-6 shadow-sm lighthouse-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Users2 size={18} className="text-violet-600 dark:text-violet-400" />
+            <h3 className="font-bold text-sm text-[#2B124C] dark:text-purple-100">My Team</h3>
+          </div>
+          {isLoadingTeams ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-6 w-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#522B5B", borderTopColor: "transparent" }} />
+            </div>
+          ) : teams.length === 0 ? (
+            <div className="rounded-xl p-8 text-center text-sm lighthouse-empty">No teams yet. Create or join a team in your dashboard to see them here.</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {teams.map((team) => {
+                const members = team.member_ids
+                  .map((id) => teamMembers.find((u) => u.id === id))
+                  .filter(Boolean) as User[];
+                const leadMember = teamMembers.find((u) => u.id === team.lead_id);
+
+                return (
+                  <div
+                    key={team.id}
+                    className="rounded-xl p-4 border border-violet-200/50 dark:border-violet-500/30 bg-gradient-to-br from-violet-50/50 to-fuchsia-50/50 dark:from-violet-950/20 dark:to-fuchsia-950/20 hover:shadow-md transition-shadow"
+                  >
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h4 className="font-bold text-sm text-[#2B124C] dark:text-purple-100">{team.name}</h4>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-violet-200/60 dark:bg-violet-500/30 text-violet-700 dark:text-violet-300">
+                          {team.member_ids.length + 1} members
+                        </span>
+                      </div>
+                      {team.project_name && (
+                        <p className="text-xs text-[#854F6C] dark:text-purple-400">Project: {team.project_name}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {/* Lead */}
+                      {leadMember && (
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-white/40 dark:bg-white/5">
+                          {leadMember.profile_picture ? (
+                            <NextImage
+                              src={leadMember.profile_picture}
+                              alt={leadMember.name || "User profile"}
+                              width={28}
+                              height={28}
+                              className="h-7 w-7 rounded-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <div
+                              className="h-7 w-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                              style={{ background: colorFor(leadMember.id) }}
+                            >
+                              {getInitials(leadMember.name || "?")}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-[#2B124C] dark:text-purple-100">
+                              {leadMember.name}
+                            </p>
+                            <p className="text-[10px] text-[#854F6C] dark:text-purple-400">Lead</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Members */}
+                      {members.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {members.map((member) => (
+                            <div key={member.id} className="flex items-center gap-2 p-2 rounded-lg bg-white/30 dark:bg-white/[0.02]">
+                              {member.profile_picture ? (
+                                <NextImage
+                                  src={member.profile_picture}
+                                  alt={member.name || "User profile"}
+                                  width={28}
+                                  height={28}
+                                  className="h-7 w-7 rounded-full object-cover"
+                                  unoptimized
+                                />
+                              ) : (
+                                <div
+                                  className="h-7 w-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                                  style={{ background: colorFor(member.id) }}
+                                >
+                                  {getInitials(member.name || "?")}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-[#2B124C] dark:text-purple-100">{member.name}</p>
+                                {member.email && <p className="text-[10px] text-[#854F6C] dark:text-purple-400 truncate">{member.email}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[#854F6C] dark:text-purple-400 text-center py-2">No team members yet.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </MySpaceShell>
