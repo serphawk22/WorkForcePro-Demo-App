@@ -3,7 +3,8 @@ import os
 import re
 from typing import List, Optional
 from datetime import date as DateType, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request, PlainTextResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from starlette.responses import PlainTextResponse
 from sqlmodel import Session, select
 from sqlalchemy import and_, or_
 
