@@ -402,6 +402,8 @@ class TaskUpdate(SQLModel):
     recurrence_start_date: Optional[DateType] = None
     recurrence_end_date: Optional[DateType] = None
     monthly_day: Optional[int] = None
+    is_starred: Optional[bool] = None
+    is_pinned: Optional[bool] = None
 
 
 class TaskRead(TaskBase):
@@ -1464,3 +1466,5 @@ class TeamsMeetingRead(SQLModel):
     created_at: datetime
     updated_at: datetime
     creator_name: Optional[str] = None
+
+

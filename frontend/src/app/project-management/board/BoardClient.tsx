@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ProjectShell from "@/components/project-management/ProjectShell";
 import { useAuth } from "@/components/AuthProvider";
 import { getAllTasks, getMyTasks, updateTaskStatus, Task } from "@/lib/api";
+import TaskPreviewPopup from "@/components/project-management/TaskPreviewPopup";
 import { Loader2, CalendarDays, User } from "lucide-react";
 import { toast } from "sonner";
 
@@ -64,6 +65,7 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [draggingOver, setDraggingOver] = useState<string | null>(null);
+  const [previewTask, setPreviewTask] = useState<Task | null>(null);
 
   const canEditTaskStatus = (task: Task) => {
     return user?.role === "employee" && task.assigned_to === user?.id;
@@ -188,10 +190,7 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
                       draggable={canEditTaskStatus(task)}
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => {
-                        if (workspaceFilter) router.push(`/project-management/workspaces/${workspaceFilter}/projects/${task.id}`);
-                        else router.push(`/project-management/${task.id}`);
-                      }}
+                      onClick={() => setPreviewTask(task)}
                       className={`rounded-xl p-4 cursor-pointer transition-all duration-200 select-none bg-card border border-border/40 shadow-sm ${draggedId === task.id ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:shadow-md hover:border-border/70"}`}
                     >
                       {/* Ref ID + priority */}
@@ -249,6 +248,12 @@ export default function BoardPage({ workspaceQuery }: BoardClientProps) {
             );
           })}
         </div>
+      )}
+      {previewTask && (
+        <TaskPreviewPopup
+          task={previewTask}
+          onClose={() => setPreviewTask(null)}
+        />
       )}
     </ProjectShell>
   );

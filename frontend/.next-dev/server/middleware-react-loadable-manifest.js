@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"components\\\\dashboard\\\\AppSidebar.tsx -> @/lib/api\":{\"id\":\"components\\\\dashboard\\\\AppSidebar.tsx -> @/lib/api\",\"files\":[]}}"

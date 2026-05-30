@@ -8,7 +8,6 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { QueryProvider } from "@/components/QueryProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AttendanceTimerProvider } from "@/components/AttendanceTimerProvider";
-import AIAssistantLauncher from "@/components/AIAssistantLauncher";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -42,7 +41,6 @@ export default function RootLayout({
                   <Toaster />
                   <Sonner />
                   {children}
-                  <AIAssistantLauncher />
                 </TooltipProvider>
               </AttendanceTimerProvider>
             </AuthProvider>
