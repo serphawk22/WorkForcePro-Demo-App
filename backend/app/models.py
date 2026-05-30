@@ -372,6 +372,8 @@ class TaskCreate(TaskBase):
     recurrence_start_date: Optional[DateType] = None
     recurrence_end_date: Optional[DateType] = None
     monthly_day: Optional[int] = None
+    is_starred: Optional[bool] = None
+    is_pinned: Optional[bool] = None
 
 
 class TaskUpdate(SQLModel):
