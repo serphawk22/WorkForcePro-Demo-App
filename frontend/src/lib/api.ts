@@ -286,6 +286,13 @@ export interface Task {
   flagged_by?: number | null;
   flagged_at?: string | null;
   comments?: string[];
+  // Star / Pin metadata
+  is_starred?: boolean;
+  starred_by?: number | null;
+  starred_at?: string | null;
+  is_pinned?: boolean;
+  pinned_by?: number | null;
+  pinned_at?: string | null;
 }
 
 
@@ -784,9 +791,14 @@ async function apiFetch<T>(
     if (!response.ok) {
       if (response.status === 401) {
         console.error(`[API] 401 Unauthorized on ${endpoint}`);
-        // Don't force-redirect here — let AuthProvider / ProtectedRoute handle
-        // navigation.  A hard redirect from apiFetch causes race conditions
-        // (e.g. chatbot opening triggers background calls that 401 and nuke the page).
+        // Clear expired/invalid session token to prevent infinite 401 loops
+        clearAuth();
+        // Emit custom event to signal auth failure across app
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint } }));
+        }
+        // Let AuthProvider / ProtectedRoute handle navigation
+        // (hard redirect from apiFetch causes race conditions with background calls)
         return { error: "Session expired. Please login again." };
       }
       if (response.status === 403) {
@@ -1444,6 +1456,10 @@ export async function uploadTaskVoiceNote(
 
       if (!response.ok) {
         if (response.status === 401) {
+          clearAuth();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint: url } }));
+          }
           return { error: "Session expired. Please login again." };
         }
         if (response.status >= 500 && i < uploadUrls.length - 1) {
@@ -1511,6 +1527,10 @@ export async function summarizeTaskVoiceNote(
 
       if (!response.ok) {
         if (response.status === 401) {
+          clearAuth();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint: url } }));
+          }
           return { error: "Session expired. Please login again." };
         }
         if (response.status >= 500 && i < summarizeUrls.length - 1) {
@@ -1647,6 +1667,28 @@ export async function deleteTask(
 }
 
 /**
+ * Toggle star/important status for a task.
+ */
+export async function toggleTaskStar(
+  taskId: number
+): Promise<ApiResponse<Task>> {
+  return apiFetch<Task>(`/tasks/${taskId}/star`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Toggle pin status for a task.
+ */
+export async function toggleTaskPin(
+  taskId: number
+): Promise<ApiResponse<Task>> {
+  return apiFetch<Task>(`/tasks/${taskId}/pin`, {
+    method: "PATCH",
+  });
+}
+
+/**
  * Get task statistics (admin only).
  */
 export async function getTaskStats(): Promise<ApiResponse<TaskStats>> {
@@ -1695,6 +1737,9 @@ export async function createLeaveRequest(
     if (!response.ok) {
       if (response.status === 401) {
         clearAuth();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint: "/leave/" } }));
+        }
         return { error: "Session expired. Please login again." };
       }
       const detailMessage = Array.isArray(result.detail)
@@ -1907,6 +1952,9 @@ export async function uploadProfilePicture(
       if (response.status === 401) {
         console.error('[API] 401 Unauthorized - clearing auth');
         clearAuth();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint: "/users/me/upload-picture" } }));
+        }
         return { error: 'Session expired. Please login again.' };
       }
       const error = await response.json();
@@ -2159,6 +2207,9 @@ async function apiFetchPayrollWithFallback<T>(
     if (!response.ok) {
       if (response.status === 401) {
         clearAuth();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth-401', { detail: { endpoint } }));
+        }
         return { error: "Session expired. Please login again." };
       }
       const detailMessage = Array.isArray(data.detail)

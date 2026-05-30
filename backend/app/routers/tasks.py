@@ -930,6 +930,95 @@ async def flag_project_for_help(
     return task
 
 
+@router.patch("/{task_id}/star", response_model=TaskRead)
+async def toggle_task_star(
+    task_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Toggle task star/important status.
+    
+    Users can mark tasks as important by starring them.
+    """
+    statement = select(Task).where(Task.id == task_id)
+    task = session.exec(statement).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+    
+    _ensure_task_access(current_user, task, "task")
+    
+    # Toggle star status
+    if task.is_starred:
+        # Unstar
+        task.is_starred = False
+        task.starred_by = None
+        task.starred_at = None
+    else:
+        # Star
+        task.is_starred = True
+        task.starred_by = current_user.id
+        task.starred_at = datetime.now(timezone.utc)
+    
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    
+    return task
+
+
+@router.patch("/{task_id}/pin", response_model=TaskRead)
+async def toggle_task_pin(
+    task_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Toggle task pin status (admin or assignee only).
+    
+    Users can pin important tasks to keep them at the top of the list.
+    """
+    statement = select(Task).where(Task.id == task_id)
+    task = session.exec(statement).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+    
+    _ensure_task_access(current_user, task, "task")
+    
+    # Check permission: must be assigned to task or be admin
+    if task.assigned_to != current_user.id and not is_admin_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only assignee or admin can pin/unpin this task"
+        )
+    
+    # Toggle pin status
+    if task.is_pinned:
+        # Unpin
+        task.is_pinned = False
+        task.pinned_by = None
+        task.pinned_at = None
+    else:
+        # Pin
+        task.is_pinned = True
+        task.pinned_by = current_user.id
+        task.pinned_at = datetime.now(timezone.utc)
+    
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    
+    return task
+
+
 @router.patch("/{task_id}/description", response_model=TaskRead)
 async def update_project_description(
     task_id: int,
@@ -958,6 +1047,7 @@ async def update_project_description(
     session.add(task)
     session.commit()
     session.refresh(task)
+
     
     return task
 
