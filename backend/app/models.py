@@ -345,6 +345,13 @@ class Task(TaskBase, table=True):
     flag_reason: Optional[str] = Field(default=None, max_length=500)  # Why the project is flagged
     flagged_by: Optional[int] = Field(default=None, foreign_key="users.id")  # Who flagged it
     flagged_at: Optional[datetime] = None  # When it was flagged
+    # Task importance & pinning
+    is_starred: bool = Field(default=False, index=True)  # Task marked as important
+    starred_by: Optional[int] = Field(default=None, foreign_key="users.id")  # Who starred it
+    starred_at: Optional[datetime] = None  # When it was starred
+    is_pinned: bool = Field(default=False, index=True)  # Task pinned to top
+    pinned_by: Optional[int] = Field(default=None, foreign_key="users.id")  # Who pinned it
+    pinned_at: Optional[datetime] = None  # When it was pinned
 
 
 class TaskCreate(TaskBase):
@@ -393,6 +400,8 @@ class TaskUpdate(SQLModel):
     recurrence_start_date: Optional[DateType] = None
     recurrence_end_date: Optional[DateType] = None
     monthly_day: Optional[int] = None
+    is_starred: Optional[bool] = None
+    is_pinned: Optional[bool] = None
 
 
 class TaskRead(TaskBase):
@@ -427,6 +436,12 @@ class TaskRead(TaskBase):
     flag_reason: Optional[str] = None
     flagged_by: Optional[int] = None
     flagged_at: Optional[datetime] = None
+    is_starred: bool = False
+    starred_by: Optional[int] = None
+    starred_at: Optional[datetime] = None
+    is_pinned: bool = False
+    pinned_by: Optional[int] = None
+    pinned_at: Optional[datetime] = None
 
 
 class TaskWithAssignee(TaskRead):

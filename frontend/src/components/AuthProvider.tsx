@@ -118,6 +118,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
+  // Listen for 401 events from API and handle session expiration
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handle401 = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[AUTH] 401 detected on endpoint:', customEvent.detail?.endpoint);
+      
+      // Clear the session
+      clearAuth();
+      setUser(null);
+      
+      // Redirect to login
+      router.push('/login');
+    };
+
+    window.addEventListener('auth-401', handle401);
+    return () => window.removeEventListener('auth-401', handle401);
+  }, [router]);
+
   // 🆕 Refresh user data from backend
   const refreshUser = useCallback(async () => {
     console.log('[AUTH] Refreshing user profile from backend...');
