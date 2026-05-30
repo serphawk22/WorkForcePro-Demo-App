@@ -2450,6 +2450,38 @@ export interface PersonalProjectEntry {
   created_at: string;
 }
 
+export interface TaskSheetEntry {
+  id: number;
+  organization_id?: number | null;
+  user_id: number;
+  date: string;
+  tasks_completed: string;
+  work_impact: string;
+  time_taken: string;
+  repo_link?: string | null;
+  created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  profile_picture?: string | null;
+}
+
+export interface TeamItem {
+  id: number;
+  organization_id?: number | null;
+  name: string;
+  project_name?: string | null;
+  lead_id: number;
+  lead_name?: string | null;
+  member_ids: number[];
+  created_at: string;
+}
+
+export interface TeamCreate {
+  name: string;
+  project_name?: string;
+  member_ids?: number[];
+}
+
 // Task Sheet
 export async function submitTaskSheet(data: {
   tasks_completed: string;
@@ -2492,6 +2524,47 @@ export async function deleteTaskSheetEntry(entryId: number): Promise<ApiResponse
   return apiFetch<{ message: string }>(`/my-space/task-sheet/${entryId}`, {
     method: "DELETE",
   });
+}
+
+export async function getMyTeams(): Promise<ApiResponse<TeamItem[]>> {
+  return apiFetch<TeamItem[]>("/my-space/team");
+}
+
+export async function getMySpaceUsers(): Promise<ApiResponse<User[]>> {
+  return apiFetch<User[]>("/my-space/team/users");
+}
+
+export async function createTeam(data: TeamCreate): Promise<ApiResponse<TeamItem>> {
+  return apiFetch<TeamItem>("/my-space/team", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getTeamTaskSheets(teamId: number, fromDate: string, toDate: string): Promise<ApiResponse<TaskSheetEntry[]>> {
+  return apiFetch<TaskSheetEntry[]>(`/my-space/task-sheet/team?team_id=${teamId}&from_date=${fromDate}&to_date=${toDate}`);
+}
+
+export async function exportTeamTaskSheets(teamId: number, fromDate: string, toDate: string): Promise<ApiResponse<string>> {
+  const token = getToken();
+  const baseUrl = typeof window !== "undefined" ? "/api" : getApiBaseUrl();
+  const response = await fetch(
+    `${baseUrl}/my-space/task-sheet/team/export?team_id=${teamId}&from_date=${fromDate}&to_date=${toDate}`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  const text = await response.text();
+  if (!response.ok) {
+    return { error: text || `Export failed (${response.status})` };
+  }
+
+  return { data: text };
 }
 
 // Happy Sheet

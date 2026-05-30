@@ -914,6 +914,46 @@ class TaskSheetWithUser(TaskSheetRead):
     profile_picture: Optional[str] = None
 
 
+class Team(SQLModel, table=True):
+    """Team structure for Lighthouse / My Team exports."""
+    __tablename__ = "teams"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    name: str = Field(index=True, min_length=1, max_length=200)
+    project_name: Optional[str] = Field(default=None, max_length=300)
+    lead_id: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TeamMember(SQLModel, table=True):
+    """Team member mapping for Lighthouse teams."""
+    __tablename__ = "team_members"
+    __table_args__ = (UniqueConstraint("team_id", "user_id"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="teams.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TeamCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=200)
+    project_name: Optional[str] = Field(default=None, max_length=300)
+    member_ids: Optional[List[int]] = None
+
+
+class TeamRead(SQLModel):
+    id: int
+    organization_id: Optional[int] = None
+    name: str
+    project_name: Optional[str] = None
+    lead_id: int
+    lead_name: Optional[str] = None
+    member_ids: List[int] = Field(default_factory=list)
+    created_at: datetime
+
+
 # ==================== ADMIN QUERY/TICKET MODELS ====================
 
 class QueryStatus(str, Enum):
