@@ -260,6 +260,16 @@ async def lifespan(app: FastAPI):
         "UPDATE task_sheets SET tasks_completed = COALESCE(achievements, 'N/A') WHERE tasks_completed IS NULL",
         "UPDATE task_sheets SET work_impact = 'Migrated from legacy achievements' WHERE work_impact IS NULL",
         "UPDATE task_sheets SET time_taken = 'N/A' WHERE time_taken IS NULL",
+        
+        # Task star/pin feature columns
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_by INTEGER REFERENCES users(id)",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_at TIMESTAMP WITH TIME ZONE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_by INTEGER REFERENCES users(id)",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP WITH TIME ZONE",
+        "CREATE INDEX IF NOT EXISTS ix_tasks_is_starred ON tasks(is_starred)",
+        "CREATE INDEX IF NOT EXISTS ix_tasks_is_pinned ON tasks(is_pinned)",
         ]
 
         for migration in additional_migrations:
@@ -492,20 +502,6 @@ async def lifespan(app: FastAPI):
             session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
             session.commit()
             print("[SUCCESS] admin_queries.assigned_to column added")
-        except Exception:
-            session.rollback()
-
-        try:
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE"))
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_by INTEGER REFERENCES users(id)"))
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_at TIMESTAMP WITH TIME ZONE"))
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE"))
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_by INTEGER REFERENCES users(id)"))
-            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP WITH TIME ZONE"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS idx_tasks_is_starred ON tasks(is_starred)"))
-            session.exec(text("CREATE INDEX IF NOT EXISTS idx_tasks_is_pinned ON tasks(is_pinned)"))
-            session.commit()
-            print("[SUCCESS] tasks star/pin columns added")
         except Exception:
             session.rollback()
 
