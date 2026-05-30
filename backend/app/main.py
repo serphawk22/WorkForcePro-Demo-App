@@ -495,6 +495,20 @@ async def lifespan(app: FastAPI):
         except Exception:
             session.rollback()
 
+        try:
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE"))
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_by INTEGER REFERENCES users(id)"))
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_at TIMESTAMP WITH TIME ZONE"))
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE"))
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_by INTEGER REFERENCES users(id)"))
+            session.exec(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP WITH TIME ZONE"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS idx_tasks_is_starred ON tasks(is_starred)"))
+            session.exec(text("CREATE INDEX IF NOT EXISTS idx_tasks_is_pinned ON tasks(is_pinned)"))
+            session.commit()
+            print("[SUCCESS] tasks star/pin columns added")
+        except Exception:
+            session.rollback()
+
         session.commit()
 
         if default_workspace:
