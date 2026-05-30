@@ -3,9 +3,9 @@ import os
 import re
 from typing import List, Optional
 from datetime import date as DateType, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, PlainTextResponse
 from sqlmodel import Session, select
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 
 from app.database import get_session
 from app.models import (
@@ -14,6 +14,11 @@ from app.models import (
     TaskSheetCreate,
     TaskSheetRead,
     TaskSheetWithUser,
+    Team,
+    TeamCreate,
+    TeamMember,
+    TeamRead,
+    UserRead,
     HappySheet,
     HappySheetCreate,
     HappySheetRead,
@@ -414,24 +419,186 @@ async def get_all_task_sheets(
     ]
 
 
-@router.get("/task-sheet/me", response_model=List[TaskSheetWithUser])
-async def get_my_task_sheets(
-    limit: int = 50,
+@router.get("/team/users", response_model=List[UserRead])
+async def get_my_space_users(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Get task sheets only for the current user."""
+    """List active users for team creation."""
+    results = session.exec(
+        select(User).where(User.is_active == True).order_by(User.name).limit(200)
+    ).all()
+    return results
+
+
+@router.post("/team", response_model=TeamRead, status_code=status.HTTP_201_CREATED)
+async def create_team(
+    team_data: TeamCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new Lighthouse team with members."""
+    name = _strip_text(team_data.name)
+    project_name = _strip_text(team_data.project_name or "")
+    if not name:
+        raise HTTPException(status_code=400, detail="Team name is required.")
+
+    team = Team(
+        name=name,
+        project_name=project_name or None,
+        lead_id=current_user.id,
+        organization_id=getattr(current_user, "organization_id", None),
+    )
+    session.add(team)
+    session.commit()
+    session.refresh(team)
+
+    member_ids = []
+    for member_id in list(dict.fromkeys(team_data.member_ids or [])):
+        if member_id == current_user.id:
+            continue
+        if session.get(User, member_id):
+            member_ids.append(member_id)
+            session.add(TeamMember(team_id=team.id, user_id=member_id))
+    session.commit()
+
+    return TeamRead(
+        id=team.id,
+        organization_id=team.organization_id,
+        name=team.name,
+        project_name=team.project_name,
+        lead_id=team.lead_id,
+        lead_name=current_user.name,
+        member_ids=member_ids,
+        created_at=team.created_at,
+    )
+
+
+@router.get("/team", response_model=List[TeamRead])
+async def get_my_teams(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get teams where the current user is the lead or a member."""
+    subquery = select(TeamMember.team_id).where(TeamMember.user_id == current_user.id)
+    teams = session.exec(
+        select(Team)
+        .where(or_(Team.lead_id == current_user.id, Team.id.in_(subquery)))
+        .order_by(Team.created_at.desc())
+    ).all()
+
+    result: List[TeamRead] = []
+    for team in teams:
+        member_ids = session.exec(select(TeamMember.user_id).where(TeamMember.team_id == team.id)).all()
+        lead_user = session.get(User, team.lead_id)
+        result.append(
+            TeamRead(
+                id=team.id,
+                organization_id=team.organization_id,
+                name=team.name,
+                project_name=team.project_name,
+                lead_id=team.lead_id,
+                lead_name=lead_user.name if lead_user else None,
+                member_ids=member_ids,
+                created_at=team.created_at,
+            )
+        )
+
+    return result
+
+
+@router.get("/task-sheet/team", response_model=List[TaskSheetWithUser])
+async def get_team_task_sheets(
+    team_id: int,
+    from_date: str,
+    to_date: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get task sheets for a team within a date range."""
+    team = session.get(Team, team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    is_member = session.exec(
+        select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.user_id == current_user.id)
+    ).first()
+    if team.lead_id != current_user.id and not is_member:
+        raise HTTPException(status_code=403, detail="Not authorized to view this team")
+
+    try:
+        start_date = DateType.fromisoformat(from_date)
+        end_date = DateType.fromisoformat(to_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="End date must be on or after start date.")
+
+    member_ids = session.exec(select(TeamMember.user_id).where(TeamMember.team_id == team_id)).all()
+    member_ids = list({*member_ids, team.lead_id})
+    if not member_ids:
+        return []
+
     results = session.exec(
         select(TaskSheet, User)
         .join(User)
-        .where(TaskSheet.user_id == current_user.id)
+        .where(
+            TaskSheet.user_id.in_(member_ids),
+            TaskSheet.date >= start_date,
+            TaskSheet.date <= end_date,
+        )
         .order_by(TaskSheet.date.desc())
-        .limit(limit)
     ).all()
+
     return [
         TaskSheetWithUser(**sheet.model_dump(), user_name=user.name, user_email=user.email)
         for sheet, user in results
     ]
+
+
+@router.get("/task-sheet/team/export")
+async def export_team_task_sheets(
+    team_id: int,
+    from_date: str,
+    to_date: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Download team task sheets as CSV."""
+    sheets = await get_team_task_sheets(team_id, from_date, to_date, session, current_user)
+    if not sheets:
+        csv_content = "Date,User,Email,Tasks Completed,Impact,Time Taken,Repo Link\n"
+    else:
+        csv_lines = [
+            "Date,User,Email,Tasks Completed,Impact,Time Taken,Repo Link",
+        ]
+        def safe(value: Optional[str]) -> str:
+            escaped = (value or "").replace('"', '""')
+            return f'"{escaped}"'
+
+        for entry in sheets:
+            csv_lines.append(
+                ",".join([
+                    safe(entry.date.isoformat()),
+                    safe(entry.user_name),
+                    safe(entry.user_email),
+                    safe(entry.tasks_completed),
+                    safe(entry.work_impact),
+                    safe(entry.time_taken),
+                    safe(entry.repo_link),
+                ])
+            )
+        csv_content = "\r\n".join(csv_lines)
+
+    filename = f"team-task-sheet-{team_id}-{from_date}-to-{to_date}.csv"
+    return PlainTextResponse(
+        csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+        },
+    )
 
 
 # ==================== HAPPY SHEET ROUTES ====================
