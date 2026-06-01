@@ -318,10 +318,28 @@ async def get_current_weekly_sheet(
 async def generate_weekly_sheet(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    week_start_date: Optional[str] = None,
 ):
-    """Generate the weekly sheet from day-wise task sheet entries."""
-    today = datetime.now(timezone.utc).date()
-    week_start = monday_of_week(today)
+    """Generate the weekly sheet from day-wise task sheet entries.
+    
+    Args:
+        week_start_date: Optional ISO format date string (YYYY-MM-DD) for the Monday of the desired week.
+                        If not provided, uses the current week.
+    """
+    if week_start_date:
+        try:
+            # Parse the provided date
+            custom_date = datetime.fromisoformat(week_start_date).date()
+            week_start = monday_of_week(custom_date)
+        except (ValueError, AttributeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid week_start_date format. Use ISO format (YYYY-MM-DD)."
+            )
+    else:
+        today = datetime.now(timezone.utc).date()
+        week_start = monday_of_week(today)
+    
     week_end = week_start + timedelta(days=6)
     
     # 1. Get Tasks and Subtasks updated this week or due this week
