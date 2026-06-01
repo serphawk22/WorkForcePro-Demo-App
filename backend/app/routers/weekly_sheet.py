@@ -4,10 +4,12 @@ Weekly Sheet AI Generator for Lighthouse.
 import os
 import json
 import logging
+import io
 from datetime import datetime, timezone, timedelta, date as DateType
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -469,3 +471,212 @@ async def save_weekly_sheet(
     session.commit()
     session.refresh(sheet)
     return sheet
+
+
+# ─── PDF Generation ────────────────────────────────────────────────────────────
+
+def generate_weekly_progress_pdf(
+    week_start: DateType,
+    sheets: List[tuple[LighthouseWeeklySheet, User]]
+) -> bytes:
+    """Generate a PDF report of all weekly sheets for a given week."""
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    
+    # Create PDF in memory
+    pdf_buffer = io.BytesIO()
+    doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=12,
+        alignment=TA_CENTER,
+    )
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=12,
+        textColor=colors.HexColor('#374151'),
+        spaceAfter=8,
+        spaceBefore=6,
+    )
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#4b5563'),
+        spaceAfter=6,
+    )
+    
+    week_end = week_start + timedelta(days=6)
+    
+    # Build document content
+    elements = []
+    
+    # Title
+    title = Paragraph(
+        f"Weekly Progress Report<br/>Week of {week_start.strftime('%B %d, %Y')} to {week_end.strftime('%B %d, %Y')}",
+        title_style
+    )
+    elements.append(title)
+    elements.append(Spacer(1, 0.3 * inch))
+    
+    # Summary stats
+    elements.append(Paragraph(f"Total Employees Reported: {len(sheets)}", heading_style))
+    elements.append(Spacer(1, 0.15 * inch))
+    
+    # Employee entries
+    for sheet, user in sheets:
+        # Employee header
+        emp_header = Paragraph(
+            f"<b>{user.name}</b> ({user.email})",
+            ParagraphStyle(
+                'EmployeeHeader',
+                parent=styles['Heading3'],
+                fontSize=11,
+                textColor=colors.HexColor('#1f2937'),
+                spaceAfter=6,
+                borderColor=colors.HexColor('#e5e7eb'),
+                borderPadding=6,
+                borderWidth=1,
+            )
+        )
+        elements.append(emp_header)
+        elements.append(Spacer(1, 0.1 * inch))
+        
+        # Weekly summary
+        if sheet.weekly_summary:
+            elements.append(Paragraph("<b>Weekly Summary:</b>", heading_style))
+            elements.append(Paragraph(sheet.weekly_summary.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Major accomplishments
+        if sheet.major_accomplishments:
+            elements.append(Paragraph("<b>Major Accomplishments:</b>", heading_style))
+            elements.append(Paragraph(sheet.major_accomplishments.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Tasks completed
+        if sheet.tasks_completed:
+            elements.append(Paragraph("<b>Tasks Completed:</b>", heading_style))
+            elements.append(Paragraph(sheet.tasks_completed.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Pending tasks
+        if sheet.pending_tasks:
+            elements.append(Paragraph("<b>Pending Tasks:</b>", heading_style))
+            elements.append(Paragraph(sheet.pending_tasks.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Blockers
+        if sheet.blockers:
+            elements.append(Paragraph("<b>Blockers:</b>", heading_style))
+            elements.append(Paragraph(sheet.blockers.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Productivity insights
+        if sheet.productivity_insights:
+            elements.append(Paragraph("<b>Productivity Insights:</b>", heading_style))
+            elements.append(Paragraph(sheet.productivity_insights.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Time utilization
+        if sheet.time_utilization:
+            elements.append(Paragraph("<b>Time Utilization:</b>", heading_style))
+            elements.append(Paragraph(sheet.time_utilization.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.1 * inch))
+        
+        # Suggested priorities
+        if sheet.suggested_priorities:
+            elements.append(Paragraph("<b>Suggested Priorities:</b>", heading_style))
+            elements.append(Paragraph(sheet.suggested_priorities.replace('\n', '<br/>'), normal_style))
+            elements.append(Spacer(1, 0.15 * inch))
+        
+        # Page break between employees (except for last one)
+        if sheet != sheets[-1][0]:
+            elements.append(PageBreak())
+    
+    # Build PDF
+    doc.build(elements)
+    pdf_buffer.seek(0)
+    return pdf_buffer.getvalue()
+
+
+@router.get("/admin/download-weekly-progress")
+async def download_weekly_progress_pdf(
+    week_start_date: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Download weekly progress report as PDF (Admin only).
+    
+    Args:
+        week_start_date: Optional ISO format date string (YYYY-MM-DD) for the Monday of the desired week.
+                        If not provided, uses the current week.
+    """
+    # Check admin permission
+    if current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can download weekly progress reports"
+        )
+    
+    # Parse week start date
+    if week_start_date:
+        try:
+            custom_date = datetime.fromisoformat(week_start_date).date()
+            week_start = monday_of_week(custom_date)
+        except (ValueError, AttributeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid week_start_date format. Use ISO format (YYYY-MM-DD)."
+            )
+    else:
+        today = datetime.now(timezone.utc).date()
+        week_start = monday_of_week(today)
+    
+    # Fetch all weekly sheets for this week in the organization
+    sheets_query = session.exec(
+        select(LighthouseWeeklySheet).where(
+            LighthouseWeeklySheet.week_start_date == week_start,
+            LighthouseWeeklySheet.organization_id == current_user.organization_id,
+        ).order_by(LighthouseWeeklySheet.user_id)
+    ).all()
+    
+    if not sheets_query:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No weekly sheets found for the week starting {week_start}"
+        )
+    
+    # Get user information for each sheet
+    sheets_with_users = []
+    for sheet in sheets_query:
+        user = session.exec(
+            select(User).where(User.id == sheet.user_id)
+        ).first()
+        if user:
+            sheets_with_users.append((sheet, user))
+    
+    # Generate PDF
+    pdf_content = generate_weekly_progress_pdf(week_start, sheets_with_users)
+    
+    # Return as file
+    week_end = week_start + timedelta(days=6)
+    filename = f"weekly_progress_{week_start.isoformat()}_{week_end.isoformat()}.pdf"
+    
+    return FileResponse(
+        io.BytesIO(pdf_content),
+        media_type="application/pdf",
+        filename=filename
+    )
+
