@@ -12,7 +12,7 @@
 
 import React, { memo, useMemo, useCallback, useState } from "react";
 import { Task } from "@/lib/api";
-import { Priority, StatusBadge } from "@/components/ui";
+import { Badge } from "@/components/ui/badge";
 import { useIntersectionObserver } from "@/lib/performance";
 import {
   Calendar,
@@ -34,6 +34,34 @@ interface OptimizedTaskItemProps {
   onLoadComments?: (taskId: number) => void;
   onLoadSubtasks?: (taskId: number) => void;
 }
+
+// Helper function to render status badge
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "in_progress":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+    case "completed":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    case "blocked":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
+  }
+};
+
+// Helper function to render priority badge
+const getPriorityColor = (priority: string) => {
+  switch (priority) {
+    case "high":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    case "medium":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    case "low":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
+  }
+};
 
 /**
  * Lightweight task row component
@@ -82,10 +110,16 @@ const TaskListRow = memo(
         </div>
 
         {/* Status Badge */}
-        <StatusBadge status={task.status} />
+        <Badge className={`text-xs ${getStatusColor(task.status)}`}>
+          {task.status.replace(/_/g, " ")}
+        </Badge>
 
         {/* Priority */}
-        <Priority priority={task.priority} />
+        {task.priority && (
+          <Badge className={`text-xs ${getPriorityColor(task.priority)}`}>
+            {task.priority}
+          </Badge>
+        )}
 
         {/* Assignee */}
         {task.assignee_name && (
@@ -206,7 +240,9 @@ const LazyExpandableTaskCard = memo(
             </div>
 
             {/* Status Badge */}
-            <StatusBadge status={task.status} />
+            <Badge className={`text-xs ${getStatusColor(task.status)}`}>
+              {task.status.replace(/_/g, " ")}
+            </Badge>
           </div>
         </div>
 
