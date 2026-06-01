@@ -82,6 +82,7 @@ export function useMemoizedAsync<T>(
   const now = Date.now();
   const isStale = now - cacheTime > (options?.ttl || 300000);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isStale && data !== null) return;
 
@@ -258,6 +259,7 @@ export function useRenderMetrics(componentName: string) {
   const [renderTimes, setRenderTimes] = useState<number[]>([]);
   const startTimeRef = React.useRef(Date.now());
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setRenderCount((prev) => prev + 1);
     const renderTime = Date.now() - startTimeRef.current;

@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,20 +61,7 @@ export function TaskOwnerManagement({
   const canManage = currentUserRole === "admin" || isCurrentOwner;
 
   // Fetch current owners
-  useEffect(() => {
-    if (isOpen) {
-      fetchOwners();
-    }
-  }, [isOpen, taskId]);
-
-  // Fetch available users for selection
-  useEffect(() => {
-    if (isOpen && (selectedUserId || transferToUserId)) {
-      fetchAvailableUsers();
-    }
-  }, [isOpen, selectedUserId, transferToUserId]);
-
-  const fetchOwners = async () => {
+  const fetchOwners = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await fetch(`/api/tasks/${taskId}/owners`, {
@@ -95,9 +82,10 @@ export function TaskOwnerManagement({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [taskId]);
 
-  const fetchAvailableUsers = async () => {
+  // Fetch available users for selection
+  const fetchAvailableUsers = useCallback(async () => {
     try {
       setIsLoadingUsers(true);
       const response = await fetch(`/api/users`, {
@@ -120,9 +108,21 @@ export function TaskOwnerManagement({
     } finally {
       setIsLoadingUsers(false);
     }
-  };
+  }, [owners]);
 
-  const handleAddOwner = async () => {
+  useEffect(() => {
+    if (isOpen) {
+      fetchOwners();
+    }
+  }, [isOpen, fetchOwners]);
+
+  useEffect(() => {
+    if (isOpen && (selectedUserId || transferToUserId)) {
+      fetchAvailableUsers();
+    }
+  }, [isOpen, selectedUserId, transferToUserId, fetchAvailableUsers]);
+
+  const handleAddOwner = useCallback(async () => {
     if (!selectedUserId) {
       toast.error("Please select a user");
       return;
@@ -157,9 +157,9 @@ export function TaskOwnerManagement({
     } finally {
       setIsAddingOwner(false);
     }
-  };
+  }, [taskId, selectedUserId, fetchOwners, onOwnershipChanged]);
 
-  const handleRemoveOwner = async (ownerId: number) => {
+  const handleRemoveOwner = useCallback(async (ownerId: number) => {
     if (owners.length <= 1) {
       toast.error("Cannot remove the last owner");
       return;
@@ -187,9 +187,9 @@ export function TaskOwnerManagement({
     } finally {
       setIsDeletingOwnerId(null);
     }
-  };
+  }, [taskId, owners.length, fetchOwners, onOwnershipChanged]);
 
-  const handleTransferOwnership = async () => {
+  const handleTransferOwnership = useCallback(async () => {
     if (!transferToUserId) {
       toast.error("Please select a user to transfer ownership to");
       return;
@@ -223,9 +223,9 @@ export function TaskOwnerManagement({
     } finally {
       setIsTransferring(false);
     }
-  };
+  }, [taskId, transferToUserId, removeOldOwners, fetchOwners, onOwnershipChanged]);
 
-  const handleSetPrimary = async (ownerId: number) => {
+  const handleSetPrimary = useCallback(async (ownerId: number) => {
     try {
       const response = await fetch(`/api/tasks/${taskId}/owners/${ownerId}`, {
         method: "PUT",
@@ -247,7 +247,7 @@ export function TaskOwnerManagement({
       console.error("Error setting primary owner:", error);
       toast.error("Failed to set primary owner");
     }
-  };
+  }, [taskId, fetchOwners, onOwnershipChanged]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

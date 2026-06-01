@@ -11,7 +11,7 @@
 "use client";
 
 import React, { memo, useMemo, useCallback, useState } from "react";
-import { TaskWithAssignee } from "@/lib/api";
+import { Task } from "@/lib/api";
 import { Priority, StatusBadge } from "@/components/ui";
 import { useIntersectionObserver } from "@/lib/performance";
 import {
@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 
 interface OptimizedTaskItemProps {
-  task: TaskWithAssignee;
+  task: Task;
   isSelected?: boolean;
   onSelect?: (taskId: number) => void;
   onStatusChange?: (taskId: number, status: string) => void;
