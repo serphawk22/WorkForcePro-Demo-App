@@ -11,7 +11,7 @@ from app.models import (
     User, UserRead
 )
 from app.database import get_session
-from app.dependencies import get_current_user, check_organization_access
+from app.auth import get_current_user, ensure_same_organization
 
 router = APIRouter(prefix="/tasks/{task_id}/owners", tags=["task-owners"])
 
@@ -28,7 +28,7 @@ async def get_task_owners(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Get all owners for this task
     owners = session.exec(
@@ -69,7 +69,7 @@ async def add_task_owner(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check if current_user is an owner or admin
     is_owner = session.exec(
@@ -146,7 +146,7 @@ async def update_task_owner(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check if current_user is an owner
     is_owner = session.exec(
@@ -198,7 +198,7 @@ async def remove_task_owner(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check if current_user is an owner
     is_owner = session.exec(
@@ -251,7 +251,7 @@ async def transfer_ownership(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Check if current_user is an owner or admin
     is_owner = session.exec(
@@ -346,7 +346,7 @@ async def get_owner_details(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    await check_organization_access(current_user, task.organization_id, session)
+    ensure_same_organization(current_user, task.organization_id, "task")
     
     # Get the owner
     owner = session.exec(
