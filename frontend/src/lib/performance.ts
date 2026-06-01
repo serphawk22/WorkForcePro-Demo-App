@@ -8,7 +8,7 @@
  * - Virtualization helpers for large lists
  */
 
-import { useMemo, useCallback, useState, useEffect } from "react";
+import React, { useMemo, useCallback, useState, useEffect, useRef } from "react";
 
 /**
  * Hook for debouncing values - reduces excessive state updates
@@ -196,7 +196,7 @@ export function useIntersectionObserver(
   callback: () => void,
   options?: IntersectionObserverInit
 ): React.RefObject<HTMLDivElement> {
-  const ref = React.useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -257,7 +257,7 @@ export function useVisibleItems(containerRef: React.RefObject<HTMLElement>) {
 export function useRenderMetrics(componentName: string) {
   const [renderCount, setRenderCount] = useState(0);
   const [renderTimes, setRenderTimes] = useState<number[]>([]);
-  const startTimeRef = React.useRef(Date.now());
+  const startTimeRef = useRef(Date.now());
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
