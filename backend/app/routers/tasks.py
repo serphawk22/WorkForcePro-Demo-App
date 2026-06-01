@@ -222,6 +222,46 @@ def _latest_comment_map(session: Session, task_ids: List[int]) -> dict[int, date
     ).all()
     return {task_id: latest_comment_at for task_id, latest_comment_at in rows}
 
+
+def _batch_load_related_data(session: Session, tasks: List[Task]) -> tuple[dict[int, User], dict[int, User], dict[int, Workspace], dict[int, list]]:
+    """
+    Batch load all related data for tasks to prevent N+1 queries.
+    Returns: (assignees_map, assigners_map, workspaces_map, comments_map)
+    """
+    task_ids = [t.id for t in tasks]
+    
+    # Get all unique user IDs from tasks
+    assignee_ids = set(t.assigned_to for t in tasks if t.assigned_to)
+    assigner_ids = set(t.assigned_by for t in tasks if t.assigned_by)
+    all_user_ids = assignee_ids | assigner_ids
+    
+    # Batch load all users (1 query instead of 2N)
+    assignees_map = {}
+    assigners_map = {}
+    if all_user_ids:
+        users = session.exec(select(User).where(User.id.in_(all_user_ids))).all()
+        users_by_id = {u.id: u for u in users}
+        assignees_map = {uid: users_by_id[uid] for uid in assignee_ids if uid in users_by_id}
+        assigners_map = {uid: users_by_id[uid] for uid in assigner_ids if uid in users_by_id}
+    
+    # Batch load all workspaces (1 query instead of N)
+    workspace_ids = set(t.workspace_id for t in tasks if t.workspace_id)
+    workspaces_map = {}
+    if workspace_ids:
+        workspaces = session.exec(select(Workspace).where(Workspace.id.in_(workspace_ids))).all()
+        workspaces_map = {w.id: w for w in workspaces}
+    
+    # Batch load all comments (1 query instead of N)
+    comments_by_task = {}
+    if task_ids:
+        comments_stmt = select(TaskComment).where(TaskComment.task_id.in_(task_ids))
+        comments_list = session.exec(comments_stmt).all()
+        for c in comments_list:
+            comments_by_task.setdefault(c.task_id, []).append(c.comment)
+    
+    return assignees_map, assigners_map, workspaces_map, comments_by_task
+
+
 def _task_to_with_assignee(
     session: Session,
     task: Task,
@@ -1398,30 +1438,14 @@ async def get_all_tasks(
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
     
-    comments_by_task = {}
-    task_ids = [t.id for t in tasks]
-    if task_ids:
-        comments_stmt = select(TaskComment).where(TaskComment.task_id.in_(task_ids))
-        comments_list = session.exec(comments_stmt).all()
-        for c in comments_list:
-            comments_by_task.setdefault(c.task_id, []).append(c.comment)
+    # PERFORMANCE: Batch load all related data to prevent N+1 queries
+    assignees_map, assigners_map, workspaces_map, comments_by_task = _batch_load_related_data(session, tasks)
 
     result = []
     for task in tasks:
-        assignee = None
-        if task.assigned_to:
-            assignee_stmt = select(User).where(User.id == task.assigned_to)
-            assignee = session.exec(assignee_stmt).first()
-
-        workspace = None
-        if task.workspace_id:
-            workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
-            workspace = session.exec(workspace_stmt).first()
-        
-        assigner = None
-        if task.assigned_by:
-            assigner_stmt = select(User).where(User.id == task.assigned_by)
-            assigner = session.exec(assigner_stmt).first()
+        assignee = assignees_map.get(task.assigned_to)
+        workspace = workspaces_map.get(task.workspace_id)
+        assigner = assigners_map.get(task.assigned_by)
         
         result.append(TaskWithAssignee(
             id=task.id,

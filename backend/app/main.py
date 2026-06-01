@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet, task_owner
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -604,6 +604,7 @@ app.include_router(workspaces.router)
 app.include_router(organizations.router)
 app.include_router(search.router)
 app.include_router(weekly_sheet.router)
+app.include_router(task_owner.router)
 
 
 @app.get("/")
