@@ -229,57 +229,6 @@ def _parse_week_payload(data_payload: str | dict) -> dict:
     return json.loads(data_payload)
 
 
-def build_weekly_sheet_fallback(data_payload: str | dict) -> dict:
-    """Build a weekly sheet from task/attendance data when OpenAI is unavailable."""
-    payload = _parse_week_payload(data_payload)
-    week_start = payload.get("week_start", "")
-    week_end = payload.get("week_end", "")
-    attendance = payload.get("attendance") or {}
-    tasks = payload.get("tasks") or []
-
-    completed_statuses = {"approved", "submitted", "reviewing"}
-    completed = [
-        t for t in tasks
-        if t.get("completed") or str(t.get("status", "")).lower() in completed_statuses
-    ]
-    pending = [t for t in tasks if t not in completed]
-
-    def bullet_lines(items: list, key: str = "title") -> str:
-        if not items:
-            return "• None recorded for this week."
-        return "\n".join(f"• {item.get(key) or 'Untitled task'}" for item in items)
-
-    days_logged = attendance.get("days_logged") or 0
-    total_hours = attendance.get("total_hours") or 0
-    total_tasks = len(tasks)
-
-    return {
-        "weekly_summary": (
-            f"Summary for {week_start} to {week_end}: {len(completed)} of {total_tasks} "
-            f"assigned task(s) marked complete. Attendance logged on {days_logged} day(s) "
-            f"({total_hours:.1f} total hours). "
-            "(Generated from your task and attendance data — AI was unavailable.)"
-        ),
-        "major_accomplishments": bullet_lines(completed),
-        "tasks_completed": bullet_lines(completed),
-        "pending_tasks": bullet_lines(pending),
-        "blockers": (
-            "• No blockers recorded."
-            if not pending
-            else "• Review pending tasks below and update status or due dates as needed."
-        ),
-        "productivity_insights": (
-            f"You logged {total_hours:.1f} hours across {days_logged} day(s) while tracking "
-            f"{total_tasks} assigned task(s)."
-        ),
-        "time_utilization": (
-            f"Total hours logged: {total_hours:.1f}. Completed tasks: {len(completed)}. "
-            f"Pending tasks: {len(pending)}."
-        ),
-        "suggested_priorities": bullet_lines(pending[:3]),
-    }
-
-
 def _should_use_ai_fallback(exc: Exception) -> bool:
     message = str(exc).lower()
     return any(
