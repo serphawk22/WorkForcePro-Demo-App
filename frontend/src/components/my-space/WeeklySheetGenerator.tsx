@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Download, Mail, RefreshCw, Save, Eye } from "lucide-react";
+import { Loader2, Download, Mail, RefreshCw, Save, Eye, Calendar } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { getApiBaseUrl, getToken } from "@/lib/api";
 
 interface WeeklySheet {
@@ -38,16 +39,22 @@ export default function WeeklySheetGenerator() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [selectedWeekDate, setSelectedWeekDate] = useState<string>("");
+  const [showWeekPicker, setShowWeekPicker] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchCurrentSheet();
   }, []);
 
-  const fetchCurrentSheet = async () => {
+  const fetchCurrentSheet = async (weekDate?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(weeklySheetEndpoint("/current"), {
+      let endpoint = weeklySheetEndpoint("/current");
+      if (weekDate) {
+        endpoint += `?week_start_date=${weekDate}`;
+      }
+      const res = await fetch(endpoint, {
         headers: {
           Authorization: `Bearer ${getToken()}`,
         },
@@ -58,6 +65,8 @@ export default function WeeklySheetGenerator() {
       } else if (res.status !== 404) {
         // 404 is expected when no sheet exists yet — only log other errors
         console.warn("[WeeklySheet] Fetch current failed:", res.status);
+      } else {
+        setSheet(null);
       }
     } catch (error) {
       console.error("[WeeklySheet] Fetch current error:", error);
@@ -69,7 +78,11 @@ export default function WeeklySheetGenerator() {
   const generateSheet = async () => {
     setGenerating(true);
     try {
-      const res = await fetch(weeklySheetEndpoint("/generate"), {
+      let endpoint = weeklySheetEndpoint("/generate");
+      if (selectedWeekDate) {
+        endpoint += `?week_start_date=${selectedWeekDate}`;
+      }
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${getToken()}`,
@@ -94,6 +107,7 @@ export default function WeeklySheetGenerator() {
       }
       const data = await res.json();
       setSheet(data);
+      setShowWeekPicker(false);
       toast.success("Weekly sheet created. Please fill in all sections.");
     } catch (error) {
       toast.error("Error generating weekly sheet");
@@ -213,10 +227,51 @@ export default function WeeklySheetGenerator() {
         <p className="text-muted-foreground max-w-md">
           Start creating your weekly summary. Fill in all sections with your accomplishments, tasks, blockers, and priorities for the week.
         </p>
-        <Button onClick={generateSheet} disabled={generating} size="lg" className="mt-4">
-          {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Create New Weekly Sheet
-        </Button>
+        <div className="flex gap-3 mt-4">
+          <Button onClick={() => setShowWeekPicker(true)} size="lg" variant="outline">
+            <Calendar className="mr-2 h-4 w-4" />
+            Select Custom Week
+          </Button>
+          <Button onClick={generateSheet} disabled={generating} size="lg">
+            {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Create This Week
+          </Button>
+        </div>
+
+        <Dialog open={showWeekPicker} onOpenChange={setShowWeekPicker}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Select Week to Generate</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Select the Monday date for the week you want to generate:
+              </p>
+              <Input
+                type="date"
+                value={selectedWeekDate}
+                onChange={(e) => setSelectedWeekDate(e.target.value)}
+                placeholder="YYYY-MM-DD"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                The system will automatically use the Monday of the selected week.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowWeekPicker(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={generateSheet}
+                  disabled={generating || !selectedWeekDate}
+                >
+                  {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Generate
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -244,12 +299,50 @@ export default function WeeklySheetGenerator() {
           <Button variant="outline" size="sm" onClick={handleEmail}>
             <Mail className="mr-2 h-4 w-4" /> Email
           </Button>
-          <Button variant="outline" size="sm" onClick={generateSheet} disabled={generating}>
+          <Button variant="outline" size="sm" onClick={() => setShowWeekPicker(true)} disabled={generating}>
+            <Calendar className="mr-2 h-4 w-4" /> Other Week
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setSelectedWeekDate(""); generateSheet(); }} disabled={generating}>
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Create New
           </Button>
         </div>
       </div>
+
+      <Dialog open={showWeekPicker} onOpenChange={setShowWeekPicker}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Sheet for Different Week</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Select the Monday date for the week you want to generate:
+            </p>
+            <Input
+              type="date"
+              value={selectedWeekDate}
+              onChange={(e) => setSelectedWeekDate(e.target.value)}
+              placeholder="YYYY-MM-DD"
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              The system will automatically use the Monday of the selected week.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowWeekPicker(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={generateSheet}
+                disabled={generating || !selectedWeekDate}
+              >
+                {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Generate
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div ref={printRef} className="space-y-6 bg-white dark:bg-card p-6 rounded-2xl shadow-sm border">
         <h1 className="text-2xl font-bold text-center mb-6 border-b pb-4">Weekly Summary Report</h1>
