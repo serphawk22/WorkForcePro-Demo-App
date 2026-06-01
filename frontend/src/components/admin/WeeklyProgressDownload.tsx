@@ -29,7 +29,7 @@ export function WeeklyProgressDownload({ isOpen, onClose }: WeeklyProgressDownlo
     if (isOpen && !weekStartDate) {
       setWeekStartDate(getDefaultWeekStart());
     }
-  }, [isOpen]);
+  }, [isOpen, weekStartDate]);
 
   const handleDownload = async () => {
     if (!weekStartDate) {
@@ -84,7 +84,7 @@ export function WeeklyProgressDownload({ isOpen, onClose }: WeeklyProgressDownlo
             Download Weekly Progress Report
           </DialogTitle>
           <DialogDescription>
-            Select the week you want to download the progress report for. The report will include all employees' weekly summaries for that week.
+            Select the week you want to download the progress report for. The report will include all employees&apos; weekly summaries for that week.
           </DialogDescription>
         </DialogHeader>
 
@@ -110,7 +110,7 @@ export function WeeklyProgressDownload({ isOpen, onClose }: WeeklyProgressDownlo
           {/* Info Box */}
           <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              💡 The report will include all employees' weekly sheets for the selected week and be saved as a PDF file.
+              💡 The report will include all employees&apos; weekly sheets for the selected week and be saved as a PDF file.
             </p>
           </div>
 
