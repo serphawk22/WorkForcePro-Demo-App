@@ -308,6 +308,9 @@ async def call_openai_for_weekly_sheet(data_payload: str | dict) -> dict:
     client = OpenAI(api_key=api_key, timeout=20.0)
 
     try:
+        # Convert data_payload to string format for API
+        payload_text = json.dumps(data_payload) if isinstance(data_payload, dict) else data_payload
+        
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -405,17 +408,23 @@ async def generate_weekly_sheet(
         for sheet in task_sheets
     ]
     
-    # Create empty sheet for manual entry - no AI generation
-    ai_result = {
-        "weekly_summary": None,
-        "major_accomplishments": None,
-        "tasks_completed": None,
-        "pending_tasks": None,
-        "blockers": None,
-        "productivity_insights": None,
-        "time_utilization": None,
-        "suggested_priorities": None,
+    # Build payload for AI generation
+    payload = {
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "tasks": task_data,
+        "task_sheets": task_sheet_data,
     }
+    payload_str = json.dumps(payload)
+    
+    # Generate AI content
+    ai_result = await generate_weekly_sheet_content(
+        payload_str,
+        week_start,
+        week_end,
+        task_data,
+        task_sheet_data
+    )
     
     # Check if a draft exists
     existing = session.exec(
