@@ -59,6 +59,7 @@ async def create_leave_request_from_ai(
 
 
 # Employee routes
+@router.post("", response_model=LeaveRequestRead, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=LeaveRequestRead, status_code=status.HTTP_201_CREATED)
 async def create_leave_request(
     request: Request,
@@ -188,6 +189,7 @@ async def cancel_leave_request(
 
 
 # Admin routes
+@router.get("", response_model=List[LeaveRequestWithUser])
 @router.get("/", response_model=List[LeaveRequestWithUser])
 async def get_all_leave_requests(
     request: Request,

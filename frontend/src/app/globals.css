@@ -1263,29 +1263,13 @@
   }
 
   html:not(.dark) .dashboard-root {
-    background: linear-gradient(
-      178deg,
-      hsl(28 92% 95%) 0%,
-      hsl(20 82% 92%) 32%,
-      hsl(10 62% 91%) 58%,
-      hsl(272 36% 92%) 100%
-    ) !important;
+    background: #f8fafc !important;
     position: relative;
   }
 
-  /* ── 2. RADIAL DEPTH: faint lavender center glow behind content ── */
+  /* ── 2. RADIAL DEPTH: disabled ── */
   html:not(.dark) .dashboard-root::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(
-      ellipse 72% 60% at 52% 34%,
-      hsl(268 55% 78% / 0.16) 0%,
-      hsl(289 40% 72% / 0.09) 42%,
-      transparent 70%
-    );
-    pointer-events: none;
-    z-index: 0;
+    display: none !important;
   }
 
   /* ── 3. AMBIENT ORBS ── */

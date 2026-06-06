@@ -308,11 +308,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
       style={{ width: effectiveWidth, left: "env(safe-area-inset-left)" }}
     >
-      {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-          W
-        </div>
+        <img
+          src="/Serp_Hwak_Logo-removebg-preview.png"
+          alt="SerpHawk Logo"
+          className="h-8 w-8 shrink-0 object-contain"
+        />
         <span className={`text-sidebar-foreground font-semibold text-base tracking-tight whitespace-nowrap transition-all duration-200 ${
           isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
         }`}>
