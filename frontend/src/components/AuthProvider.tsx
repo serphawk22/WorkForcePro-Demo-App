@@ -89,18 +89,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Role:', role || 'none');
       
       if (token && role && userId && userEmail) {
-        const validRole = normalizeUserRole(role);
-        
-        // Restore user from localStorage
-        const restoredUser: User = {
-          id: parseInt(userId),
-          email: userEmail,
-          role: validRole,
-          name: userName || userEmail,
-        };
-        
-        console.log('[AUTH] Restored user from localStorage:', restoredUser.email);
-        setUser(restoredUser);
+        const parsedId = parseInt(userId, 10);
+        if (Number.isNaN(parsedId)) {
+          console.warn('[AUTH] Invalid user_id in localStorage, clearing session');
+          setUser(null);
+        } else {
+          const validRole = normalizeUserRole(role);
+          const restoredUser: User = {
+            id: parsedId,
+            email: userEmail,
+            role: validRole,
+            name: userName || userEmail,
+          };
+          console.log('[AUTH] Restored user from localStorage:', restoredUser.email);
+          setUser(restoredUser);
+        }
       } else {
         console.log('[AUTH] No valid session in localStorage');
         setUser(null);

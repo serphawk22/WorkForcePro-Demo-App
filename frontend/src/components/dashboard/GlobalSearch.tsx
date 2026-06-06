@@ -239,9 +239,6 @@ export default function GlobalSearch() {
     // Rebuild flattened array for keyboard up/down navigation
     const flat = [...finalFeatures, ...finalEmployees, ...finalProjects, ...finalTasks];
 
-    // Reset selected index when grouping changes to prevent out of bounds
-    setSelectedIndex(0);
-
     return {
       allFeatures: finalFeatures,
       allEmployees: finalEmployees,
@@ -250,6 +247,11 @@ export default function GlobalSearch() {
       flatResults: flat
     };
   }, [debouncedQuery, apiResults]);
+
+  // Reset selected index when results change (keeps cursor in range)
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [flatResults.length]);
 
   // Keyboard navigation within suggestions
   useEffect(() => {
@@ -334,14 +336,15 @@ export default function GlobalSearch() {
     <div className="relative z-50 flex items-center" ref={containerRef}>
       <button
         onClick={() => setIsOpen(true)}
-        className="h-10 w-10 flex items-center justify-center rounded-full bg-background/50 backdrop-blur-md border border-border/50 text-muted-foreground shadow-sm hover:bg-accent/50 hover:text-foreground transition-all"
+        className="h-10 w-10 flex items-center justify-center rounded-full bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors duration-150"
         title="Global Search (Cmd+K)"
+        aria-label="Open global search"
       >
         <Search size={18} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-12 right-0 w-[320px] md:w-[450px] bg-card dark:bg-[#1f1b32] rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] border border-border/50 flex flex-col overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute top-12 right-0 w-[320px] md:w-[450px] bg-card rounded-xl shadow-lg border border-border flex flex-col overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
           {/* Input Header */}
           <div className="flex items-center border-b border-border/50 px-4 py-3 bg-background/50">
             <Search className="h-4 w-4 text-muted-foreground mr-3" />

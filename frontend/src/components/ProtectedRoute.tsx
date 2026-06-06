@@ -16,14 +16,19 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const pathname = usePathname() || "";
   const hasRedirected = useRef(false);
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
+  const [hasLocalSession, setHasLocalSession] = useState(false);
 
-  const hasLocalSession =
-    typeof window !== "undefined" &&
-    Boolean(localStorage.getItem("token") && localStorage.getItem("role") && localStorage.getItem("user_id"));
+  // Detect existing localStorage session client-side only (avoids SSR/CSR hydration mismatch).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setHasLocalSession(
+      Boolean(localStorage.getItem("token") && localStorage.getItem("role") && localStorage.getItem("user_id"))
+    );
+  }, []);
 
   const RedirectState = ({ message }: { message: string }) => (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/20 bg-white/20 dark:bg-white/5 px-8 py-6 backdrop-blur-xl shadow-lg">
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-card px-8 py-6 shadow-sm">
         <Loader2 size={40} className="animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">{message}</p>
       </div>

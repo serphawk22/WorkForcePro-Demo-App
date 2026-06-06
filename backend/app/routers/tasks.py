@@ -488,24 +488,14 @@ async def get_my_tasks(
     statement = statement.order_by(Task.created_at.desc())
     tasks = session.exec(statement).all()
     latest_comment_lookup = _latest_comment_map(session, [task.id for task in tasks])
-    
+    assignees_map, assigners_map, workspaces_map, _ = _batch_load_related_data(session, tasks)
+
     result = []
     for task in tasks:
-        assignee = None
-        if task.assigned_to:
-            assignee_stmt = select(User).where(User.id == task.assigned_to)
-            assignee = session.exec(assignee_stmt).first()
+        assignee = assignees_map.get(task.assigned_to) if task.assigned_to else None
+        workspace = workspaces_map.get(task.workspace_id) if task.workspace_id else None
+        assigner = assigners_map.get(task.assigned_by) if task.assigned_by else None
 
-        workspace = None
-        if task.workspace_id:
-            workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
-            workspace = session.exec(workspace_stmt).first()
-        
-        assigner = None
-        if task.assigned_by:
-            assigner_stmt = select(User).where(User.id == task.assigned_by)
-            assigner = session.exec(assigner_stmt).first()
-        
         result.append(TaskWithAssignee(
             id=task.id,
             public_id=task.public_id,
@@ -536,7 +526,7 @@ async def get_my_tasks(
             progress=calculate_task_progress(task, session),
             **_recurrence_kwargs(task),
         ))
-    
+
     return result
 
 

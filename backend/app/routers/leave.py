@@ -205,15 +205,22 @@ async def get_all_leave_requests(
     
     statement = statement.order_by(LeaveRequest.created_at.desc())
     requests = session.exec(statement).all()
-    
+
+    # Batch-load users instead of N+1 queries
+    user_ids = {req.user_id for req in requests if req.user_id}
+    users_by_id: dict = {}
+    if user_ids:
+        users = session.exec(
+            select(User).where(
+                User.id.in_(user_ids),
+                User.organization_id == admin.organization_id,
+            )
+        ).all()
+        users_by_id = {u.id: u for u in users}
+
     result = []
     for req in requests:
-        user_stmt = select(User).where(
-            User.id == req.user_id,
-            User.organization_id == admin.organization_id,
-        )
-        user = session.exec(user_stmt).first()
-        
+        user = users_by_id.get(req.user_id)
         result.append(LeaveRequestWithUser(
             id=req.id,
             user_id=req.user_id,
@@ -229,7 +236,7 @@ async def get_all_leave_requests(
             user_name=user.name if user else None,
             user_email=user.email if user else None
         ))
-    
+
     return result
 
 
@@ -244,17 +251,24 @@ async def get_pending_leave_requests(
         LeaveRequest.organization_id == admin.organization_id,
         LeaveRequest.status == LeaveStatus.pending
     ).order_by(LeaveRequest.created_at.asc())
-    
+
     requests = session.exec(statement).all()
-    
+
+    # Batch-load users instead of N+1 queries
+    user_ids = {req.user_id for req in requests if req.user_id}
+    users_by_id: dict = {}
+    if user_ids:
+        users = session.exec(
+            select(User).where(
+                User.id.in_(user_ids),
+                User.organization_id == admin.organization_id,
+            )
+        ).all()
+        users_by_id = {u.id: u for u in users}
+
     result = []
     for req in requests:
-        user_stmt = select(User).where(
-            User.id == req.user_id,
-            User.organization_id == admin.organization_id,
-        )
-        user = session.exec(user_stmt).first()
-        
+        user = users_by_id.get(req.user_id)
         result.append(LeaveRequestWithUser(
             id=req.id,
             user_id=req.user_id,

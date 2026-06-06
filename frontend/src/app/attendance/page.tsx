@@ -22,8 +22,8 @@ import { toast } from "sonner";
 import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceTimerProvider";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   ResponsiveContainer,
@@ -476,7 +476,7 @@ export default function AttendancePage() {
                   {chartData.length > 0 ? (
                     <div className="h-72 w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
+                        <ComposedChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" />
                           <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                           <YAxis yAxisId="attendance" tick={{ fontSize: 12 }} allowDecimals={false} />
@@ -497,7 +497,7 @@ export default function AttendancePage() {
                           <Bar yAxisId="attendance" dataKey="present" fill="#16a34a" radius={[4, 4, 0, 0]} name="present" />
                           <Bar yAxisId="attendance" dataKey="absent" fill="#f59e0b" radius={[4, 4, 0, 0]} name="absent" />
                           <Line yAxisId="hours" type="monotone" dataKey="hours" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} name="hours" />
-                        </BarChart>
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (

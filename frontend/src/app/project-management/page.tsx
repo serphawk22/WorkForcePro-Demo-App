@@ -355,14 +355,14 @@ export default function ProjectManagementGlobalPage() {
                           Last Activity: {lastActivity ? lastActivity.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "-"}
                         </p>
 
-                        <div className="mt-3 rounded-lg border border-border/70 bg-background/60 p-2">
+                        <div className="mt-3 rounded-lg border border-border bg-secondary/40 p-2">
                           <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Tasks Completed</span>
                             <span className="font-semibold text-foreground">{completionRate}%</span>
                           </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/70">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                             <div
-                              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-500"
+                              className="h-full rounded-full bg-foreground transition-all duration-500"
                               style={{ width: `${completionRate}%` }}
                             />
                           </div>
@@ -374,7 +374,7 @@ export default function ProjectManagementGlobalPage() {
                             e.stopPropagation();
                             router.push(`/project-management/workspaces/${ws.id}`);
                           }}
-                          className="mt-3 w-full rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-left text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                          className="mt-3 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-left text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70"
                         >
                           Open Workspace
                         </button>
@@ -385,7 +385,7 @@ export default function ProjectManagementGlobalPage() {
               )}
             </section>
 
-          <section className="rounded-xl border border-border bg-card p-4 shadow-sm dark:shadow-[0_0_20px_rgba(168,85,247,0.12)]">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
               <Activity size={15} className="text-primary" />
               Recent Activity Across Workspaces
