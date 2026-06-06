@@ -7,7 +7,7 @@ import { ArrowRight } from "lucide-react";
 import TextType from "@/components/TextType";
 import ScrollFloat from "@/components/ScrollFloat";
 
-const Antigravity = dynamic(() => import("@/components/Antigravity").then(mod => mod.Antigravity), {
+const PixelBlast = dynamic(() => import("@/components/PixelBlast"), {
   ssr: false,
   loading: () => <div className="w-full h-screen bg-white" />
 });
@@ -24,25 +24,35 @@ export default function Home() {
   return (
     <div className="relative min-h-screen bg-white overflow-hidden">
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <Antigravity
-          count={300}
-          magnetRadius={23}
-          ringRadius={18}
-          waveSpeed={0.4}
-          waveAmplitude={2.1}
-          particleSize={0.9}
-          lerpSpeed={0.01}
-          color="#7eff27"
-          autoAnimate={true}
-          particleVariance={0.2}
-          fieldStrength={2}
+        <PixelBlast
+          variant="circle"
+          pixelSize={6}
+          color="#B497CF"
+          patternScale={3}
+          patternDensity={1.2}
+          pixelSizeJitter={0.5}
+          enableRipples
+          rippleSpeed={0.4}
+          rippleThickness={0.12}
+          rippleIntensityScale={1.5}
+          liquid
+          liquidStrength={0.12}
+          liquidRadius={1.2}
+          liquidWobbleSpeed={5}
+          speed={0.6}
+          edgeFade={0.25}
+          transparent
         />
       </div>
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-gray-900 font-semibold">
-            <div className="w-5 h-5 rounded-full bg-gray-900" />
+            <img
+              src="/Serp_Hwak_Logo-removebg-preview.png"
+              alt="SerpHawk Logo"
+              className="h-6 w-6 object-contain"
+            />
             WorkForce Pro
           </div>
           <div className="flex items-center gap-4">
