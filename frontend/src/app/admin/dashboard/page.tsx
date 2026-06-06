@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type CSSProperties } from "react";
+import { useEffect, useState, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
@@ -17,33 +17,13 @@ import { toast } from "sonner";
 
 // Priority badge colors
 const priorityColors: Record<string, string> = {
-  high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
-  medium: "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-yellow-400 border border-yellow-500/30 shadow-lg shadow-yellow-500/20",
-  low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30 shadow-lg shadow-green-500/20",
-};
-
-type AdminCardAccentStyle = CSSProperties & {
-  "--admin-card-accent": string;
-  "--admin-card-accent-secondary": string;
-};
-
-const adminCardAccentStyles: Record<"primary" | "blue", AdminCardAccentStyle> = {
-  primary: {
-    "--admin-card-accent": "328 60% 60%",
-    "--admin-card-accent-secondary": "228 92% 66%",
-  },
-  blue: {
-    "--admin-card-accent": "217 91% 60%",
-    "--admin-card-accent-secondary": "191 91% 55%",
-  },
+  high: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20",
+  medium: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+  low: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
 };
 
 const premiumCardBase =
-  "bg-white rounded-2xl border border-slate-200 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-300";
-
-const premiumCardGlow = "hidden";
-
-const fourSideEdgeGlow = null;
+  "group relative bg-card rounded-2xl border border-border transition-all duration-200 hover:border-foreground/20 hover:shadow-sm";
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -202,7 +182,6 @@ export default function AdminDashboard() {
 
   const greetingHour = now.getHours();
   const greetingLabel = greetingHour < 12 ? "Good Morning" : greetingHour < 18 ? "Good Afternoon" : "Good Evening";
-  const greetingEmoji = greetingHour < 18 ? "☀️" : "🌙";
 
   const pendingApprovals = stats?.pending_tasks ?? 0;
   const newRequests = stats?.leave_requests_pending ?? 0;
@@ -255,45 +234,35 @@ export default function AdminDashboard() {
       title: "Pending Approvals",
       value: pendingApprovals,
       subtitle: "Tasks waiting for review",
-      accent: "from-violet-500/24 via-fuchsia-500/12 to-transparent dark:from-violet-500/20 dark:via-fuchsia-500/10",
-      accentDark: "dark:from-violet-500/20 dark:via-fuchsia-500/10",
-      valueTone: "text-fuchsia-600 dark:text-fuchsia-300",
+      valueTone: "text-foreground",
       redirectUrl: "/project-management?status=reviewing",
     },
     {
       title: "New Requests",
       value: newRequests,
       subtitle: "Leave requests submitted today",
-      accent: "from-sky-500/24 via-cyan-500/12 to-transparent dark:from-sky-500/20 dark:via-cyan-500/10",
-      accentDark: "dark:from-sky-500/20 dark:via-cyan-500/10",
-      valueTone: "text-sky-600 dark:text-sky-300",
+      valueTone: "text-foreground",
       redirectUrl: "/requests",
     },
     {
       title: "Tasks Due Today",
       value: tasksDueToday,
       subtitle: "Need attention before day end",
-      accent: "from-amber-500/24 via-yellow-500/12 to-transparent dark:from-amber-500/20 dark:via-yellow-500/10",
-      accentDark: "dark:from-amber-500/20 dark:via-yellow-500/10",
-      valueTone: "text-amber-600 dark:text-amber-300",
+      valueTone: "text-foreground",
       redirectUrl: "/tasks",
     },
     {
       title: "Projects In Progress",
       value: projectsInProgress,
       subtitle: "Active projects still moving",
-      accent: "from-emerald-500/24 via-green-500/12 to-transparent dark:from-emerald-500/20 dark:via-green-500/10",
-      accentDark: "dark:from-emerald-500/20 dark:via-green-500/10",
-      valueTone: "text-emerald-600 dark:text-emerald-300",
+      valueTone: "text-foreground",
       redirectUrl: "/project-management",
     },
     {
       title: "Team Productivity",
       value: `${completionRate}%`,
       subtitle: `${completedTasks}/${totalTasks || 0} tasks approved`,
-      accent: "from-indigo-500/24 via-blue-500/12 to-transparent dark:from-indigo-500/20 dark:via-blue-500/10",
-      accentDark: "dark:from-indigo-500/20 dark:via-blue-500/10",
-      valueTone: "text-indigo-600 dark:text-indigo-300",
+      valueTone: "text-foreground",
       redirectUrl: "/project-management/reports",
     },
   ];
@@ -330,27 +299,21 @@ export default function AdminDashboard() {
       label: "Approvals Done Today",
       value: approvalsDoneToday,
       helpText: "Your approvals only",
-      accent: "from-violet-500/24 to-transparent dark:from-violet-500/20",
-      accentDark: "dark:from-violet-500/20",
-      valueTone: "text-violet-700 dark:text-violet-300",
+      valueTone: "text-foreground",
       redirectUrl: "/requests",
     },
     {
       label: "Projects Created",
       value: projectsCreatedToday,
       helpText: "Created by you today",
-      accent: "from-blue-500/24 to-transparent dark:from-blue-500/20",
-      accentDark: "dark:from-blue-500/20",
-      valueTone: "text-sky-700 dark:text-sky-300",
+      valueTone: "text-foreground",
       redirectUrl: "/project-management/projects",
     },
     {
       label: "Employees Added",
       value: employeesAddedToday,
       helpText: "Accounts added by you",
-      accent: "from-emerald-500/24 to-transparent dark:from-emerald-500/20",
-      accentDark: "dark:from-emerald-500/20",
-      valueTone: "text-emerald-700 dark:text-emerald-300",
+      valueTone: "text-foreground",
       redirectUrl: "/employees",
     },
   ];
@@ -361,36 +324,28 @@ export default function AdminDashboard() {
       value: presentToday,
       icon: UserCheck,
       redirectUrl: "/attendance",
-      accent: "from-emerald-500/28 via-green-500/14 to-transparent dark:from-emerald-500/25 dark:via-green-500/10",
-      accentDark: "dark:from-emerald-500/25 dark:via-green-500/10",
-      valueTone: "text-emerald-600 dark:text-emerald-300",
+      valueTone: "text-foreground",
     },
     {
       title: "On Leave",
       value: onLeave,
       icon: Calendar,
       redirectUrl: "/attendance?filter=leave",
-      accent: "from-sky-500/28 via-blue-500/14 to-transparent dark:from-sky-500/25 dark:via-blue-500/10",
-      accentDark: "dark:from-sky-500/25 dark:via-blue-500/10",
-      valueTone: "text-sky-600 dark:text-sky-300",
+      valueTone: "text-foreground",
     },
     {
       title: "Late Check-ins",
       value: lateCheckins,
       icon: AlertCircle,
       redirectUrl: "/attendance?filter=late",
-      accent: "from-amber-500/28 via-yellow-500/14 to-transparent dark:from-amber-500/25 dark:via-yellow-500/10",
-      accentDark: "dark:from-amber-500/25 dark:via-yellow-500/10",
-      valueTone: "text-amber-600 dark:text-amber-300",
+      valueTone: "text-foreground",
     },
     {
       title: "Pending Requests",
       value: newRequests,
       icon: Clock,
       redirectUrl: "/requests",
-      accent: "from-violet-500/28 via-fuchsia-500/14 to-transparent dark:from-violet-500/25 dark:via-fuchsia-500/10",
-      accentDark: "dark:from-violet-500/25 dark:via-fuchsia-500/10",
-      valueTone: "text-violet-600 dark:text-violet-300",
+      valueTone: "text-foreground",
     },
   ];
 
@@ -400,11 +355,11 @@ export default function AdminDashboard() {
 
   // Department performance derived from real task stats
   const deptPerformance = [
-    { dept: "Approved", completion: taskStats?.approved || 0, color: "from-green-400 to-green-600" },
-    { dept: "In Progress", completion: taskStats?.in_progress || 0, color: "from-blue-400 to-blue-600" },
-    { dept: "Reviewing", completion: taskStats?.reviewing || 0, color: "from-purple-400 to-purple-600" },
-    { dept: "To Do", completion: taskStats?.todo || 0, color: "from-gray-400 to-gray-500" },
-    { dept: "Rejected", completion: taskStats?.rejected || 0, color: "from-red-400 to-red-500" },
+    { dept: "Approved", completion: taskStats?.approved || 0, color: "bg-emerald-500" },
+    { dept: "In Progress", completion: taskStats?.in_progress || 0, color: "bg-blue-500" },
+    { dept: "Reviewing", completion: taskStats?.reviewing || 0, color: "bg-amber-500" },
+    { dept: "To Do", completion: taskStats?.todo || 0, color: "bg-zinc-400" },
+    { dept: "Rejected", completion: taskStats?.rejected || 0, color: "bg-red-500" },
   ].filter(d => d.completion > 0);
 
   return (
@@ -416,37 +371,36 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <div className="space-y-6 pb-8">
-            <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-slate-800 shadow-sm">
+            <section className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 text-foreground">
               <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                 <div className="max-w-3xl space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-600">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     Admin Overview
                   </div>
-                  <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
+                  <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
                     {greetingLabel},{" "}
-                    <span className="text-slate-800">
+                    <span className="text-foreground">
                       {user?.name || "Administrator"}
-                    </span>{" "}
-                    {greetingEmoji}
+                    </span>
                   </h1>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
                     Here&apos;s your personalized workforce snapshot for today. The cards below highlight what needs your attention, your most common actions, and the live status of the team.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white px-4 py-3 transition-all duration-300 hover:scale-[1.02]">
-                    <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Active Staff</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">{totalEmployees}</p>
+                <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border bg-secondary/50 p-4">
+                  <div className="rounded-xl border border-border bg-card px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Active Staff</p>
+                    <p className="mt-1 text-2xl font-semibold text-foreground">{totalEmployees}</p>
                   </div>
-                  <div className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white px-4 py-3 transition-all duration-300 hover:scale-[1.02]">
-                    <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Open Tasks</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">{activeTasks}</p>
+                  <div className="rounded-xl border border-border bg-card px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Open Tasks</p>
+                    <p className="mt-1 text-2xl font-semibold text-foreground">{activeTasks}</p>
                   </div>
-                  <div className="group relative col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white px-4 py-3 transition-all duration-300 hover:scale-[1.01]">
-                    <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Today</p>
-                    <p className="mt-1 text-sm font-medium text-slate-900">
+                  <div className="col-span-2 rounded-xl border border-border bg-card px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Today</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
                       {now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                     </p>
                   </div>
@@ -467,19 +421,16 @@ export default function AdminDashboard() {
                   onClick={() => router.push(card.redirectUrl)}
                   className={`${premiumCardBase} p-5 text-left`}
                 >
-                  <div className={`${premiumCardGlow} ${card.accent} ${card.accentDark}`} />
-                  {fourSideEdgeGlow}
-                  <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-white/10 blur-3xl opacity-50 transition-all duration-300 group-hover:h-32 group-hover:w-32 group-hover:opacity-70" />
                   <div className="relative flex h-full flex-col justify-between gap-5">
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Priority Summary</p>
                         <h2 className="mt-2 text-lg font-semibold text-foreground">{card.title}</h2>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1 group-hover:text-primary shrink-0 ml-2" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground shrink-0 ml-2" />
                     </div>
                     <div>
-                      <p className={`text-4xl font-bold ${card.valueTone}`}>{card.value}</p>
+                      <p className={`text-3xl font-semibold ${card.valueTone}`}>{card.value}</p>
                       <p className="mt-2 text-xs text-muted-foreground">{card.subtitle}</p>
                     </div>
                   </div>
@@ -487,7 +438,7 @@ export default function AdminDashboard() {
               ))}
             </section>
 
-            <section className="rounded-2xl border border-border/60 bg-card/90 p-5 shadow-sm backdrop-blur-sm">
+            <section className="rounded-2xl border border-border bg-card p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
@@ -502,13 +453,10 @@ export default function AdminDashboard() {
                       key={action.label}
                       type="button"
                       onClick={action.onClick}
-                      className={`${premiumCardBase} flex items-center justify-between px-4 py-4 text-left border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 hover:border-primary/45 dark:border-white/15 dark:bg-white/10 dark:from-transparent dark:via-transparent dark:to-transparent dark:hover:border-primary/35`}
+                      className={`${premiumCardBase} flex items-center justify-between px-4 py-4 text-left`}
                     >
-                      <div className={`${premiumCardGlow} from-primary/20 via-fuchsia-500/10 to-transparent dark:from-primary/20 dark:via-fuchsia-500/10`} />
-                      {fourSideEdgeGlow}
-                      <div className="absolute left-0 top-0 h-16 w-16 rounded-full bg-primary/25 blur-3xl opacity-50 transition-all duration-300 group-hover:h-24 group-hover:w-24 group-hover:opacity-70 dark:bg-primary/20 dark:opacity-40 dark:group-hover:opacity-60" />
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-200/80 to-fuchsia-200/60 text-violet-700 transition-transform duration-300 group-hover:scale-105 dark:from-primary/20 dark:to-primary/10 dark:text-primary">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground">
                           <Icon className="h-5 w-5" />
                         </div>
                         <div>
@@ -516,7 +464,7 @@ export default function AdminDashboard() {
                           <p className="text-xs text-muted-foreground">{action.description}</p>
                         </div>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1 group-hover:text-primary" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground" />
                     </button>
                   );
                 })}
@@ -525,8 +473,6 @@ export default function AdminDashboard() {
 
             <section className="grid gap-4 xl:grid-cols-2">
               <article className={`${premiumCardBase} p-5`}>
-                <div className={`${premiumCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
-                {fourSideEdgeGlow}
                 <div className="relative space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -536,7 +482,7 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => router.push("/my-space/happy-sheet")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
                     >
                       Open
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -544,26 +490,26 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3">
                       <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Submissions Today</p>
-                      <p className="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-300">
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {submissionsToday} / {employeeCount} employees
                       </p>
                     </div>
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3">
                       <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Participation Rate</p>
-                      <p className="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-300">{participationRate}%</p>
+                      <p className="mt-1 text-2xl font-semibold text-foreground">{participationRate}%</p>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border/60 bg-background/40 p-3 space-y-2">
+                  <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Recent Entries</p>
                     {recentHappySheetEntries.length === 0 ? (
                       <p className="text-xs text-muted-foreground">No submissions yet.</p>
                     ) : (
                       recentHappySheetEntries.map((entry) => (
-                        <p key={entry.id} className="text-xs text-slate-700 dark:text-foreground/90 line-clamp-1">
-                          <span className="font-semibold text-violet-700 dark:text-violet-300">{entry.user_name || `User #${entry.user_id}`}</span>
+                        <p key={entry.id} className="text-xs text-foreground line-clamp-1">
+                          <span className="font-semibold text-foreground">{entry.user_name || `User #${entry.user_id}`}</span>
                           {" - "}
                           {(entry.what_made_you_happy || entry.what_made_others_happy || "Shared a reflection").slice(0, 56)}
                         </p>
@@ -572,7 +518,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3">
                       <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Latest Submission</p>
                       <p className="mt-1 text-xs font-semibold text-foreground">
                         {latestHappySheetEntry
@@ -586,9 +532,9 @@ export default function AdminDashboard() {
                           : "No entries yet"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3">
                       <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Most Common Theme</p>
-                      <p className="mt-1 text-sm font-bold text-fuchsia-600 dark:text-fuchsia-300">
+                      <p className="mt-1 text-sm font-semibold text-foreground">
                         {dominantTheme?.score ? dominantTheme.label : "Positive"}
                       </p>
                     </div>
@@ -597,8 +543,6 @@ export default function AdminDashboard() {
               </article>
 
               <article className={`${premiumCardBase} p-5`}>
-                <div className={`${premiumCardGlow} from-violet-500/20 via-fuchsia-500/10 to-transparent dark:from-violet-500/20 dark:via-fuchsia-500/10`} />
-                {fourSideEdgeGlow}
                 <div className="relative space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -608,7 +552,7 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => router.push("/my-space/learning-canvas")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
                     >
                       Manage
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -616,28 +560,28 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-center">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Old</p>
-                      <p className="mt-1 text-xl font-bold text-amber-700 dark:text-amber-300">{lighthouseGroups.old.length}</p>
+                      <p className="mt-1 text-xl font-semibold text-foreground">{lighthouseGroups.old.length}</p>
                     </div>
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-center">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Current</p>
-                      <p className="mt-1 text-xl font-bold text-violet-700 dark:text-violet-300">{lighthouseGroups.current.length}</p>
+                      <p className="mt-1 text-xl font-semibold text-foreground">{lighthouseGroups.current.length}</p>
                     </div>
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-2.5 text-center">
+                    <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-center">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Future</p>
-                      <p className="mt-1 text-xl font-bold text-sky-700 dark:text-sky-300">{lighthouseGroups.future.length}</p>
+                      <p className="mt-1 text-xl font-semibold text-foreground">{lighthouseGroups.future.length}</p>
                     </div>
                   </div>
 
                   {personalProjects.length === 0 ? (
-                    <p className="text-xs text-muted-foreground rounded-xl border border-dashed border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground rounded-xl border border-dashed border-border p-3">
                       Add your old/current/future projects in Lighthouse. You can include links, images, GitHub references, and writeups.
                     </p>
                   ) : (
-                    <div className="rounded-xl border border-border/60 bg-background/40 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Latest project</p>
-                      <p className="text-sm font-medium text-slate-700 dark:text-foreground line-clamp-1">{personalProjects[0].title}</p>
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-foreground">Latest project</p>
+                      <p className="text-sm font-medium text-foreground line-clamp-1">{personalProjects[0].title}</p>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         {personalProjects[0].github_link && <span className="inline-flex items-center gap-1"><Github className="h-3.5 w-3.5" />GitHub</span>}
                         {personalProjects[0].demo_link && <span className="inline-flex items-center gap-1"><ExternalLink className="h-3.5 w-3.5" />Link</span>}
@@ -658,41 +602,38 @@ export default function AdminDashboard() {
                   onClick={() => router.push(card.redirectUrl)}
                   className={`${premiumCardBase} p-5 text-left`}
                 >
-                  <div className={`${premiumCardGlow} ${card.accent} ${card.accentDark}`} />
-                  {fourSideEdgeGlow}
-                  <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-white/10 blur-3xl opacity-40 transition-all duration-300 group-hover:h-28 group-hover:w-28 group-hover:opacity-60" />
                   <div className="relative space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">Your Admin Activity</p>
                         <h3 className="text-lg font-semibold text-foreground">{card.label}</h3>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1 group-hover:text-primary shrink-0 ml-2" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground shrink-0 ml-2" />
                     </div>
-                    <p className={`text-4xl font-bold ${card.valueTone}`}>{card.value}</p>
+                    <p className={`text-3xl font-semibold ${card.valueTone}`}>{card.value}</p>
                     <p className="text-xs text-muted-foreground">{card.helpText}</p>
                   </div>
                 </button>
               ))}
             </section>
 
-            <div className="glass-panel rounded-2xl p-8 glow-sm">
+            <div className="rounded-2xl border border-border bg-card p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-lg glow-primary">
-                    <Users className="h-6 w-6 text-primary-foreground" />
+                  <div className="h-11 w-11 rounded-xl bg-secondary text-foreground flex items-center justify-center">
+                    <Users className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-foreground">Team Snapshot</h2>
+                    <h2 className="text-xl font-semibold text-foreground">Team Snapshot</h2>
                     <p className="text-xs text-muted-foreground">Today&apos;s attendance and request status</p>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground hidden md:block">
                   {now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 xl:justify-items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {teamSnapshotCards.map((card) => {
                   const Icon = card.icon;
                   return (
@@ -700,19 +641,16 @@ export default function AdminDashboard() {
                       key={card.title}
                       type="button"
                       onClick={() => router.push(card.redirectUrl)}
-                      className={`${premiumCardBase} w-full xl:max-w-[255px] p-4 text-left border-white/15 bg-white/10 hover:border-primary/35`}
+                      className={`${premiumCardBase} w-full p-4 text-left`}
                     >
-                      <div className={`${premiumCardGlow} ${card.accent} ${card.accentDark}`} />
-                      {fourSideEdgeGlow}
-                      <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-white/10 blur-3xl opacity-40 transition-all duration-300 group-hover:h-28 group-hover:w-28 group-hover:opacity-60" />
                       <div className="relative space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-primary shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-secondary text-foreground">
                             <Icon className="h-5 w-5" />
                           </span>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1 group-hover:text-primary" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground" />
                         </div>
-                        <p className={`text-3xl font-bold ${card.valueTone}`}>{card.value}</p>
+                        <p className={`text-2xl font-semibold ${card.valueTone}`}>{card.value}</p>
                         <p className="text-sm font-medium text-foreground">{card.title}</p>
                       </div>
                     </button>
@@ -721,31 +659,23 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* 🔷 2-COLUMN GRID */}
             <div className="space-y-6">
-                {/* Task Completion Overview */}
-                <div
-                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm p-6"
-                  style={adminCardAccentStyles.primary}
-                >
+                <div className="rounded-2xl border border-border bg-card p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2">
-                      <span className="admin-dashboard-card-icon">
-                        <Target className="h-5 w-5 text-primary" />
-                      </span>
-                      <h3 className="font-bold text-foreground">Task Completion</h3>
+                      <Target className="h-5 w-5 text-foreground" />
+                      <h3 className="font-semibold text-foreground">Task Completion</h3>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">Overall:</span>
-                      <span className="font-bold text-primary">{completionRate}%</span>
+                      <span className="font-semibold text-foreground">{completionRate}%</span>
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="mb-6">
-                    <div className="h-3 bg-secondary/50 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-primary to-primary-light rounded-full transition-all duration-500 shadow-lg shadow-primary/20"
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-foreground rounded-full transition-all duration-500"
                         style={{ width: `${completionRate}%` }}
                       />
                     </div>
@@ -755,7 +685,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Department Breakdown */}
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-foreground mb-3">Task Status Breakdown</h4>
                     {deptPerformance.length > 0 ? deptPerformance.map((item, index) => (
@@ -764,9 +693,9 @@ export default function AdminDashboard() {
                           <span className="text-muted-foreground">{item.dept}</span>
                           <span className="font-semibold text-foreground">{item.completion}</span>
                         </div>
-                        <div className="h-2 bg-secondary/40 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full bg-gradient-to-r ${item.color} rounded-full transition-all duration-500`}
+                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${item.color} rounded-full transition-all duration-500`}
                             style={{ width: `${totalTasks > 0 ? Math.round((item.completion / totalTasks) * 100) : 0}%` }}
                           />
                         </div>
@@ -777,41 +706,34 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Upcoming Deadlines — real tasks */}
-                <div
-                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm overflow-hidden"
-                  style={adminCardAccentStyles.blue}
-                >
-                  <div className="bg-gradient-to-r from-primary-light/10 to-transparent p-5 border-b border-border/30">
+                <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                  <div className="p-5 border-b border-border">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="admin-dashboard-card-icon">
-                        <Clock className="h-5 w-5 text-primary-light" />
-                      </span>
-                      <h3 className="font-bold text-foreground">Upcoming Deadlines</h3>
+                      <Clock className="h-5 w-5 text-foreground" />
+                      <h3 className="font-semibold text-foreground">Upcoming Deadlines</h3>
                     </div>
                     <p className="text-xs text-muted-foreground">Active projects nearest to due date</p>
                   </div>
-                  
+
                   <div className="p-5 space-y-3">
-                    {upcomingTasks.length > 0 ? upcomingTasks.map((task, index) => (
+                    {upcomingTasks.length > 0 ? upcomingTasks.map((task) => (
                       <div
                         key={task.id}
                         onClick={() => router.push(`/project-management/${task.id}`)}
-                        className="relative p-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent hover:from-primary/20 hover:border-primary/40 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 cursor-pointer overflow-hidden group"
+                        className="relative p-4 rounded-xl border border-border bg-secondary/40 hover:border-foreground/30 hover:bg-secondary transition-colors duration-200 cursor-pointer group"
                       >
-                        {/* subtle left accent bar */}
-                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-accent to-primary/30 rounded-l-xl opacity-70 group-hover:opacity-100 transition-opacity" />
                         <div className="flex items-start justify-between mb-2 gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             {task.public_id && (
                               <>
-                                <span className="font-mono text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded shrink-0 tracking-wider">
+                                <span className="font-mono text-[10px] font-semibold bg-card text-foreground border border-border px-1.5 py-0.5 rounded shrink-0 tracking-wider">
                                   {task.public_id}
                                 </span>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCopyRefId(task.public_id); }}
-                                  className="shrink-0 text-muted-foreground hover:text-purple-500 transition-colors"
+                                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                                   title="Copy Ref ID"
+                                  aria-label="Copy Ref ID"
                                 >
                                   <Copy size={10} />
                                 </button>
@@ -824,7 +746,7 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1 text-primary/70 group-hover:text-primary transition-colors">
+                          <div className="flex items-center gap-1 text-muted-foreground group-hover:text-foreground transition-colors">
                             <CalendarDays className="h-3 w-3" />
                             <span>Due: {task.due_date ? new Date(task.due_date).toLocaleDateString('en-IN') : 'No date'}</span>
                           </div>
@@ -838,36 +760,29 @@ export default function AdminDashboard() {
                       </div>
                     )) : (
                       <div className="text-center py-8">
-                        <ListTodo className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                        <ListTodo className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
                         <p className="text-sm text-muted-foreground">No upcoming deadlines</p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">Tasks with due dates will appear here</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">Tasks with due dates will appear here</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Teams Meeting Link */}
-                <div
-                  className="admin-dashboard-card group rounded-2xl glass-card glow-sm p-6"
-                  style={adminCardAccentStyles.blue}
-                >
+                <div className="rounded-2xl border border-border bg-card p-6">
                   <div className="flex items-center gap-2 mb-5">
-                    <span className="admin-dashboard-card-icon">
-                      <Video className="h-5 w-5 text-blue-400" />
-                    </span>
-                    <h3 className="font-bold text-foreground">Teams Meeting</h3>
+                    <Video className="h-5 w-5 text-foreground" />
+                    <h3 className="font-semibold text-foreground">Teams Meeting</h3>
                   </div>
 
-                  {/* Active meeting banner */}
                   {activeMeeting && (
-                    <div className="mb-4 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-start justify-between gap-3">
+                    <div className="mb-4 p-4 rounded-xl bg-secondary border border-border flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-blue-300 truncate">{activeMeeting.title}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{activeMeeting.title}</p>
                         <a
                           href={activeMeeting.meeting_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
+                          className="text-xs text-foreground hover:underline underline-offset-2 break-all"
                         >
                           {activeMeeting.meeting_link}
                         </a>
@@ -878,25 +793,25 @@ export default function AdminDashboard() {
                       <button
                         onClick={handleRemoveMeeting}
                         disabled={isRemovingMeeting}
-                        className="shrink-0 p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors disabled:opacity-50"
+                        className="shrink-0 p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
                         title="Remove meeting link"
+                        aria-label="Remove meeting link"
                       >
                         {isRemovingMeeting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     </div>
                   )}
 
-                  {/* Share form */}
                   <div className="space-y-3">
                     <input
                       type="text"
                       placeholder="Meeting title (e.g. Weekly Standup)"
                       value={meetingTitle}
                       onChange={(e) => setMeetingTitle(e.target.value)}
-                      className="w-full rounded-lg bg-secondary/40 border border-border/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      className="w-full rounded-lg bg-background border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
                     />
                     <div className="flex gap-2">
-                      <div className="flex-1 flex items-center gap-2 rounded-lg bg-secondary/40 border border-border/60 px-3 py-2">
+                      <div className="flex-1 flex items-center gap-2 rounded-lg bg-background border border-border px-3 py-2">
                         <Link2 className="h-4 w-4 text-muted-foreground shrink-0" />
                         <input
                           type="url"
@@ -909,7 +824,7 @@ export default function AdminDashboard() {
                       <button
                         onClick={handleShareMeeting}
                         disabled={isSharingMeeting || !meetingTitle.trim() || !meetingLink.trim()}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium transition-opacity"
                       >
                         {isSharingMeeting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         {activeMeeting ? "Update" : "Share"}
@@ -918,27 +833,19 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Performance Score */}
-                <div
-                  className="admin-dashboard-card group rounded-2xl glass-card glow-primary p-6"
-                  style={adminCardAccentStyles.primary}
-                >
+                <div className="rounded-2xl border border-border bg-card p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <span className="admin-dashboard-card-icon">
-                        <Award className="h-5 w-5 text-primary" />
-                      </span>
-                      <h3 className="font-bold text-foreground">Overall Performance</h3>
+                      <Award className="h-5 w-5 text-foreground" />
+                      <h3 className="font-semibold text-foreground">Overall Performance</h3>
                     </div>
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="relative">
-                      <div className="h-24 w-24 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-lg shadow-primary/30">
-                        <div className="h-20 w-20 rounded-full bg-card flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold text-primary">87</div>
-                            <div className="text-xs text-muted-foreground">Score</div>
-                          </div>
+                      <div className="h-24 w-24 rounded-full border-2 border-border bg-secondary flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-2xl font-semibold text-foreground">87</div>
+                          <div className="text-xs text-muted-foreground">Score</div>
                         </div>
                       </div>
                     </div>

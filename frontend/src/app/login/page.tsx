@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [serverWaking, setServerWaking] = useState(false);
   const router = useRouter();
 
-  // 2️⃣ Auto-redirect if user is already logged in
+  // Auto-redirect if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem("token");
     const role = localStorage.getItem("role");
@@ -31,7 +31,7 @@ export default function LoginPage() {
     }
   }, []);
 
-  // 3️⃣ Ping server on mount so Railway wakes up before the user even clicks Login
+  // Ping server on mount so Railway wakes up before the user even clicks Login
   useEffect(() => {
     let cancelled = false;
 
@@ -59,7 +59,7 @@ export default function LoginPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // 1️⃣ Login handler with direct fetch
+  // Login handler with direct fetch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -201,12 +201,9 @@ export default function LoginPage() {
 
           {pendingMessage && (
             <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-sm">
-              <div className="flex items-center gap-2 font-semibold mb-1 text-amber-800">
-                <span className="text-lg">⏳</span>
-                Account Pending Approval
-              </div>
+              <p className="font-semibold mb-1 text-amber-800">Account Pending Approval</p>
               <p className="text-amber-800">{pendingMessage}</p>
-              <p className="mt-1 text-xs text-amber-600">Please wait until an administrator approves your request.</p>
+              <p className="mt-1 text-xs text-amber-700">Please wait until an administrator approves your request.</p>
             </div>
           )}
 

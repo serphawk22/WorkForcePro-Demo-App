@@ -426,29 +426,27 @@ export default function ProjectsPage({
   ], []);
 
   const workspaceFilterOptions: DropdownOption[] = useMemo(() => [
-    { value: "__all", label: "All Workspaces", icon: <span className="text-muted-foreground">📁</span> },
+    { value: "__all", label: "All Workspaces" },
     ...workspaces.map((ws) => ({
       value: String(ws.id),
       label: ws.name,
-      icon: <span>{ws.icon || "📁"}</span>,
       description: ws.description || undefined,
     })),
   ], [workspaces]);
 
   const assigneeFilterOptions: DropdownOption[] = useMemo(() => [
-    { value: "__all", label: "All Users", icon: <span className="text-muted-foreground">👤</span> },
+    { value: "__all", label: "All Users" },
     ...employees.map((emp) => ({
       value: String(emp.id),
       label: emp.name,
       description: emp.role,
       avatarSrc: getProfilePictureUrl(emp.profile_picture),
       avatarFallback: emp.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-      icon: <span className="text-primary">{emp.role === "admin" ? "⭐" : "👤"}</span>,
     })),
   ], [employees]);
 
   const projectFilterOptions: DropdownOption[] = useMemo(() => [
-    { value: "__all", label: "All Projects", icon: <span className="text-muted-foreground">🗂️</span> },
+    { value: "__all", label: "All Projects" },
     { value: "__subtasks__", label: "Subtasks", icon: <ListTree className="h-3.5 w-3.5 text-primary" /> },
   ], []);
 
@@ -523,27 +521,27 @@ export default function ProjectsPage({
   }, [tasks, taskChildren]);
 
   const priorityOptions: DropdownOption[] = [
-    { value: "low", label: "Low", icon: <span className="text-green-400">🟢</span> },
-    { value: "medium", label: "Medium", icon: <span className="text-amber-400">🟡</span> },
-    { value: "high", label: "High", icon: <span className="text-red-400">🔴</span> },
+    { value: "low", label: "Low", icon: <span className="text-emerald-500">●</span> },
+    { value: "medium", label: "Medium", icon: <span className="text-amber-500">●</span> },
+    { value: "high", label: "High", icon: <span className="text-red-500">●</span> },
   ];
 
   const taskAdminStatusOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-zinc-500">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-500">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-500">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-500">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-emerald-500">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-500">●</span> },
   ];
 
   const employeeStatusOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-zinc-500">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-500">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-500">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-500">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-emerald-500">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-500">●</span> },
   ];
 
   const canEditTaskStatus = (task: Task) => {
@@ -565,19 +563,17 @@ export default function ProjectsPage({
     label: assigneeOptionLabel(emp),
     avatarSrc: getProfilePictureUrl(emp.profile_picture),
     avatarFallback: emp.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-    icon: <span className="text-primary">{emp.role === "admin" ? "⭐" : "👤"}</span>,
   })), [employees]);
 
   const workspaceSelectOptions: DropdownOption[] = useMemo(() => workspaces.map((ws) => ({
     value: String(ws.id),
     label: ws.name,
-    icon: <span>{ws.icon || "📁"}</span>,
   })), [workspaces]);
 
   const recurringFrequencyOptions: DropdownOption[] = [
-    { value: "daily", label: "Daily", icon: <span>🗓️</span> },
-    { value: "weekly", label: "Weekly", icon: <span>📅</span> },
-    { value: "monthly", label: "Monthly", icon: <span>🗓️</span> },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
   ];
 
   const toggleRepeatDay = (d: number) => {

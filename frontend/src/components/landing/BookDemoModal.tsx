@@ -195,7 +195,7 @@ export function BookDemoModal({
               </svg>
             </div>
             <h2 className="text-2xl font-bold mb-2 text-center">
-              🎉 Demo Request Sent!
+              Demo Request Sent!
             </h2>
             <p className="text-sm text-center max-w-xs opacity-70 leading-relaxed">
               Thank you for your interest in WorkForce Pro.

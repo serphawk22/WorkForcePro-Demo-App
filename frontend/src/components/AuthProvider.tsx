@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const refreshedUserIdRef = useRef<number | null>(null);
 
-  // 1️⃣ Check localStorage on app load
+  // Check localStorage on app load
   const checkAuth = useCallback(() => {
     console.log('[AUTH] Checking localStorage for existing session...');
     
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('auth-401', handle401);
   }, [router]);
 
-  // 🆕 Refresh user data from backend
+  // Refresh user data from backend
   const refreshUser = useCallback(async () => {
     console.log('[AUTH] Refreshing user profile from backend...');
     
@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchProfileAfterAuth();
   }, [isLoading, user, refreshUser]); // Run when loading completes
 
-  // 2️⃣ Login function - update state BEFORE redirect
+  // Login function - update state BEFORE redirect
   const login = async (email: string, password: string) => {
     console.log('[AUTH] Login attempt for:', email);
     setIsLoading(true);

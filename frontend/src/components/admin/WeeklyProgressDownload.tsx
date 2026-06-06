@@ -110,7 +110,7 @@ export function WeeklyProgressDownload({ isOpen, onClose }: WeeklyProgressDownlo
           {/* Info Box */}
           <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              💡 The report will include all employees&apos; weekly sheets for the selected week and be saved as a PDF file.
+              The report will include all employees&apos; weekly sheets for the selected week and be saved as a PDF file.
             </p>
           </div>
 

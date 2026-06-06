@@ -232,10 +232,20 @@ const LazyExpandableTaskCard = memo(
 
               {/* Metadata Row */}
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                {task.workspace_name && <span>📁 {task.workspace_name}</span>}
-                {dueDate && <span>📅 {dueDate}</span>}
-                {task.assignee_name && <span>👤 {task.assignee_name}</span>}
-                {task.progress && <span>⚡ {task.progress}% complete</span>}
+                {task.workspace_name && <span>{task.workspace_name}</span>}
+                {dueDate && (
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar size={12} />
+                    {dueDate}
+                  </span>
+                )}
+                {task.assignee_name && (
+                  <span className="inline-flex items-center gap-1">
+                    <User size={12} />
+                    {task.assignee_name}
+                  </span>
+                )}
+                {task.progress && <span>{task.progress}% complete</span>}
               </div>
             </div>
 

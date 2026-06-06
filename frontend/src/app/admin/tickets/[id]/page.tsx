@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, ArrowLeft, MessageCircle, Clock, AlertCircle } from "lucide-react";
+import { Loader2, ArrowLeft, MessageCircle, Clock, AlertCircle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import {
@@ -355,8 +355,9 @@ export default function TicketDetailPage() {
                           size="sm"
                           onClick={() => handleDeleteComment(comment.id)}
                           className="h-6 w-6 p-0"
+                          aria-label="Delete comment"
                         >
-                          ✕
+                          <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                       <p className="text-sm whitespace-pre-wrap">{comment.content}</p>

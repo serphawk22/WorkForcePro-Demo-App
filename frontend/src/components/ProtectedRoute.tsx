@@ -56,7 +56,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       hasRedirected: hasRedirected.current
     });
     
-    // 3️⃣ Don't interfere with login page
+    // Don't interfere with login page
     if (pathname === "/login") {
       console.log('[PROTECTED ROUTE] On login page, skipping checks');
       return;
@@ -82,7 +82,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       return;
     }
 
-    // 3️⃣ Check role permission
+    // Check role permission
     if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
       console.log(`[PROTECTED ROUTE] Role mismatch - User: ${userRole}, Allowed: ${allowedRoles.join(', ')}`);
       
@@ -101,7 +101,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     console.log('[PROTECTED ROUTE] Access granted ✓');
   }, [isLoading, isLoggedIn, user, allowedRoles, router, pathname, authLoadTimedOut, hasLocalSession]);
 
-  // 3️⃣ Show loading spinner while checking auth
+  // Show loading spinner while checking auth
   if (isLoading && !authLoadTimedOut) {
     console.log('[PROTECTED ROUTE] Rendering loading spinner');
     return (

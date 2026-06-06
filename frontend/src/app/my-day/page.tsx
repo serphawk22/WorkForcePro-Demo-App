@@ -43,19 +43,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 const overviewCardBase =
-  "admin-dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 backdrop-blur-xl shadow-[0_16px_45px_rgba(109,40,217,0.14)] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-violet-300/80 hover:shadow-[0_24px_70px_rgba(124,58,237,0.2)] dark:border-white/10 dark:bg-white/8 dark:from-transparent dark:via-transparent dark:to-transparent dark:shadow-[0_18px_60px_rgba(8,6,20,0.28)] dark:hover:shadow-[0_24px_80px_rgba(124,58,237,0.22)]";
-
-const overviewCardGlow =
-  "absolute inset-0 bg-gradient-to-br opacity-80 transition-opacity duration-300 group-hover:opacity-100";
-
-const overviewEdgeGlow = (
-  <>
-    <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/55 to-transparent dark:via-white/45" />
-    <div className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/45 to-transparent dark:via-white/35" />
-    <div className="pointer-events-none absolute inset-y-5 left-0 w-px bg-gradient-to-b from-transparent via-purple-400/45 to-transparent dark:via-white/35" />
-    <div className="pointer-events-none absolute inset-y-5 right-0 w-px bg-gradient-to-b from-transparent via-sky-400/45 to-transparent dark:via-white/35" />
-  </>
-);
+  "group relative overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:border-foreground/20 hover:shadow-sm";
 
 export default function MyDayPage() {
   const { user } = useAuth();
@@ -310,35 +298,29 @@ export default function MyDayPage() {
           </div>
         ) : (
           <div className="space-y-6 pb-8 animate-in fade-in duration-700">
-            {/* 1. Slim Hero Section */}
-            <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-violet-600 via-fuchsia-600 to-indigo-700 p-6 text-white shadow-2xl shadow-fuchsia-900/20 dark:border-white/5 dark:from-violet-950 dark:via-fuchsia-900 dark:to-slate-950">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.12),transparent_35%)]" />
+            <section className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 text-foreground">
               <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                 <div className="max-w-2xl space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/75 backdrop-blur-sm">
-                    <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.8)]" />
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     Personal Overview
                   </div>
-                  <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                    My Day,{" "}
-                    <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-orange-300 bg-clip-text text-transparent drop-shadow-[0_0_14px_rgba(251,191,36,0.45)]">
-                      {user?.name?.split(" ")[0]}
-                    </span>{" "}
-                    ✨
+                  <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl text-foreground">
+                    My Day, <span className="text-foreground">{user?.name?.split(" ")[0]}</span>
                   </h1>
-                  <p className="text-sm leading-6 text-white/80">
+                  <p className="text-sm leading-6 text-muted-foreground">
                     Stay focused and synchronize your workspace activities. Track deadlines, reflections, and personal growth projects in one unified view.
                   </p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-xl min-w-[140px]">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">Time</p>
-                    <p className="mt-1 text-xl font-bold text-white">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  <div className="rounded-xl border border-border bg-secondary px-4 py-3 min-w-[140px]">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Time</p>
+                    <p className="mt-1 text-xl font-semibold text-foreground">{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
-                  <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-xl min-w-[180px]">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">Today</p>
-                    <p className="mt-1 text-sm font-semibold text-white/90">{now.toLocaleDateString("en-US", { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                  <div className="rounded-xl border border-border bg-secondary px-4 py-3 min-w-[180px]">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Today</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{now.toLocaleDateString("en-US", { weekday: 'long', month: 'short', day: 'numeric' })}</p>
                   </div>
                 </div>
               </div>
@@ -351,8 +333,8 @@ export default function MyDayPage() {
                   key={card.title}
                   className={`${overviewCardBase} p-5 text-left`}
                 >
-                  <div className={`${overviewCardGlow} ${card.accent}`} />
-                  {overviewEdgeGlow}
+                  
+                  
                   <div className="relative flex h-full flex-col justify-between gap-5">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">My Summary</p>
@@ -370,8 +352,8 @@ export default function MyDayPage() {
             {/* 3. Snapshot Articles */}
             <section className="grid gap-4 xl:grid-cols-3">
               <article className={`${overviewCardBase} p-5`}>
-                <div className={`${overviewCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
-                {overviewEdgeGlow}
+                
+                
                 <div className="relative space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -407,8 +389,8 @@ export default function MyDayPage() {
               </article>
 
               <article className={`${overviewCardBase} p-5`}>
-                <div className={`${overviewCardGlow} from-violet-500/20 via-fuchsia-500/10 to-transparent dark:from-violet-500/20 dark:via-fuchsia-500/10`} />
-                {overviewEdgeGlow}
+                
+                
                 <div className="relative space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -450,8 +432,8 @@ export default function MyDayPage() {
               </article>
 
               <article className={`${overviewCardBase} p-5`}>
-                <div className={`${overviewCardGlow} from-sky-500/20 via-cyan-500/10 to-transparent dark:from-sky-500/20 dark:via-cyan-500/10`} />
-                {overviewEdgeGlow}
+                
+                
                 <div className="relative space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>

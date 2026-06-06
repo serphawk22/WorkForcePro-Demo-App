@@ -29,7 +29,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     keywords: ["happy", "happiness", "reflection", "journal", "sheet"],
     route: "/my-space/happy-sheet",
     priority_score: 100,
-    icon: "😊"
   },
   {
     id: "feat_2",
@@ -39,7 +38,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     keywords: ["lighthouse", "personal growth", "reflection", "task sheet"],
     route: "/my-space/task-sheet",
     priority_score: 95,
-    icon: "🗼"
   },
   {
     id: "feat_4",
@@ -49,7 +47,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     keywords: ["learning", "canvas", "education", "course"],
     route: "/my-space/learning-canvas",
     priority_score: 90,
-    icon: "📚"
   },
   {
     id: "feat_5",
@@ -59,7 +56,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     keywords: ["vision", "canvas", "goals", "long term"],
     route: "/my-space/visionary-canvas",
     priority_score: 90,
-    icon: "🎯"
   },
   {
     id: "feat_6",
@@ -69,7 +65,6 @@ const STATIC_FEATURES: ExtendedSearchResult[] = [
     keywords: ["dashboard", "home", "main"],
     route: "/employee-dashboard",
     priority_score: 85,
-    icon: "🏠"
   }
 ];
 
@@ -394,8 +389,8 @@ export default function GlobalSearch() {
                             onMouseEnter={() => setSelectedIndex(idx)}
                             className={`px-3 py-2 flex items-center cursor-pointer transition-colors rounded-md ${selectedIndex === idx ? "bg-primary/10" : "hover:bg-accent/50"}`}
                           >
-                            <div className="w-7 h-7 mr-3 ml-1 rounded-md bg-accent flex-shrink-0 flex items-center justify-center border border-border shadow-sm text-sm">
-                               {item.icon || "⚙️"}
+                            <div className="w-7 h-7 mr-3 ml-1 rounded-md bg-secondary flex-shrink-0 flex items-center justify-center border border-border text-[11px] font-semibold text-foreground">
+                               {item.title?.[0]?.toUpperCase()}
                             </div>
                             <div className="flex-1 overflow-hidden">
                               <div className="text-sm font-bold text-foreground truncate">{highlightMatch(item.title, debouncedQuery)}</div>
@@ -451,8 +446,8 @@ export default function GlobalSearch() {
                             onMouseEnter={() => setSelectedIndex(idx)}
                             className={`px-3 py-2 flex items-center cursor-pointer transition-colors rounded-md ${selectedIndex === idx ? "bg-primary/10" : "hover:bg-accent/50"}`}
                           >
-                            <div className="w-7 h-7 mr-3 ml-1 rounded-md text-lg flex-shrink-0 flex items-center justify-center bg-accent/50 border border-border shadow-sm">
-                               {item.icon || "📁"}
+                            <div className="w-7 h-7 mr-3 ml-1 rounded-md flex-shrink-0 flex items-center justify-center bg-secondary border border-border text-[11px] font-semibold text-foreground">
+                               {item.title?.[0]?.toUpperCase()}
                             </div>
                             <div className="flex-1 overflow-hidden">
                               <div className="text-sm font-medium text-foreground truncate">{highlightMatch(item.title, debouncedQuery)}</div>
