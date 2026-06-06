@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Mail, Lock, Eye, EyeClosed, ArrowRight, Loader2, ServerCrash } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Mail, Lock, Eye, EyeClosed, ArrowRight, Loader2 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
 
 export default function LoginPage() {
@@ -166,87 +165,94 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-page-shell">
+    <div className="bg-gradient-to-b from-white to-slate-100 min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-[420px]">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center shadow-primary">
-            <Zap size={20} className="text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">
-            WorkForce <span className="text-gradient-primary">Pro</span>
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <img
+            src="/Serp_Hwak_Logo-removebg-preview.png"
+            alt="SerpHawk Logo"
+            className="h-8 w-8 object-contain"
+          />
+          <span className="text-xl font-bold tracking-tight text-slate-800">
+            WorkForce Pro
           </span>
         </div>
 
         {/* Card */}
-        <div className="login-page-card">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/60 shadow-xl shadow-slate-200/50">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-card-foreground">Welcome back</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in to your account to continue</p>
+            <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
+            <p className="text-sm text-slate-500 mt-1">Sign in to your account to continue</p>
           </div>
 
           {serverWaking && (
-            <div className="mb-5 p-3 rounded-xl flex items-center gap-3 border border-amber-400/40 bg-amber-500/10 text-amber-300 text-xs">
-              <Loader2 size={14} className="animate-spin shrink-0" />
+            <div className="mb-5 p-3 rounded-xl flex items-center gap-3 border border-amber-200 bg-amber-50 text-amber-800 text-xs">
+              <Loader2 size={14} className="animate-spin shrink-0 text-amber-600" />
               <span>Server is waking up (free tier cold start). Login will work in ~20 seconds…</span>
             </div>
           )}
 
           {error && (
-            <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm text-center font-medium">
               {error}
             </div>
           )}
 
           {pendingMessage && (
-            <div className="mb-6 p-4 rounded-xl border-2 border-purple-400/60 bg-amber-50/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-sm">
-              <div className="flex items-center gap-2 font-semibold mb-1">
+            <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-sm">
+              <div className="flex items-center gap-2 font-semibold mb-1 text-amber-800">
                 <span className="text-lg">⏳</span>
                 Account Pending Approval
               </div>
-              <p>{pendingMessage}</p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Please wait until an administrator approves your request.</p>
+              <p className="text-amber-800">{pendingMessage}</p>
+              <p className="mt-1 text-xs text-amber-600">Please wait until an administrator approves your request.</p>
             </div>
           )}
-
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label className="login-page-label">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
+                <Mail size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="email"
-                  placeholder="you@company.com"
+                  name="email"
+                  id="email"
+                  autoComplete="email"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="login-page-input text-sm"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="login-page-label">Password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
               <div className="flex items-stretch gap-2">
                 <div className="relative flex-1">
-                  <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 dark:text-foreground/90 pointer-events-none" />
+                  <Lock size={16} className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    name="password"
+                    id="password"
+                    autoComplete="current-password"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="login-page-input text-sm"
+                    className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="login-page-password-toggle"
+                  className="w-11 h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center shrink-0 hover:bg-slate-100 transition"
                 >
                   {showPassword ? <Eye size={16} /> : <EyeClosed size={16} />}
                 </button>
@@ -255,18 +261,18 @@ export default function LoginPage() {
 
             {/* Remember & Forgot */}
             <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-muted-foreground cursor-pointer">
-                <input type="checkbox" className="rounded border-border accent-primary" />
+              <label className="flex items-center gap-2 text-slate-500 cursor-pointer">
+                <input type="checkbox" className="rounded border-slate-300 accent-slate-900" />
                 Remember me
               </label>
-              <Link href="#" className="text-primary hover:underline font-medium">Forgot password?</Link>
+              <Link href="#" className="text-slate-900 hover:underline font-medium">Forgot password?</Link>
             </div>
 
             {/* Submit */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="login-page-submit w-full inline-flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-11 rounded-full font-semibold text-sm text-white bg-slate-900 hover:bg-slate-800 transition shadow-lg shadow-slate-900/10 inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
@@ -281,15 +287,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline font-medium">Sign up</Link>
+            <Link href="/signup" className="text-slate-900 hover:underline font-medium">Sign up</Link>
           </div>
-        </div>
-
-        {/* Theme toggle */}
-        <div className="flex justify-center mt-6">
-          <ThemeToggle />
         </div>
       </div>
     </div>

@@ -47,11 +47,11 @@ export default function Home() {
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-gray-900 font-semibold">
+          <div className="flex items-center gap-3 text-gray-900 font-semibold">
             <img
               src="/Serp_Hwak_Logo-removebg-preview.png"
               alt="SerpHawk Logo"
-              className="h-6 w-6 object-contain"
+              className="h-8 w-8 object-contain"
             />
             WorkForce Pro
           </div>
