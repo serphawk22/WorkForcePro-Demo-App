@@ -111,7 +111,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* 🔷 TOP SECTION - Workforce Snapshot (Full Width) */}
+            {/* TOP SECTION - Workforce Snapshot */}
             <div className="glass-panel rounded-2xl p-8 glow-sm">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* 🔷 2-COLUMN GRID */}
+            {/* 2-COLUMN GRID */}
             <div className="space-y-6">
                 {/* Task Completion Overview */}
                 <div className="rounded-2xl glass-card glow-sm p-6">

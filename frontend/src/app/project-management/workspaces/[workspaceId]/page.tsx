@@ -20,15 +20,6 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 
-const WORKSPACE_ICON_OPTIONS = [
-  { value: "⭐", label: "Star" },
-  { value: "📁", label: "Folder" },
-  { value: "📊", label: "Analytics" },
-  { value: "📘", label: "Book" },
-  { value: "🧠", label: "Brain" },
-  { value: "⚙", label: "Settings" },
-];
-
 const WORKSPACE_COLOR_OPTIONS = [
   { value: "#7C3AED", label: "Purple" },
   { value: "#2563EB", label: "Blue" },
@@ -73,7 +64,7 @@ export default function WorkspaceProjectsPage() {
   const [workspaceForm, setWorkspaceForm] = useState({
     name: "",
     description: "",
-    icon: "📁",
+    icon: "",
     color: "#4F46E5",
   });
 
@@ -86,27 +77,26 @@ export default function WorkspaceProjectsPage() {
 
   const statusOptions: DropdownOption[] = [
     { value: "", label: "All Status", icon: <span className="text-muted-foreground">●</span> },
-    { value: "todo", label: "To Do", icon: <span className="text-purple-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-400">●</span> },
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">●</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">●</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-zinc-500">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-500">●</span> },
+    { value: "submitted", label: "Submitted", icon: <span className="text-yellow-500">●</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-500">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-emerald-500">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-500">●</span> },
   ];
 
   const ownerOptions: DropdownOption[] = [
-    { value: "", label: "All Owners", icon: <span className="text-muted-foreground">👥</span> },
+    { value: "", label: "All Owners" },
     ...users.map((u) => ({
       value: String(u.id),
       label: u.name,
       avatarSrc: getProfilePictureUrl(u.profile_picture),
       avatarFallback: u.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-      icon: <span>{u.role === "admin" ? "⭐" : "👤"}</span>,
     })),
   ];
 
   const recentOptions: DropdownOption[] = [
-    { value: "", label: "Any Activity", icon: <span className="text-muted-foreground">⏱️</span> },
+    { value: "", label: "Any Activity" },
     { value: "7", label: "Last 7 days", icon: <span>7</span> },
     { value: "14", label: "Last 14 days", icon: <span>14</span> },
     { value: "30", label: "Last 30 days", icon: <span>30</span> },
@@ -165,7 +155,7 @@ export default function WorkspaceProjectsPage() {
       setWorkspaceForm({
         name: workspaceProjectsRes.data.workspace.name,
         description: workspaceProjectsRes.data.workspace.description || "",
-        icon: workspaceProjectsRes.data.workspace.icon || "📁",
+        icon: workspaceProjectsRes.data.workspace.icon || "",
         color: workspaceProjectsRes.data.workspace.color || "#4F46E5",
       });
     }
@@ -248,7 +238,7 @@ export default function WorkspaceProjectsPage() {
         <>
           <button
             onClick={() => {
-              setWorkspaceForm({ name: "", description: "", icon: "📁", color: "#4F46E5" });
+              setWorkspaceForm({ name: "", description: "", icon: "", color: "#4F46E5" });
               setShowCreateWsModal(true);
             }}
             className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold border border-border text-foreground hover:bg-muted transition-colors"
@@ -307,12 +297,12 @@ export default function WorkspaceProjectsPage() {
         <div className="space-y-4">
           <section className="rounded-2xl border border-white/20 bg-gradient-to-r from-violet-600/90 via-fuchsia-600/90 to-indigo-700/90 p-5 text-white shadow-xl shadow-fuchsia-900/20">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-semibold border border-white/30 bg-white/10">
+              <span className="mt-0.5 inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-semibold border border-border bg-secondary text-foreground">
                 <span
-                  className="inline-flex h-2.5 w-2.5 rounded-full border border-white/20"
+                  className="inline-flex h-2.5 w-2.5 rounded-full"
                   style={{ backgroundColor: workspace.color || "#6b7280" }}
                 />
-                <span>{workspace.icon || "📁"}</span>
+                {workspace.icon && <span>{workspace.icon}</span>}
               </span>
               <div>
                 <h2 className="text-xl font-bold text-white">{workspace.name}</h2>
@@ -449,32 +439,13 @@ export default function WorkspaceProjectsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
-                      const active = workspaceForm.icon === iconOpt.value;
-                      return (
-                        <button
-                          key={iconOpt.value}
-                          type="button"
-                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
-                          title={iconOpt.label}
-                          className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
-                            active
-                              ? "border-primary bg-primary/15 text-primary shadow-sm"
-                              : "border-border bg-background/80 hover:border-primary/40"
-                          }`}
-                        >
-                          {iconOpt.value}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Label</label>
                   <input
                     value={workspaceForm.icon}
                     onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                    placeholder="Any emoji"
-                    className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                    placeholder="Optional short label"
+                    maxLength={3}
+                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
                   />
                 </div>
                 <div>
@@ -550,32 +521,13 @@ export default function WorkspaceProjectsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
-                      const active = workspaceForm.icon === iconOpt.value;
-                      return (
-                        <button
-                          key={iconOpt.value}
-                          type="button"
-                          onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
-                          title={iconOpt.label}
-                          className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
-                            active
-                              ? "border-primary bg-primary/15 text-primary shadow-sm"
-                              : "border-border bg-background/80 hover:border-primary/40"
-                          }`}
-                        >
-                          {iconOpt.value}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Label</label>
                   <input
                     value={workspaceForm.icon}
                     onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                    placeholder="Any emoji"
-                    className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                    placeholder="Optional short label"
+                    maxLength={3}
+                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
                   />
                 </div>
                 <div>

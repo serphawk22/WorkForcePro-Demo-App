@@ -1780,8 +1780,8 @@ export async function cancelLeaveRequest(
 export async function getAllLeaveRequests(
   statusFilter?: string
 ): Promise<ApiResponse<LeaveRequest[]>> {
-  const query = statusFilter ? `?status_filter=${statusFilter}` : "";
-  return apiFetch<LeaveRequest[]>(`/leave/${query}`);
+  const endpoint = statusFilter ? `/leave/?status_filter=${statusFilter}` : "/leave/";
+  return apiFetch<LeaveRequest[]>(endpoint);
 }
 
 /**

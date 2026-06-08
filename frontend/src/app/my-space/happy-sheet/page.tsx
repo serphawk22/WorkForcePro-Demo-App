@@ -41,7 +41,7 @@ const AVATAR_COLORS = [
 const getInitials = (name?: string | null) =>
   name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "?";
 const colorFor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
-const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const DEFAULT_REACTIONS: string[] = [];
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtLongDate = (date: string) =>
   new Date(date + "T00:00:00").toLocaleDateString(undefined, {
@@ -619,7 +619,7 @@ export default function HappySheetPage() {
                   <div key={item.entry_id} className="rounded-lg p-2 bg-white/70 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
                     <div className="text-xs font-semibold text-[#2B124C] dark:text-purple-100">{item.user_name}</div>
                     <div className="text-xs text-[#522B5B] dark:text-purple-200 truncate">{item.excerpt || "Shared a positive update"}</div>
-                    <div className="text-[11px] text-[#854F6C] dark:text-purple-300 mt-1">⭐ {item.appreciation_count} Appreciations</div>
+                    <div className="text-[11px] text-[#854F6C] dark:text-purple-300 mt-1">{item.appreciation_count} Appreciations</div>
                   </div>
                 ))}
               </div>
@@ -635,8 +635,8 @@ export default function HappySheetPage() {
                 <div className="space-y-1 text-xs">
                   {weeklyLeaderboard.map((item, idx) => (
                     <div key={item.user_id} className="flex items-center justify-between text-[#522B5B] dark:text-purple-200">
-                      <span>{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {item.user_name}</span>
-                      <span>⭐ {item.appreciation_count}</span>
+                      <span>{idx + 1}. {item.user_name}</span>
+                      <span>{item.appreciation_count}</span>
                     </div>
                   ))}
                 </div>
@@ -914,7 +914,7 @@ export default function HappySheetPage() {
                               setCustomReactionOpenEntryId(null);
                             }
                           }}
-                          placeholder="😀"
+                          placeholder="Reaction"
                           className="h-7 w-16 px-2 rounded-md text-sm lighthouse-input-white"
                         />
                       )}
@@ -923,7 +923,7 @@ export default function HappySheetPage() {
                     <div className="space-y-2">
                       <div className="rounded-md p-2 bg-white/80 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="text-xs text-[#522B5B] dark:text-purple-200">⭐ {(appreciationsByEntry[entry.id] || []).length} Appreciations</div>
+                          <div className="text-xs text-[#522B5B] dark:text-purple-200 inline-flex items-center gap-1"><Star size={12} /> {(appreciationsByEntry[entry.id] || []).length} Appreciations</div>
                           <button
                             type="button"
                             className="h-7 px-2 rounded-md border border-slate-300/70 dark:border-white/20 text-xs text-[#522B5B] dark:text-purple-200 flex items-center gap-1 hover:bg-slate-200/70 dark:hover:bg-white/15"
@@ -963,7 +963,7 @@ export default function HappySheetPage() {
                           <div className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-1">
                             {(appreciationsByEntry[entry.id] || []).map((a) => (
                               <div key={a.id} className="text-xs text-[#522B5B] dark:text-purple-200">
-                                <span className="font-semibold">⭐ Appreciated by {a.from_user_name || a.from_user_email || `User #${a.from_user_id}`}</span>
+                                <span className="font-semibold">Appreciated by {a.from_user_name || a.from_user_email || `User #${a.from_user_id}`}</span>
                                 <div className="text-[#854F6C] dark:text-purple-300">&quot;{a.message}&quot;</div>
                               </div>
                             ))}

@@ -149,6 +149,17 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
+        # User columns
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS date_joined DATE',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url VARCHAR(255)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(255)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(100)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS base_salary DOUBLE PRECISION',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER',
+        'ALTER TABLE users ALTER COLUMN password DROP NOT NULL',
         # Multi-tenant org fields
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id INTEGER',
         'ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS organization_id INTEGER',

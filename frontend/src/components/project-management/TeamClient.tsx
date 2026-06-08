@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { AlertCircle, FolderKanban } from "lucide-react";
 import {
   getWorkspaces,
   getWorkspaceProjects,
@@ -251,13 +252,11 @@ export default function TeamClient() {
   if (globalError) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center text-3xl">
-          ⚠️
-        </div>
-        <p className="text-red-400 font-medium">{globalError}</p>
+        <AlertCircle className="h-10 w-10 text-destructive" />
+        <p className="text-destructive font-medium">{globalError}</p>
         <button
           onClick={fetchData}
-          className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:opacity-90 transition"
+          className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
         >
           Retry
         </button>
@@ -268,9 +267,7 @@ export default function TeamClient() {
   if (workspaceData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-        <div className="w-20 h-20 rounded-3xl bg-purple-500/10 flex items-center justify-center text-4xl">
-          🗂️
-        </div>
+        <FolderKanban className="h-12 w-12 text-muted-foreground" />
         <h3 className="text-lg font-bold text-foreground">No workspaces yet</h3>
         <p className="text-sm text-muted-foreground max-w-sm">
           Create a workspace first, then your team structure will appear here.
@@ -303,7 +300,7 @@ export default function TeamClient() {
             <option value="all">All Workspaces</option>
             {allWorkspaces.map((ws) => (
               <option key={ws.id} value={String(ws.id)}>
-                {ws.icon} {ws.name}
+                {ws.name}
               </option>
             ))}
           </select>
@@ -330,8 +327,11 @@ export default function TeamClient() {
                   onClick={() => toggleWorkspace(workspace.id)}
                   className="w-full flex items-center gap-3 px-5 py-4 hover:bg-white/5 transition text-left"
                 >
-                  <span className="text-2xl flex-shrink-0">
-                    {workspace.icon || "📁"}
+                  <span
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold text-white flex-shrink-0"
+                    style={{ backgroundColor: workspace.color || "#6b7280" }}
+                  >
+                    {workspace.name?.[0]?.toUpperCase() || "W"}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -882,13 +882,13 @@ function AssignTaskSlideOver({
               <button
                 key={t}
                 onClick={() => setFormType(t)}
-                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
                   formType === t
-                    ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {t === "task" ? "🎯 Assign Task" : "📋 Daily Update"}
+                {t === "task" ? "Assign Task" : "Daily Update"}
               </button>
             ))}
           </div>
@@ -1029,8 +1029,7 @@ function AssignTaskSlideOver({
           </div>
 
           {/* Project context chip */}
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-border/50">
-            <span className="text-lg">📌</span>
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-secondary border border-border">
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Under project</p>
               <p className="text-sm font-semibold text-foreground truncate">
@@ -1048,10 +1047,8 @@ function AssignTaskSlideOver({
 
           {/* Success */}
           {success && (
-            <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-400 flex items-center gap-2">
-              <span>✅</span>
-              {formType === "update" ? "Update logged!" : "Task assigned!"}{" "}
-              Closing…
+            <div className="px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
+              {formType === "update" ? "Update logged! Closing…" : "Task assigned! Closing…"}
             </div>
           )}
         </form>
@@ -1076,9 +1073,7 @@ function AssignTaskSlideOver({
                 Saving…
               </>
             ) : (
-              <>
-                {formType === "update" ? "📋 Log Update" : "🎯 Assign Task"}
-              </>
+              <>{formType === "update" ? "Log Update" : "Assign Task"}</>
             )}
           </button>
         </div>

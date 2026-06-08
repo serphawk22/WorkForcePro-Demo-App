@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const refreshedUserIdRef = useRef<number | null>(null);
 
-  // 1️⃣ Check localStorage on app load
+  // Check localStorage on app load
   const checkAuth = useCallback(() => {
     console.log('[AUTH] Checking localStorage for existing session...');
     
@@ -89,18 +89,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Role:', role || 'none');
       
       if (token && role && userId && userEmail) {
-        const validRole = normalizeUserRole(role);
-        
-        // Restore user from localStorage
-        const restoredUser: User = {
-          id: parseInt(userId),
-          email: userEmail,
-          role: validRole,
-          name: userName || userEmail,
-        };
-        
-        console.log('[AUTH] Restored user from localStorage:', restoredUser.email);
-        setUser(restoredUser);
+        const parsedId = parseInt(userId, 10);
+        if (Number.isNaN(parsedId)) {
+          console.warn('[AUTH] Invalid user_id in localStorage, clearing session');
+          setUser(null);
+        } else {
+          const validRole = normalizeUserRole(role);
+          const restoredUser: User = {
+            id: parsedId,
+            email: userEmail,
+            role: validRole,
+            name: userName || userEmail,
+          };
+          console.log('[AUTH] Restored user from localStorage:', restoredUser.email);
+          setUser(restoredUser);
+        }
       } else {
         console.log('[AUTH] No valid session in localStorage');
         setUser(null);
@@ -138,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('auth-401', handle401);
   }, [router]);
 
-  // 🆕 Refresh user data from backend
+  // Refresh user data from backend
   const refreshUser = useCallback(async () => {
     console.log('[AUTH] Refreshing user profile from backend...');
     
@@ -197,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchProfileAfterAuth();
   }, [isLoading, user, refreshUser]); // Run when loading completes
 
-  // 2️⃣ Login function - update state BEFORE redirect
+  // Login function - update state BEFORE redirect
   const login = async (email: string, password: string) => {
     console.log('[AUTH] Login attempt for:', email);
     setIsLoading(true);

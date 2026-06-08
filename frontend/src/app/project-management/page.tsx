@@ -8,15 +8,6 @@ import { getAllTasks, getWorkspaces, Task, Workspace, createWorkspace, deleteWor
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 
-const WORKSPACE_ICON_OPTIONS = [
-  { value: "⭐", label: "Star" },
-  { value: "📁", label: "Folder" },
-  { value: "📊", label: "Analytics" },
-  { value: "📘", label: "Book" },
-  { value: "🧠", label: "Brain" },
-  { value: "⚙", label: "Settings" },
-];
-
 const WORKSPACE_COLOR_OPTIONS = [
   { value: "#7C3AED", label: "Purple" },
   { value: "#2563EB", label: "Blue" },
@@ -43,7 +34,7 @@ export default function ProjectManagementGlobalPage() {
   const [workspaceForm, setWorkspaceForm] = useState({
     name: "",
     description: "",
-    icon: "📁",
+    icon: "",
     color: "#4F46E5",
   });
 
@@ -86,7 +77,7 @@ export default function ProjectManagementGlobalPage() {
     } else if (result.data) {
       toast.success("Workspace created");
       setShowCreateWsModal(false);
-      setWorkspaceForm({ name: "", description: "", icon: "📁", color: "#4F46E5" });
+      setWorkspaceForm({ name: "", description: "", icon: "", color: "#4F46E5" });
       window.dispatchEvent(new Event("workspaces-updated"));
     }
     setSavingWorkspace(false);
@@ -110,7 +101,7 @@ export default function ProjectManagementGlobalPage() {
       toast.success("Workspace updated");
       setShowEditWsModal(false);
       setEditingWorkspace(null);
-      setWorkspaceForm({ name: "", description: "", icon: "📁", color: "#4F46E5" });
+      setWorkspaceForm({ name: "", description: "", icon: "", color: "#4F46E5" });
       window.dispatchEvent(new Event("workspaces-updated"));
     }
     setSavingWorkspace(false);
@@ -132,7 +123,7 @@ export default function ProjectManagementGlobalPage() {
   const headerAction = isAdmin && (
     <button
       onClick={() => {
-        setWorkspaceForm({ name: "", description: "", icon: "📁", color: "#4F46E5" });
+        setWorkspaceForm({ name: "", description: "", icon: "", color: "#4F46E5" });
         setShowCreateWsModal(true);
       }}
       className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
@@ -287,7 +278,7 @@ export default function ProjectManagementGlobalPage() {
                 {isAdmin && (
                   <button
                     onClick={() => {
-                      setWorkspaceForm({ name: "", description: "", icon: "📁", color: "#4F46E5" });
+                      setWorkspaceForm({ name: "", description: "", icon: "", color: "#4F46E5" });
                       setShowCreateWsModal(true);
                     }}
                     className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold border border-border text-foreground hover:bg-muted transition-colors"
@@ -305,14 +296,18 @@ export default function ProjectManagementGlobalPage() {
                     <div
                       key={ws.id}
                       onClick={() => router.push(`/project-management/workspaces/${ws.id}`)}
-                      className="group relative cursor-pointer overflow-hidden rounded-xl border border-white/20 bg-gradient-to-br from-violet-500/10 via-fuchsia-500/5 to-transparent p-3 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-700/20 hover:border-primary/40"
+                      className="group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-card p-3 transition-all duration-200 hover:border-foreground/20 hover:shadow-sm"
                     >
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_48%)] opacity-70 transition-opacity duration-300 group-hover:opacity-100" />
                       <div className="relative">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">{ws.icon || "📁"}</span>
+                              <span
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold text-white"
+                                style={{ backgroundColor: ws.color || "#6b7280" }}
+                              >
+                                {ws.name?.[0]?.toUpperCase() || "W"}
+                              </span>
                               <h4 className="font-semibold text-sm text-foreground line-clamp-1">{ws.name}</h4>
                             </div>
                             {ws.description && (
@@ -328,7 +323,7 @@ export default function ProjectManagementGlobalPage() {
                                   setWorkspaceForm({
                                     name: ws.name,
                                     description: ws.description || "",
-                                    icon: ws.icon || "📁",
+                                    icon: ws.icon || "",
                                     color: ws.color || "#4F46E5",
                                   });
                                   setShowEditWsModal(true);
@@ -360,14 +355,14 @@ export default function ProjectManagementGlobalPage() {
                           Last Activity: {lastActivity ? lastActivity.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "-"}
                         </p>
 
-                        <div className="mt-3 rounded-lg border border-border/70 bg-background/60 p-2">
+                        <div className="mt-3 rounded-lg border border-border bg-secondary/40 p-2">
                           <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
                             <span>Tasks Completed</span>
                             <span className="font-semibold text-foreground">{completionRate}%</span>
                           </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/70">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                             <div
-                              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-500"
+                              className="h-full rounded-full bg-foreground transition-all duration-500"
                               style={{ width: `${completionRate}%` }}
                             />
                           </div>
@@ -379,7 +374,7 @@ export default function ProjectManagementGlobalPage() {
                             e.stopPropagation();
                             router.push(`/project-management/workspaces/${ws.id}`);
                           }}
-                          className="mt-3 w-full rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-left text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                          className="mt-3 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-left text-xs font-semibold text-foreground transition-colors hover:bg-secondary/70"
                         >
                           Open Workspace
                         </button>
@@ -390,7 +385,7 @@ export default function ProjectManagementGlobalPage() {
               )}
             </section>
 
-          <section className="rounded-xl border border-border bg-card p-4 shadow-sm dark:shadow-[0_0_20px_rgba(168,85,247,0.12)]">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
               <Activity size={15} className="text-primary" />
               Recent Activity Across Workspaces
@@ -498,32 +493,13 @@ export default function ProjectManagementGlobalPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
-                          const active = workspaceForm.icon === iconOpt.value;
-                          return (
-                            <button
-                              key={iconOpt.value}
-                              type="button"
-                              onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
-                              title={iconOpt.label}
-                              className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
-                                active
-                                  ? "border-primary bg-primary/15 text-primary shadow-sm"
-                                  : "border-border bg-background/80 hover:border-primary/40"
-                              }`}
-                            >
-                              {iconOpt.value}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Label</label>
                       <input
                         value={workspaceForm.icon}
                         onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                        placeholder="Any emoji"
-                        className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                        placeholder="Optional short label"
+                        maxLength={3}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
                       />
                     </div>
                     <div>
@@ -599,32 +575,13 @@ export default function ProjectManagementGlobalPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Icon</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {WORKSPACE_ICON_OPTIONS.map((iconOpt) => {
-                          const active = workspaceForm.icon === iconOpt.value;
-                          return (
-                            <button
-                              key={iconOpt.value}
-                              type="button"
-                              onClick={() => setWorkspaceForm((prev) => ({ ...prev, icon: iconOpt.value }))}
-                              title={iconOpt.label}
-                              className={`rounded-lg border px-2 py-2 text-base transition-all duration-200 hover:-translate-y-0.5 ${
-                                active
-                                  ? "border-primary bg-primary/15 text-primary shadow-sm"
-                                  : "border-border bg-background/80 hover:border-primary/40"
-                              }`}
-                            >
-                              {iconOpt.value}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace Label</label>
                       <input
                         value={workspaceForm.icon}
                         onChange={(e) => setWorkspaceForm((prev) => ({ ...prev, icon: e.target.value }))}
-                        placeholder="Any emoji"
-                        className="mt-2 w-full rounded-lg border border-border bg-background/85 px-2.5 py-1.5 text-sm"
+                        placeholder="Optional short label"
+                        maxLength={3}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
                       />
                     </div>
                     <div>
