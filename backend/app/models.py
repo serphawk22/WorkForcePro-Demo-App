@@ -372,6 +372,8 @@ class TaskCreate(TaskBase):
     recurrence_start_date: Optional[DateType] = None
     recurrence_end_date: Optional[DateType] = None
     monthly_day: Optional[int] = None
+    is_starred: Optional[bool] = None
+    is_pinned: Optional[bool] = None
 
 
 class TaskUpdate(SQLModel):
@@ -403,6 +405,44 @@ class TaskUpdate(SQLModel):
     is_starred: Optional[bool] = None
     is_pinned: Optional[bool] = None
 
+
+# ==================== TASK OWNER MODELS (Multiple Owners Support) ====================
+
+class TaskOwner(SQLModel, table=True):
+    """Junction table for multiple project/task owners - many-to-many relationship."""
+    __tablename__ = "task_owners"
+    __table_args__ = (UniqueConstraint("task_id", "user_id", name="unique_task_owner"),)
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="tasks.id", index=True, ondelete="CASCADE")
+    user_id: int = Field(foreign_key="users.id", index=True, ondelete="CASCADE")
+    is_primary: bool = Field(default=False)  # Mark primary owner
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TaskOwnerCreate(SQLModel):
+    """Schema for adding an owner to a task."""
+    user_id: int
+    is_primary: Optional[bool] = False
+
+
+class TaskOwnerRead(SQLModel):
+    """Schema for reading task owner data."""
+    id: int
+    task_id: int
+    user_id: int
+    is_primary: bool
+    created_at: datetime
+
+
+class TaskOwnerWithUser(TaskOwnerRead):
+    """Task owner with user info."""
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_role: Optional[str] = None
+
+
+# ==================== TASK READ SCHEMAS ====================
 
 class TaskRead(TaskBase):
     """Schema for reading task data."""
@@ -453,6 +493,7 @@ class TaskWithAssignee(TaskRead):
     progress: Optional[int] = None  # Task completion progress (0-100)
     subtask_count: Optional[int] = None
     comments: Optional[List[str]] = None
+    owners: Optional[List["TaskOwnerWithUser"]] = None  # Multiple project owners
 
 
 
@@ -912,6 +953,46 @@ class TaskSheetWithUser(TaskSheetRead):
     user_name: Optional[str] = None
     user_email: Optional[str] = None
     profile_picture: Optional[str] = None
+
+
+class Team(SQLModel, table=True):
+    """Team structure for Lighthouse / My Team exports."""
+    __tablename__ = "teams"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    name: str = Field(index=True, min_length=1, max_length=200)
+    project_name: Optional[str] = Field(default=None, max_length=300)
+    lead_id: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TeamMember(SQLModel, table=True):
+    """Team member mapping for Lighthouse teams."""
+    __tablename__ = "team_members"
+    __table_args__ = (UniqueConstraint("team_id", "user_id"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="teams.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TeamCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=200)
+    project_name: Optional[str] = Field(default=None, max_length=300)
+    member_ids: Optional[List[int]] = None
+
+
+class TeamRead(SQLModel):
+    id: int
+    organization_id: Optional[int] = None
+    name: str
+    project_name: Optional[str] = None
+    lead_id: int
+    lead_name: Optional[str] = None
+    member_ids: List[int] = Field(default_factory=list)
+    created_at: datetime
 
 
 # ==================== ADMIN QUERY/TICKET MODELS ====================

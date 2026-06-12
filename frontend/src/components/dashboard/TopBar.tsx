@@ -18,12 +18,6 @@ export default function TopBar() {
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
 
-  // Debug: Log when user changes
-  useEffect(() => {
-    console.log('[TopBar] User state changed:', user?.email || 'null');
-    console.log('[TopBar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
-  }, [user]);
-
   useEffect(() => {
     setMounted(true);
     const updateTime = () => {
@@ -40,9 +34,7 @@ export default function TopBar() {
 
   const getProfilePictureUrl = () => {
     if (!user?.profile_picture) return null;
-    // If it's a data URI (base64), return it directly
     if (user.profile_picture.startsWith("data:")) return user.profile_picture;
-    // Otherwise treat as URL
     if (user.profile_picture.startsWith("http")) return user.profile_picture;
     return `${getApiBaseUrl()}${user.profile_picture}`;
   };
@@ -50,28 +42,24 @@ export default function TopBar() {
   const profilePictureUrl = getProfilePictureUrl();
 
   return (
-    <div className="flex items-center px-4 pt-2.5 pb-1 w-full">
-      {/* Left Spacer for perfect flex centering */}
+    <div className="flex items-center px-4 pt-3 pb-1 w-full">
       <div className="flex-1 hidden md:block" />
 
-      {/* Gradient border wrapper — centered pill */}
-      <div className="topbar-pill-border w-full max-w-[820px]">
-        <header className="topbar-pill-inner flex items-center justify-between px-6 py-3">
-          {/* Left: time + date */}
+      <div className="w-full max-w-[820px] rounded-full border border-border bg-card">
+        <header className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
             <span className="font-semibold text-foreground text-sm tabular-nums tracking-tight">{time}</span>
-            <span className="hidden sm:block w-px h-3.5 bg-border/50" />
+            <span className="hidden sm:block w-px h-3.5 bg-border" />
             <span className="hidden sm:block text-[10px] tracking-widest text-muted-foreground font-medium">{date}</span>
           </div>
 
-
-          {/* Right: actions */}
           <div className="flex items-center gap-0.5">
             {mounted && (
               <button
                 onClick={() => setTheme(isDark ? "light" : "dark")}
                 className="topbar-icon-btn"
                 title={isDark ? "Switch to light" : "Switch to dark"}
+                aria-label={isDark ? "Switch to light" : "Switch to dark"}
               >
                 {isDark ? <Sun size={15} /> : <Moon size={15} />}
               </button>
@@ -81,6 +69,7 @@ export default function TopBar() {
               onClick={() => router.push("/profile")}
               className="topbar-icon-btn"
               title="Profile"
+              aria-label="Open profile"
             >
               {profilePictureUrl ? (
                 <Image
@@ -92,7 +81,7 @@ export default function TopBar() {
                   unoptimized
                 />
               ) : (
-                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-semibold">
+                <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-foreground text-[10px] font-semibold">
                   {user?.name?.[0] || <User size={14} />}
                 </div>
               )}
@@ -101,6 +90,7 @@ export default function TopBar() {
               onClick={logout}
               className="topbar-icon-btn hover:!text-destructive hover:!bg-destructive/10"
               title="Logout"
+              aria-label="Logout"
             >
               <LogOut size={15} />
             </button>
@@ -108,7 +98,6 @@ export default function TopBar() {
         </header>
       </div>
 
-      {/* Right Flank: Floating Global Search Button */}
       <div className="flex-1 hidden md:flex justify-end pr-2 md:pr-4">
         <GlobalSearch />
       </div>

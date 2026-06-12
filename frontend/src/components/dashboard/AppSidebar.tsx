@@ -14,47 +14,16 @@ import {
   UserCheck,
   LogOut,
   Pin,
-  ClipboardList,
   ChevronDown,
   ChevronRight,
   Menu,
   PanelLeftClose,
   Zap,
   AlertCircle,
+  Compass,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
-
-function LighthouseNavIcon({ size = 18, className }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M32 5 23.5 10h17z" fill="currentColor" />
-      <rect x="26" y="10" width="12" height="9" rx="1.5" fill="currentColor" />
-      <rect x="26.8" y="10.8" width="3.2" height="6.8" rx="0.7" fill="hsl(var(--background))" opacity="0.95" />
-      <rect x="33.9" y="10.8" width="3.2" height="6.8" rx="0.7" fill="hsl(var(--background))" opacity="0.95" />
-
-      <path d="M18 16.5 7 19.5 18 20.8 25.5 18.9z" fill="currentColor" opacity="0.18" />
-      <path d="M46 16.5 57 19.5 46 20.8 38.5 18.9z" fill="currentColor" opacity="0.18" />
-
-      <path d="M24.7 19h14.6l1.3 3.8H23.4z" fill="currentColor" />
-      <path d="M25.8 22.8h12.4l2.2 18.5H23.6z" fill="currentColor" />
-
-      <path d="M29.4 27.1h5.2v3.3h-5.2z" fill="hsl(var(--background))" />
-      <path d="M29.8 34h4.4v3h-4.4z" fill="hsl(var(--background))" />
-      <path d="M29.8 41.3v-3.1a2.2 2.2 0 0 1 4.4 0v3.1z" fill="hsl(var(--background))" />
-
-      <path d="M9 44.2c10.1-1.9 18.1-1.7 24.1.8 7.7 3.2 15.8 3.2 22.3 1.1-2.5 4.1-7.7 6.4-14.6 6.4-3.4 0-6.7-.6-9.8-1.8-3.7-1.4-8.8-2.5-15.6-1.4-2.9.5-5.4-1.8-6.4-5.1z" fill="currentColor" />
-      <path d="M9.4 48.3c6.1-.6 10.8.2 14.5 1.6 5.1 2 10.6 2.6 16 1.9-3.1 3.8-8.4 6.2-14.5 6.2-7.2 0-13.2-3.3-16-8.1z" fill="currentColor" />
-    </svg>
-  );
-}
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
@@ -66,7 +35,7 @@ const adminLinks = [
   { label: "Ticket Management", icon: AlertCircle, path: "/admin/queries" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
-  { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },
+  { label: "The Lighthouse", icon: Compass, path: "/my-space/task-sheet" },
 ];
 
 const employeeLinks = [
@@ -74,7 +43,7 @@ const employeeLinks = [
   { label: "My Day", icon: Zap, path: "/my-day" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
-  { label: "The Lighthouse", icon: LighthouseNavIcon, path: "/my-space/task-sheet" },
+  { label: "The Lighthouse", icon: Compass, path: "/my-space/task-sheet" },
 ];
 
 interface SidebarProps {
@@ -113,20 +82,21 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     }
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    if (typeof window === "undefined") return 280;
+    if (typeof window === "undefined") return 260;
     try {
       const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
       const parsed = raw ? Number(raw) : NaN;
       if (Number.isFinite(parsed)) {
-        return Math.min(360, Math.max(220, parsed));
+        return Math.min(340, Math.max(220, parsed));
       }
     } catch {}
-    return 280;
+    return 260;
   });
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(72);
+  const hoverDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { user, logout } = useAuth();
   const links = role === "admin" ? adminLinks : employeeLinks;
   const [pendingCount, setPendingCount] = useState(0);
@@ -140,7 +110,6 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     ? compactSidebarWidth
     : (isOpen ? sidebarWidth : 72);
 
-  // Persist pinned state across route navigation (prevents collapse on menu click).
   useEffect(() => {
     try {
       localStorage.setItem(PIN_KEY, String(isPinned));
@@ -152,11 +121,6 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
     } catch {}
   }, [sidebarWidth]);
-
-  useEffect(() => {
-    console.log('[AppSidebar] User state changed:', user?.email || 'null');
-    console.log('[AppSidebar] Profile picture:', user?.profile_picture ? '✓ Present' : '✗ Missing');
-  }, [user]);
 
   useEffect(() => {
     if (role !== "admin") return;
@@ -229,7 +193,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingRef.current) return;
       const delta = e.clientX - dragStartX.current;
-      const newWidth = Math.min(360, Math.max(220, dragStartWidth.current + delta));
+      const newWidth = Math.min(340, Math.max(220, dragStartWidth.current + delta));
       setSidebarWidth(newWidth);
     };
     const handleMouseUp = () => {
@@ -244,14 +208,30 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
     };
   }, []);
 
+  useEffect(() => () => {
+    if (hoverDelayRef.current) clearTimeout(hoverDelayRef.current);
+  }, []);
+
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     if (isCompactViewport) return;
     dragStartX.current = e.clientX;
-    dragStartWidth.current = isOpen ? sidebarWidth : 280;
+    dragStartWidth.current = isOpen ? sidebarWidth : 260;
     isDraggingRef.current = true;
     setIsDragging(true);
     e.preventDefault();
   }, [isCompactViewport, isOpen, sidebarWidth]);
+
+  const handleMouseEnter = useCallback(() => {
+    if (isPinned || isCompactViewport) return;
+    if (hoverDelayRef.current) clearTimeout(hoverDelayRef.current);
+    hoverDelayRef.current = setTimeout(() => setIsHovered(true), 80);
+  }, [isPinned, isCompactViewport]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (isPinned || isCompactViewport) return;
+    if (hoverDelayRef.current) clearTimeout(hoverDelayRef.current);
+    hoverDelayRef.current = setTimeout(() => setIsHovered(false), 120);
+  }, [isPinned, isCompactViewport]);
 
   const handleCompactNavigate = () => {
     if (isCompactViewport) {
@@ -274,6 +254,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   };
 
   const profilePictureUrl = getProfilePictureUrl();
+  const widthTransition = isDragging
+    ? "none"
+    : "width 220ms cubic-bezier(0.4, 0, 0.2, 1)";
 
   return (
     <>
@@ -282,7 +265,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
           type="button"
           aria-label={isCompactOpen ? "Close navigation" : "Open navigation"}
           onClick={() => setIsCompactOpen((prev) => !prev)}
-          className="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar/90 text-sidebar-foreground shadow-lg backdrop-blur-md xl:hidden"
+          className="fixed left-3 top-3 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm xl:hidden"
           style={{ left: "max(0.75rem, env(safe-area-inset-left))" }}
         >
           {isCompactOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
@@ -294,59 +277,62 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
           type="button"
           aria-label="Close sidebar overlay"
           onClick={() => setIsCompactOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] xl:hidden"
+          className="fixed inset-0 z-30 bg-black/40 xl:hidden"
         />
       )}
 
       <aside
-      onMouseEnter={() => { if (!isPinned) setIsHovered(true); }}
-      onMouseLeave={() => { if (!isPinned) setIsHovered(false); }}
-      className={`glass-sidebar fixed left-0 top-0 h-dvh flex flex-col z-40 ${
-        isCompactViewport ? (isCompactOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
-      } ${
-        isDragging ? "" : "transition-[width] duration-300 ease-in-out"
-      } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
-      style={{ width: effectiveWidth, left: "env(safe-area-inset-left)" }}
-    >
-      {/* Logo */}
+        data-open={isOpen ? "true" : "false"}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`glass-sidebar fixed left-0 top-0 h-dvh flex flex-col z-40 ${
+          isCompactViewport ? (isCompactOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
+        } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
+        style={{
+          width: effectiveWidth,
+          left: "env(safe-area-inset-left)",
+          transition: isCompactViewport ? undefined : widthTransition,
+          willChange: "width",
+        }}
+      >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-          W
-        </div>
-        <span className={`text-sidebar-foreground font-semibold text-base tracking-tight whitespace-nowrap transition-all duration-200 ${
-          isOpen ? "opacity-100 max-w-[160px]" : "opacity-0 max-w-0"
-        }`}>
-          WorkForce Pro
-        </span>
-        {/* Pin button — visible when sidebar is open */}
-        <button
-          onClick={() => setIsPinned((prev) => !prev)}
-          title={isPinned ? "Unpin sidebar" : "Pin sidebar open"}
-          className={`ml-auto shrink-0 rounded p-1 transition-all duration-200 ${
-            isOpen
-              ? "opacity-100 pointer-events-auto"
-              : "opacity-0 pointer-events-none"
-          } ${
-            isPinned
-              ? "text-sidebar-primary"
-              : "text-sidebar-foreground/40 hover:text-sidebar-foreground"
-          }`}
-        >
-          <Pin size={13} className={`transition-transform duration-200 ${isPinned ? "-rotate-45" : "rotate-0"}`} />
-        </button>
+        <img
+          src="/Serp_Hwak_Logo-removebg-preview.png"
+          alt="SerpHawk Logo"
+          className="h-8 w-8 shrink-0 object-contain"
+        />
+        {isOpen && (
+          <span className="text-sidebar-foreground font-semibold text-base tracking-tight whitespace-nowrap">
+            WorkForce Pro
+          </span>
+        )}
+        {isOpen && (
+          <button
+            onClick={() => setIsPinned((prev) => !prev)}
+            title={isPinned ? "Unpin sidebar" : "Pin sidebar open"}
+            className={`ml-auto shrink-0 rounded p-1 ${
+              isPinned
+                ? "text-sidebar-primary"
+                : "text-sidebar-foreground/50 hover:text-sidebar-foreground"
+            }`}
+            aria-label={isPinned ? "Unpin sidebar" : "Pin sidebar open"}
+          >
+            <Pin size={13} className={isPinned ? "-rotate-45" : ""} />
+          </button>
+        )}
       </div>
 
       {/* Section label */}
-      <div className="px-4 pt-6 pb-2 overflow-hidden">
-        <span className={`text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/50 whitespace-nowrap transition-all duration-200 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}>
-          {role === "admin" ? "Admin Controls" : "Employee Menu"}
-        </span>
-      </div>
+      {isOpen && (
+        <div className="px-4 pt-5 pb-2 overflow-hidden">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-sidebar-foreground/50 whitespace-nowrap">
+            {role === "admin" ? "Admin Controls" : "Employee Menu"}
+          </span>
+        </div>
+      )}
 
       {/* Nav links */}
-      <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 px-3 py-2 pb-3">
+      <nav className={`flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 px-3 ${isOpen ? "py-2" : "py-4"} pb-3`}>
         {links.map((link) => {
           if (link.label === "Project Management") {
             const parentActive = pathname.startsWith("/project-management");
@@ -375,30 +361,30 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                     router.push("/project-management", { scroll: false });
                     handleCompactNavigate();
                   }}
-                  className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
+                  className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium overflow-hidden transition-colors duration-150 ${
                     parentActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                   }`}
                 >
-                  <span className={`sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-sidebar-primary transition-all duration-300 ${
-                    parentActive ? "h-5 opacity-100" : "h-0 opacity-0"
-                  }`} />
-                  <FolderKanban size={18} className={`shrink-0 transition-transform duration-200 ${parentActive ? "scale-110" : "group-hover/item:scale-110"}`} />
-                  <span className={`flex-1 min-w-0 truncate whitespace-nowrap transition-all duration-200 ${
-                      isOpen ? "opacity-100" : "opacity-0 max-w-0"
-                    }`}>
-                    Project Management
-                  </span>
+                  {parentActive && (
+                    <span className="sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full" />
+                  )}
+                  <FolderKanban size={18} className="shrink-0" />
+                  {isOpen && (
+                    <span className="flex-1 min-w-0 truncate whitespace-nowrap">
+                      Project Management
+                    </span>
+                  )}
                   {isOpen && (
                     <span
-                      className="ml-auto rounded p-0.5 hover:bg-sidebar-accent/70"
+                      className="ml-auto rounded p-0.5 hover:bg-sidebar-accent"
                       onClick={(e) => {
                         e.stopPropagation();
                         setWorkspacesOpen((prev) => !prev);
                       }}
                     >
-                      {workspacesOpen ? <ChevronDown size={14} className="ml-auto" /> : <ChevronRight size={14} className="ml-auto" />}
+                      {workspacesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </span>
                   )}
                 </button>
@@ -411,8 +397,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                     {workspaces.map((ws) => {
                       const wsPath = `/project-management/workspaces/${ws.id}`;
                       const wsActive = String(ws.id) === activeWorkspaceId;
-                      const badgeBg = hexToRgba(ws.color || "#6b7280", wsActive ? 0.26 : 0.16);
-                      const badgeBorder = hexToRgba(ws.color || "#6b7280", wsActive ? 0.58 : 0.35);
+                      const badgeBg = hexToRgba(ws.color || "#6b7280", wsActive ? 0.2 : 0.12);
+                      const badgeBorder = hexToRgba(ws.color || "#6b7280", wsActive ? 0.5 : 0.3);
                       return (
                         <Link
                           key={ws.id}
@@ -425,22 +411,21 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                             } catch {}
                             handleCompactNavigate();
                           }}
-                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors duration-150 ${
                             wsActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/75 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                              : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                           }`}
                         >
                           <span
-                            className="inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 transition-all duration-200 hover:-translate-y-0.5"
+                            className="inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5"
                             style={{ backgroundColor: badgeBg, borderColor: badgeBorder }}
                             aria-hidden
                           >
                             <span
-                              className="inline-flex h-2 w-2 rounded-full border border-white/25"
+                              className="inline-flex h-2 w-2 rounded-full"
                               style={{ backgroundColor: ws.color || "#6b7280" }}
                             />
-                            <span className="text-sm leading-none">{ws.icon || "📁"}</span>
                           </span>
                           <span className="truncate">{ws.name}</span>
                         </Link>
@@ -450,8 +435,8 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 )}
 
                 {!isOpen && (
-                  <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 delay-150">
-                    <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-lg border border-border whitespace-nowrap">
+                  <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150">
+                    <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-sm border border-border whitespace-nowrap">
                       Project Management
                     </div>
                   </div>
@@ -474,29 +459,23 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 prefetch
                 scroll={false}
                 onClick={handleCompactNavigate}
-                className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 overflow-hidden ${
+                className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium overflow-hidden transition-colors duration-150 ${
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 }`}
               >
-                {/* Active left indicator bar */}
-                <span className={`sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-sidebar-primary transition-all duration-300 ${
-                  isActive ? "h-5 opacity-100" : "h-0 opacity-0"
-                }`} />
+                {isActive && (
+                  <span className="sidebar-active-bar absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full" />
+                )}
 
-                <link.icon
-                  size={link.label === "The Lighthouse" ? 26 : 18}
-                  className={`shrink-0 transition-transform duration-200 ${
-                    isActive ? "scale-110" : "group-hover/item:scale-110"
-                  }`}
-                />
+                <link.icon size={18} className="shrink-0" />
 
-                <span className={`flex-1 min-w-0 truncate whitespace-nowrap transition-all duration-200 ${
-                  isOpen ? "opacity-100" : "opacity-0 max-w-0"
-                }`}>
-                  {link.label}
-                </span>
+                {isOpen && (
+                  <span className="flex-1 min-w-0 truncate whitespace-nowrap">
+                    {link.label}
+                  </span>
+                )}
 
                 {isOpen && showBadge && (
                   <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
@@ -510,10 +489,9 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 )}
               </Link>
 
-              {/* Tooltip — only visible when sidebar is collapsed */}
               {!isOpen && (
-                <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 delay-150">
-                  <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-lg border border-border whitespace-nowrap">
+                <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150">
+                  <div className="rounded-md bg-popover text-popover-foreground text-xs font-medium px-2.5 py-1.5 shadow-sm border border-border whitespace-nowrap">
                     {link.label}
                     {showBadge && (
                       <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
@@ -542,43 +520,42 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                 unoptimized
               />
             ) : (
-              displayName[0]
+              (displayName?.[0] || "?").toUpperCase()
             )}
           </div>
-          <div className={`min-w-0 overflow-hidden transition-all duration-200 ${
-            isOpen ? "flex-1 opacity-100 max-w-[120px]" : "flex-none opacity-0 max-w-0"
-          }`}>
-            <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
-            <p className="text-xs text-sidebar-foreground/50 truncate">{displayHandle}</p>
+          {isOpen && (
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
+              <p className="text-xs text-sidebar-foreground/60 truncate">{displayHandle}</p>
+            </div>
+          )}
+          {isOpen && (
+            <button
+              onClick={logout}
+              title="Logout"
+              aria-label="Logout"
+              className="shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors duration-150"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
+        </div>
+        {isOpen && (
+          <div className="mt-2">
+            <span className="inline-block rounded-md bg-sidebar-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-accent-foreground">
+              {role}
+            </span>
           </div>
-          <button
-            onClick={logout}
-            title="Logout"
-            className={`shrink-0 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-all duration-200 ${
-              isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-        <div className={`overflow-hidden transition-all duration-200 ${
-          isOpen ? "max-h-10 opacity-100 mt-2" : "max-h-0 opacity-0"
-        }`}>
-          <span className="inline-block rounded-md bg-sidebar-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-accent-foreground">
-            {role}
-          </span>
-        </div>
+        )}
       </div>
 
-      {/* Resize handle */}
       {!isCompactViewport && (
         <div
           onMouseDown={handleResizeMouseDown}
-          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize z-50 hover:bg-sidebar-primary/20 transition-colors"
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-50 hover:bg-sidebar-primary/20 transition-colors"
         />
       )}
     </aside>
     </>
   );
 }
-

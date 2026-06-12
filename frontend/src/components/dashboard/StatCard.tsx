@@ -1,11 +1,5 @@
 import { LucideIcon, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import type { CSSProperties } from "react";
-
-type DashboardHoverAccentStyle = CSSProperties & {
-  "--admin-card-accent"?: string;
-  "--admin-card-accent-secondary"?: string;
-};
 
 interface StatCardProps {
   icon: LucideIcon;
@@ -18,13 +12,12 @@ interface StatCardProps {
   shadowColor?: string;
   href?: string;
   enablePremiumHover?: boolean;
-  hoverAccentStyle?: DashboardHoverAccentStyle;
 }
 
 const trendColors = {
-  up: "bg-green-500/20 text-green-300 border border-green-500/30",
-  down: "bg-red-500/20 text-red-300 border border-red-500/30",
-  stable: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
+  up: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+  down: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20",
+  stable: "bg-slate-50 text-slate-700 border border-slate-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
 };
 
 export default function StatCard({
@@ -35,46 +28,34 @@ export default function StatCard({
   trend,
   trendType = "stable",
   iconColor,
-  shadowColor,
   href,
-  enablePremiumHover = false,
-  hoverAccentStyle,
 }: StatCardProps) {
   const inner = (
     <div
-      className={`group relative rounded-xl glass-card ${enablePremiumHover ? "admin-dashboard-card hover:-translate-y-1.5 hover:scale-[1.03] active:translate-y-0 active:scale-[0.96]" : "glass-card-hover"} p-5 transition-all duration-300 overflow-hidden glow-sm ${enablePremiumHover ? "dark:hover:glow-md" : "hover:scale-[1.02] hover:glow-md"} ${href ? "cursor-pointer" : ""}`}
-      style={hoverAccentStyle}
+      className={`group relative rounded-xl border border-border bg-card p-5 transition-all duration-200 hover:border-foreground/20 hover:shadow-sm ${href ? "cursor-pointer" : ""}`}
     >
-      {/* Gradient overlay on hover */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      {/* Enhanced glow effect */}
-      <div className="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
       <div className="relative flex items-start justify-between mb-4">
-        <div 
-          className={`${enablePremiumHover ? "admin-dashboard-card-icon" : "group-hover:scale-110"} dashboard-card-icon-shell rounded-xl p-3 transition-all duration-300 ${iconColor || "bg-primary/12 dark:bg-primary/30"}`}
-          style={{
-            boxShadow: `0 4px 14px ${shadowColor || 'rgba(0,0,0,0.25)'}, 0 8px 24px -4px ${shadowColor || 'rgba(0,0,0,0.15)'}`
-          }}
+        <div
+          className={`rounded-lg p-2.5 ${iconColor || "bg-secondary text-foreground"}`}
         >
-          <Icon size={20} className="relative z-10 text-primary dark:text-white" />
+          <Icon size={18} />
         </div>
         <div className="flex items-center gap-2">
           {trend && (
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${trendColors[trendType]}`}>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${trendColors[trendType]}`}>
               {trendType === "up" ? "↑" : trendType === "down" ? "↓" : "•"} {trend}
             </span>
           )}
           {href && (
-            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary/50 group-hover:bg-primary/20 group-hover:text-primary group-hover:shadow-md group-hover:shadow-primary/25 dark:bg-white/10 dark:text-white/50 dark:group-hover:bg-primary/40 dark:group-hover:text-white dark:group-hover:shadow-lg dark:group-hover:shadow-primary/40 group-hover:animate-bounce group-active:scale-75 transition-all duration-200">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full text-muted-foreground group-hover:text-foreground transition-colors">
               <ArrowUpRight size={14} />
             </span>
           )}
         </div>
       </div>
-      <p className="relative text-3xl font-bold text-card-foreground drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">{value}</p>
-      <p className="relative text-sm font-bold text-card-foreground/90 mt-1">{label}</p>
-      {subtitle && <p className="relative text-xs text-muted-foreground/80 mt-1 font-medium">{subtitle}</p>}
+      <p className="text-2xl font-semibold text-card-foreground">{value}</p>
+      <p className="text-sm font-medium text-card-foreground mt-1">{label}</p>
+      {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
     </div>
   );
 

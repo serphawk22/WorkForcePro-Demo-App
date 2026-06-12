@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet, task_owner
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -149,6 +149,17 @@ async def lifespan(app: FastAPI):
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_holder VARCHAR',
+        # User columns
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS date_joined DATE',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url VARCHAR(255)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url VARCHAR(255)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(100)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS base_salary DOUBLE PRECISION',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER',
+        'ALTER TABLE users ALTER COLUMN password DROP NOT NULL',
         # Multi-tenant org fields
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id INTEGER',
         'ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS organization_id INTEGER',
@@ -261,7 +272,16 @@ async def lifespan(app: FastAPI):
         "UPDATE task_sheets SET tasks_completed = COALESCE(achievements, 'N/A') WHERE tasks_completed IS NULL",
         "UPDATE task_sheets SET work_impact = 'Migrated from legacy achievements' WHERE work_impact IS NULL",
         "UPDATE task_sheets SET time_taken = 'N/A' WHERE time_taken IS NULL",
-
+        
+        # Task star/pin feature columns
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_by INTEGER REFERENCES users(id)",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS starred_at TIMESTAMP WITH TIME ZONE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_by INTEGER REFERENCES users(id)",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP WITH TIME ZONE",
+        "CREATE INDEX IF NOT EXISTS ix_tasks_is_starred ON tasks(is_starred)",
+        "CREATE INDEX IF NOT EXISTS ix_tasks_is_pinned ON tasks(is_pinned)",
         ]
 
         for migration in additional_migrations:
@@ -595,6 +615,7 @@ app.include_router(workspaces.router)
 app.include_router(organizations.router)
 app.include_router(search.router)
 app.include_router(weekly_sheet.router)
+app.include_router(task_owner.router)
 
 
 @app.get("/")

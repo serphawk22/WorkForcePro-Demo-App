@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -21,17 +21,17 @@ import { useAttendanceTimer, formatTimerDisplay } from "@/components/AttendanceT
 import { DropdownMenu, type DropdownOption } from "@/components/ui/themed-dropdown";
 
 const priorityStyles: Record<string, string> = {
-  high: "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20",
-  medium: "bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-yellow-400 border border-yellow-500/30 shadow-lg shadow-yellow-500/20",
-  low: "bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30 shadow-lg shadow-green-500/20",
+  high: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20",
+  medium: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+  low: "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
 };
 
 const statusStyles: Record<string, string> = {
-  in_progress: "text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.6)]",
-  todo: "text-gray-400 drop-shadow-[0_0_4px_rgba(156,163,175,0.3)]",
-  submitted: "text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.6)]",  // Employee sees "Done" as green
-  approved: "text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]",
-  rejected: "text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.6)]",
+  in_progress: "text-blue-600 dark:text-blue-400",
+  todo: "text-zinc-500 dark:text-zinc-400",
+  submitted: "text-emerald-600 dark:text-emerald-400",
+  approved: "text-emerald-600 dark:text-emerald-400",
+  rejected: "text-red-600 dark:text-red-400",
 };
 
 const statusLabels: Record<string, string> = {
@@ -42,59 +42,8 @@ const statusLabels: Record<string, string> = {
   rejected: "Needs Changes",
 };
 
-type EmployeeCardAccentStyle = CSSProperties & {
-  "--admin-card-accent": string;
-  "--admin-card-accent-secondary": string;
-};
-
-const employeeCardAccentStyles: Record<
-  "session" | "attention" | "productivity" | "projects" | "meeting" | "neutral" | "recurring",
-  EmployeeCardAccentStyle
-> = {
-  session: {
-    "--admin-card-accent": "272 91% 65%",
-    "--admin-card-accent-secondary": "328 75% 62%",
-  },
-  attention: {
-    "--admin-card-accent": "20 100% 60%",
-    "--admin-card-accent-secondary": "0 84% 60%",
-  },
-  productivity: {
-    "--admin-card-accent": "45 93% 58%",
-    "--admin-card-accent-secondary": "28 92% 58%",
-  },
-  projects: {
-    "--admin-card-accent": "217 91% 60%",
-    "--admin-card-accent-secondary": "191 91% 55%",
-  },
-  meeting: {
-    "--admin-card-accent": "217 91% 60%",
-    "--admin-card-accent-secondary": "228 92% 66%",
-  },
-  neutral: {
-    "--admin-card-accent": "220 14% 55%",
-    "--admin-card-accent-secondary": "262 18% 60%",
-  },
-  recurring: {
-    "--admin-card-accent": "38 92% 50%",
-    "--admin-card-accent-secondary": "25 95% 53%",
-  },
-};
-
 const overviewCardBase =
-  "admin-dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-white/95 via-violet-50/85 to-fuchsia-50/75 backdrop-blur-xl shadow-[0_16px_45px_rgba(109,40,217,0.14)] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-violet-300/80 hover:shadow-[0_24px_70px_rgba(124,58,237,0.2)] dark:border-white/10 dark:bg-white/8 dark:from-transparent dark:via-transparent dark:to-transparent dark:shadow-[0_18px_60px_rgba(8,6,20,0.28)] dark:hover:shadow-[0_24px_80px_rgba(124,58,237,0.22)]";
-
-const overviewCardGlow =
-  "absolute inset-0 bg-gradient-to-br opacity-80 transition-opacity duration-300 group-hover:opacity-100";
-
-const overviewEdgeGlow = (
-  <>
-    <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/55 to-transparent dark:via-white/45" />
-    <div className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/45 to-transparent dark:via-white/35" />
-    <div className="pointer-events-none absolute inset-y-5 left-0 w-px bg-gradient-to-b from-transparent via-purple-400/45 to-transparent dark:via-white/35" />
-    <div className="pointer-events-none absolute inset-y-5 right-0 w-px bg-gradient-to-b from-transparent via-sky-400/45 to-transparent dark:via-white/35" />
-  </>
-);
+  "group relative overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:border-foreground/20 hover:shadow-sm";
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -113,21 +62,21 @@ export default function EmployeeDashboard() {
   const [myPersonalProjects, setMyPersonalProjects] = useState<PersonalProjectEntry[]>([]);
 
   const recurringInstanceOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-gray-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "completed", label: "Completed", icon: <span className="text-green-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-zinc-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-500">●</span> },
+    { value: "completed", label: "Completed", icon: <span className="text-emerald-500">●</span> },
   ];
 
   const employeeTaskOptions: DropdownOption[] = [
-    { value: "todo", label: "To Do", icon: <span className="text-gray-400">●</span> },
-    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-400">●</span> },
-    { value: "done", label: "Done", icon: <span className="text-green-400">●</span> },
+    { value: "todo", label: "To Do", icon: <span className="text-zinc-400">●</span> },
+    { value: "in_progress", label: "In Progress", icon: <span className="text-blue-500">●</span> },
+    { value: "done", label: "Done", icon: <span className="text-emerald-500">●</span> },
   ];
 
   const subtaskReviewOptions: DropdownOption[] = [
-    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-400">🟡</span> },
-    { value: "approved", label: "Approved", icon: <span className="text-green-400">🟢</span> },
-    { value: "rejected", label: "Rejected", icon: <span className="text-red-400">🔴</span> },
+    { value: "reviewing", label: "Reviewing", icon: <span className="text-amber-500">●</span> },
+    { value: "approved", label: "Approved", icon: <span className="text-emerald-500">●</span> },
+    { value: "rejected", label: "Rejected", icon: <span className="text-red-500">●</span> },
   ];
 
   // Global persistent timer — provided by AttendanceTimerProvider at root layout level
@@ -432,40 +381,40 @@ export default function EmployeeDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-foreground">
-                {getGreeting()}, <span className="text-accent">{firstName}</span>
+                {getGreeting()}, <span className="text-foreground">{firstName}</span>
               </h1>
               <p className="text-sm text-muted-foreground mt-1">{new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold glass-card glow-sm ${isWorking ? "bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-green-400/50 text-green-300 shadow-lg shadow-green-500/40" : "bg-gradient-to-r from-gray-500/20 to-slate-500/20 border-gray-400/30 text-gray-300"}`}>
-                <Circle size={8} className={`${isWorking ? "fill-green-400 text-green-400 animate-pulse" : "fill-gray-400 text-gray-400"} drop-shadow-[0_0_6px_currentColor]`} />
+              <span className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold ${isWorking ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400" : "bg-secondary border-border text-muted-foreground"}`}>
+                <Circle size={7} className={isWorking ? "fill-emerald-500 text-emerald-500" : "fill-zinc-400 text-zinc-400"} />
                 {isWorking ? "ON DUTY" : "OFF DUTY"}
               </span>
               {isWorking ? (
                 <button
                   onClick={handlePunchOut}
                   disabled={isPunching}
-                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 px-5 py-2 text-sm font-bold text-white hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105 shadow-lg shadow-red-500/50 hover:shadow-xl hover:shadow-red-500/60 disabled:opacity-50 disabled:hover:scale-100"
+                  className="inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  {isPunching ? <Loader2 size={14} className="animate-spin glow-icon" /> : <Square size={14} className="glow-icon" />}
+                  {isPunching ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
                   Punch Out
                 </button>
               ) : (
                 <button
                   onClick={handlePunchIn}
                   disabled={isPunching || hasCompletedToday}
-                  className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold transition-all transform shadow-lg disabled:hover:scale-100 ${
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-opacity ${
                     hasCompletedToday
-                      ? "bg-gradient-to-r from-emerald-200 via-teal-200 to-cyan-200 text-emerald-900 border border-emerald-300/80 shadow-[0_10px_24px_-14px_rgba(16,185,129,0.65)] ring-1 ring-white/70 cursor-not-allowed opacity-95 dark:bg-gradient-to-r dark:from-emerald-500/35 dark:via-teal-500/30 dark:to-cyan-500/35 dark:text-emerald-100 dark:border-emerald-300/35 dark:shadow-emerald-500/30 dark:ring-0"
-                      : "bg-gradient-to-r from-primary to-primary-light text-white hover:from-primary-light hover:to-primary-glow hover:scale-105 shadow-primary/50 hover:shadow-xl hover:shadow-primary/60"
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 cursor-not-allowed"
+                      : "bg-primary text-primary-foreground hover:opacity-90"
                   } ${isPunching ? "opacity-50" : ""}`}
                 >
                   {isPunching ? (
-                    <Loader2 size={14} className="animate-spin glow-icon" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : hasCompletedToday ? (
-                    <CheckCircle size={14} className="text-emerald-700 drop-shadow-[0_0_6px_rgba(16,185,129,0.35)] dark:text-emerald-200 dark:drop-shadow-[0_0_8px_rgba(16,185,129,0.55)]" />
+                    <CheckCircle size={14} />
                   ) : (
-                    <Play size={14} className="glow-icon" />
+                    <Play size={14} />
                   )}
                   {hasCompletedToday ? "Completed Today" : "Punch In"}
                 </button>
@@ -492,7 +441,6 @@ export default function EmployeeDashboard() {
               shadowColor="rgba(236, 72, 153, 0.25)"
               href="/attendance"
               enablePremiumHover
-              hoverAccentStyle={employeeCardAccentStyles.session}
             />
             <StatCard
               icon={AlertCircle}
@@ -505,7 +453,6 @@ export default function EmployeeDashboard() {
               shadowColor="rgba(251, 146, 60, 0.25)"
               href="/project-management"
               enablePremiumHover
-              hoverAccentStyle={employeeCardAccentStyles.attention}
             />
             <StatCard
               icon={Zap}
@@ -518,7 +465,6 @@ export default function EmployeeDashboard() {
               shadowColor="rgba(250, 204, 21, 0.25)"
               href="/project-management"
               enablePremiumHover
-              hoverAccentStyle={employeeCardAccentStyles.productivity}
             />
             <StatCard
               icon={Building2}
@@ -531,14 +477,13 @@ export default function EmployeeDashboard() {
               shadowColor="rgba(59, 130, 246, 0.25)"
               href="/project-management"
               enablePremiumHover
-              hoverAccentStyle={employeeCardAccentStyles.projects}
             />
           </div>
 
           <section className="grid gap-4 xl:grid-cols-3">
             <article className={`${overviewCardBase} p-5`}>
-              <div className={`${overviewCardGlow} from-emerald-500/20 via-sky-500/10 to-transparent dark:from-emerald-500/20 dark:via-sky-500/10`} />
-              {overviewEdgeGlow}
+              
+              
               <div className="relative space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -607,8 +552,8 @@ export default function EmployeeDashboard() {
             </article>
 
             <article className={`${overviewCardBase} p-5`}>
-              <div className={`${overviewCardGlow} from-violet-500/20 via-fuchsia-500/10 to-transparent dark:from-violet-500/20 dark:via-fuchsia-500/10`} />
-              {overviewEdgeGlow}
+              
+              
               <div className="relative space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -660,8 +605,8 @@ export default function EmployeeDashboard() {
             </article>
 
             <article className={`${overviewCardBase} p-5`}>
-              <div className={`${overviewCardGlow} from-cyan-500/20 via-blue-500/10 to-transparent dark:from-cyan-500/20 dark:via-blue-500/10`} />
-              {overviewEdgeGlow}
+              
+              
               <div className="relative space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -730,7 +675,7 @@ export default function EmployeeDashboard() {
             {activeMeeting ? (
               <div
                 className="admin-dashboard-card col-span-full rounded-xl glass-card glow-sm p-5 border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-transparent to-transparent"
-                style={employeeCardAccentStyles.meeting}
+                
               >
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
@@ -757,7 +702,7 @@ export default function EmployeeDashboard() {
             ) : (
               <div
                 className="admin-dashboard-card col-span-full rounded-xl glass-card p-5 border border-border/40 flex items-center gap-3 text-muted-foreground"
-                style={employeeCardAccentStyles.neutral}
+                
               >
                 <div className="admin-dashboard-card-icon p-2.5 rounded-xl bg-secondary">
                   <Video className="h-5 w-5 text-muted-foreground" />
@@ -773,7 +718,7 @@ export default function EmployeeDashboard() {
           {/* Recurring task occurrences */}
           <div
             className="admin-dashboard-card rounded-xl glass-card glow-sm"
-            style={employeeCardAccentStyles.recurring}
+            
           >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -834,7 +779,7 @@ export default function EmployeeDashboard() {
           {/* Active Projects */}
           <div
             className="admin-dashboard-card rounded-xl glass-card glow-sm"
-            style={employeeCardAccentStyles.projects}
+            
           >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">

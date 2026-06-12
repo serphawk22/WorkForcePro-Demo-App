@@ -197,7 +197,6 @@ export function AttendanceTimerProvider({ children }: { children: React.ReactNod
       if (moduleState.isRunning && moduleState.timerStart !== null) {
         const delta = Math.floor((Date.now() - moduleState.timerStart) / 1000);
         const total = moduleState.baseElapsed + delta;
-        console.log(`[TIMER TICK] base=${moduleState.baseElapsed}, delta=${delta}, total=${total}`);
         setSecondsFn(total);
       }
     };

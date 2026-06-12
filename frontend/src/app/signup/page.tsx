@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Mail, Lock, ArrowRight, Loader2, User, Shield } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Mail, Lock, ArrowRight, Loader2, User, Shield } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function SignupPage() {
@@ -51,33 +50,35 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+    <div className="bg-gradient-to-b from-white to-slate-100 min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center shadow-primary">
-            <Zap size={20} className="text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">
-            WorkForce <span className="text-gradient-primary">Pro</span>
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <img
+            src="/Serp_Hwak_Logo-removebg-preview.png"
+            alt="SerpHawk Logo"
+            className="h-8 w-8 object-contain"
+          />
+          <span className="text-xl font-bold tracking-tight text-slate-800">
+            WorkForce Pro
           </span>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl glass-card glow-sm p-8">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/60 shadow-xl shadow-slate-200/50">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-card-foreground">Create an account</h1>
-            <p className="text-sm text-muted-foreground mt-1">Join WorkForce Pro today</p>
+            <h1 className="text-2xl font-bold text-slate-900">Create an account</h1>
+            <p className="text-sm text-slate-500 mt-1">Join WorkForce Pro today</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-3 rounded-xl glass-light bg-destructive/10 border border-destructive/30 text-destructive text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm text-center font-medium">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="mb-6 p-3 rounded-xl glass-light bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm text-center">
+            <div className="mb-6 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-sm text-center font-medium">
               {success}
             </div>
           )}
@@ -85,83 +86,103 @@ export default function SignupPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-card-foreground mb-2">Full Name</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
               <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
+                  name="name"
+                  id="name"
+                  autoComplete="name"
                   placeholder="John Doe"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
                   minLength={2}
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 />
               </div>
             </div>
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-card-foreground mb-2">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="email"
-                  placeholder="you@company.com"
+                  name="email"
+                  id="email"
+                  autoComplete="email"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 />
               </div>
             </div>
 
             {/* Role */}
             <div>
-              <label className="block text-sm font-medium text-card-foreground mb-2">Role</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
               <div className="relative">
-                <Shield size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Shield size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <select
                   value={role}
+                  name="role"
+                  id="role"
+                  autoComplete="off"
                   onChange={(e) => setRole(e.target.value as "admin" | "employee")}
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm appearance-none cursor-pointer"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-10 text-sm text-slate-900 dark:text-slate-900 appearance-none cursor-pointer focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 >
                   <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
                 </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                  </svg>
+                </div>
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-card-foreground mb-2">Password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="password"
+                  name="password"
+                  id="password"
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 />
               </div>
             </div>
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-card-foreground mb-2">Confirm Password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Confirm Password</label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="password"
+                  name="confirm-password"
+                  id="confirm-password"
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="w-full rounded-xl glass-input py-2.5 pl-10 pr-4 text-sm"
+                  className="w-full h-11 rounded-xl bg-white dark:bg-white border border-slate-200 dark:border-slate-200 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:bg-white transition autofill:shadow-[0_0_0_30px_white_inset] [-webkit-text-fill-color:#0f172a]"
                 />
               </div>
             </div>
@@ -170,7 +191,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-primary-foreground gradient-primary shadow-primary hover:shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-11 rounded-full font-semibold text-sm text-white bg-slate-900 hover:bg-slate-800 transition shadow-lg shadow-slate-900/10 inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
@@ -185,15 +206,10 @@ export default function SignupPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:underline font-medium">Sign in</Link>
+            <Link href="/login" className="text-slate-900 hover:underline font-medium">Sign in</Link>
           </div>
-        </div>
-
-        {/* Theme toggle */}
-        <div className="flex justify-center mt-6">
-          <ThemeToggle />
         </div>
       </div>
     </div>

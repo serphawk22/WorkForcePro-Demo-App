@@ -53,7 +53,7 @@ export default function UserApprovalsPage() {
     setActionLoading(userId);
     const result = await approveUser(userId);
     if (result.data) {
-      showToast(`✅ ${userName} has been approved.`);
+      showToast(`${userName} has been approved.`);
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, status: "APPROVED" as const } : u))
       );
@@ -67,7 +67,7 @@ export default function UserApprovalsPage() {
     setActionLoading(userId);
     const result = await rejectUser(userId);
     if (result.data) {
-      showToast(`❌ ${userName} has been rejected.`, "error");
+      showToast(`${userName} has been rejected.`, "error");
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, status: "REJECTED" as const } : u))
       );

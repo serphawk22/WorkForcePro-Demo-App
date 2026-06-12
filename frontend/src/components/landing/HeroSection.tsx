@@ -4,19 +4,19 @@ import { ArrowRight, PlayCircle, Sparkles, Brain, Clock, RefreshCw } from "lucid
 const features = [
   {
     icon: Sparkles,
-    title: "AI Task Creation 🤖",
+    title: "AI Task Creation",
     description: "Create tasks, assign employees, and structure workflows instantly using AI.",
     gradient: "from-purple-500 via-pink-400 to-pink-300",
   },
   {
     icon: Clock,
-    title: "Smart Attendance Tracking ⏱️",
+    title: "Smart Attendance Tracking",
     description: "Real-time punch-in/out tracking with productivity insights.",
     gradient: "from-blue-500 via-purple-500 to-purple-300",
   },
   {
     icon: RefreshCw,
-    title: "Recurring Task Automation 🔁",
+    title: "Recurring Task Automation",
     description: "Automate weekly/monthly tasks and never miss repetitive workflows.",
     gradient: "from-orange-400 via-pink-500 to-pink-300",
   },

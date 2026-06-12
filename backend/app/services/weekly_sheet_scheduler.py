@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta, date as DateType
 import json
 import logging
+import asyncio
 
 from sqlmodel import Session, select
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,7 +17,11 @@ from app.models import (
     NotificationType,
 )
 from app.routers.notifications import create_notification
-from app.routers.weekly_sheet import monday_of_week
+from app.routers.weekly_sheet import (
+    monday_of_week,
+    generate_weekly_sheet_content,
+    _sheet_day_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +66,7 @@ def generate_weekly_sheets_job():
 
                 task_sheet_data = [
                     {
-                        "day": sheet.date.strftime("%A"),
+                        "day": _sheet_day_label(sheet.date),
                         "tasks_completed": sheet.tasks_completed,
                         "work_impact": sheet.work_impact,
                     }
@@ -90,21 +95,45 @@ def generate_weekly_sheets_job():
                 if existing:
                     continue  # Skip if already exists so we don't overwrite manual edits
                 
-                # Create empty sheet for manual entry - no AI generation
+                # Generate AI content using async function
+                try:
+                    ai_result = asyncio.run(
+                        generate_weekly_sheet_content(
+                            payload,
+                            week_start,
+                            week_end,
+                            task_data,
+                            task_sheet_data
+                        )
+                    )
+                except Exception as ai_error:
+                    logger.warning(f"AI generation failed for user {user.id}, using fallback: {ai_error}")
+                    ai_result = {
+                        "weekly_summary": None,
+                        "major_accomplishments": None,
+                        "tasks_completed": None,
+                        "pending_tasks": None,
+                        "blockers": None,
+                        "productivity_insights": None,
+                        "time_utilization": None,
+                        "suggested_priorities": None,
+                    }
+                
+                # Create sheet with AI-generated or empty content
                 now = datetime.now(timezone.utc)
                 sheet = LighthouseWeeklySheet(
                     organization_id=user.organization_id,
                     user_id=user.id,
                     week_start_date=week_start,
                     status=WeeklySheetStatus.draft,
-                    weekly_summary=None,
-                    major_accomplishments=None,
-                    tasks_completed=None,
-                    pending_tasks=None,
-                    blockers=None,
-                    productivity_insights=None,
-                    time_utilization=None,
-                    suggested_priorities=None,
+                    weekly_summary=ai_result.get("weekly_summary"),
+                    major_accomplishments=ai_result.get("major_accomplishments"),
+                    tasks_completed=ai_result.get("tasks_completed"),
+                    pending_tasks=ai_result.get("pending_tasks"),
+                    blockers=ai_result.get("blockers"),
+                    productivity_insights=ai_result.get("productivity_insights"),
+                    time_utilization=ai_result.get("time_utilization"),
+                    suggested_priorities=ai_result.get("suggested_priorities"),
                     created_at=now,
                     updated_at=now
                 )
@@ -112,11 +141,12 @@ def generate_weekly_sheets_job():
                 session.commit()
                 
                 # Create notification
+                sheet_status = "with AI-generated content" if ai_result.get("weekly_summary") else "for manual entry"
                 create_notification(
                     session=session,
                     user_id=user.id,
                     type=NotificationType.SYSTEM,
-                    message="Your Weekly Sheet has been created. Please fill in all sections and submit before the deadline."
+                    message=f"Your Weekly Sheet has been created {sheet_status}. Please review and submit before the deadline."
                 )
                 
             except Exception as e:

@@ -79,7 +79,7 @@ export function NotificationDropdown() {
   async function handleMarkAllAsRead() {
     const response = await markAllNotificationsRead();
     if (response.data) {
-      setNotifications([]);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
     }
   }
