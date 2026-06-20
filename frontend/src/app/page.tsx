@@ -2,15 +2,16 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { ArrowRight } from "lucide-react";
-import TextType from "@/components/TextType";
-import ScrollFloat from "@/components/ScrollFloat";
 
-const PixelBlast = dynamic(() => import("@/components/PixelBlast"), {
-  ssr: false,
-  loading: () => <div className="w-full h-screen bg-white" />
-});
+const FEATURES = [
+  { title: "Project Management", description: "Workspaces, parent/child nodes, tasks and subtasks in one clear hierarchy." },
+  { title: "Workforce Management", description: "Attendance, leave, payroll and employee records in a single place." },
+  { title: "Team Communication", description: "Workspace channels and direct messages to keep teams aligned." },
+  { title: "Reports & Analytics", description: "Automatic weekly and monthly reports with CSV export." },
+  { title: "Company Culture", description: "Lightweight daily reflections to keep a pulse on the team." },
+  { title: "Roles & Permissions", description: "Clear admin and employee boundaries enforced end to end." },
+];
 
 export default function Home() {
   useEffect(() => {
@@ -22,30 +23,9 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="relative min-h-screen bg-white overflow-hidden">
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <PixelBlast
-          variant="circle"
-          pixelSize={6}
-          color="#B497CF"
-          patternScale={3}
-          patternDensity={1.2}
-          pixelSizeJitter={0.5}
-          enableRipples
-          rippleSpeed={0.4}
-          rippleThickness={0.12}
-          rippleIntensityScale={1.5}
-          liquid
-          liquidStrength={0.12}
-          liquidRadius={1.2}
-          liquidWobbleSpeed={5}
-          speed={0.6}
-          edgeFade={0.25}
-          transparent
-        />
-      </div>
+    <div className="relative min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50">
+      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50 border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 text-gray-900 font-semibold">
             <img
@@ -69,19 +49,12 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative w-full min-h-screen flex items-center justify-center pt-24">
         <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
-          <TextType
-            as="h1"
-            text={["Experience liftoff with workforce pro"]}
-            typingSpeed={60}
-            pauseDuration={2000}
-            showCursor={true}
-            cursorCharacter="|"
-            loop={false}
-            className="text-5xl md:text-7xl lg:text-8xl font-medium text-gray-900 mb-8 leading-tight tracking-tight"
-          />
+          <h1 className="text-5xl md:text-7xl font-semibold text-gray-900 mb-8 leading-tight tracking-tight">
+            The workforce and project platform for modern teams
+          </h1>
 
           <p className="text-base md:text-lg text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Manage tasks, track attendance, and streamline workflows with AI-powered intelligence — all in one platform.
+            Manage projects, attendance, payroll and team communication — all in one professional, fast platform.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -100,52 +73,17 @@ export default function Home() {
       <section id="features" className="relative z-20 bg-white py-20 px-6 border-t border-gray-100">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <ScrollFloat
-              containerClassName="mb-4"
-              textClassName="text-3xl md:text-4xl font-medium text-gray-900 whitespace-nowrap"
-              animationDuration={1}
-              ease="back.inOut(2)"
-              scrollStart="center bottom+=50%"
-              scrollEnd="bottom bottom-=40%"
-              stagger={0.02}
-            >
-              Built for us!
-            </ScrollFloat>
-            <p className="text-lg text-gray-600">Everything you need in one intelligent platform</p>
+            <h2 className="text-3xl md:text-4xl font-semibold text-gray-900 mb-4">Built for real companies</h2>
+            <p className="text-lg text-gray-600">Everything your team needs in one platform</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                title: "Smart Task Management",
-                description: "Hierarchical task creation with AI-powered assignments and tracking"
-              },
-              {
-                title: "Real-time Attendance",
-                description: "Accurate punch in/out with detailed analytics and insights"
-              },
-              {
-                title: "Team Collaboration",
-                description: "Seamless workflows and communication across your organization"
-              },
-              {
-                title: "Analytics Dashboard",
-                description: "Comprehensive reports on productivity and team performance"
-              },
-              {
-                title: "Payroll Integration",
-                description: "Streamlined salary management and payment processing"
-              },
-              {
-                title: "AI Approvals",
-                description: "Intelligent approval workflows that save time and reduce errors"
-              }
-            ].map((feature, idx) => (
+            {FEATURES.map((feature, idx) => (
               <div
                 key={idx}
-                className="p-8 rounded-2xl border border-gray-200 hover:border-gray-900 hover:shadow-lg transition bg-white group"
+                className="p-8 rounded-2xl border border-gray-200 hover:border-gray-900 transition bg-white"
               >
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
                 <p className="text-gray-600">{feature.description}</p>
               </div>
             ))}

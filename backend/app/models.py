@@ -322,6 +322,7 @@ class Task(TaskBase, table=True):
     public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
     parent_task_id: Optional[int] = Field(default=None, foreign_key="tasks.id", index=True)
     workspace_id: Optional[int] = Field(default=None, foreign_key="workspaces.id", index=True)
+    node_id: Optional[int] = Field(default=None, foreign_key="project_nodes.id", index=True)  # Child node this task lives under
     assigned_to: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     assigned_by: int = Field(foreign_key="users.id")  # Admin who created/assigned the task
     status: TaskStatus = Field(default=TaskStatus.todo)
@@ -357,6 +358,7 @@ class Task(TaskBase, table=True):
 class TaskCreate(TaskBase):
     """Schema for creating task."""
     workspace_id: int
+    node_id: Optional[int] = None  # Child node this task belongs to
     parent_task_id: Optional[int] = None
     start_date: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -391,6 +393,7 @@ class TaskUpdate(SQLModel):
     completed_at: Optional[datetime] = None
     parent_task_id: Optional[int] = None
     workspace_id: Optional[int] = None
+    node_id: Optional[int] = None
     assigned_to: Optional[int] = None
     assigned_by: Optional[int] = None
     github_link: Optional[str] = None
@@ -451,6 +454,8 @@ class TaskRead(TaskBase):
     public_id: Optional[str] = None
     parent_task_id: Optional[int] = None
     workspace_id: Optional[int] = None
+    node_id: Optional[int] = None
+    node_name: Optional[str] = None
     workspace_name: Optional[str] = None
     workspace_icon: Optional[str] = None
     workspace_color: Optional[str] = None
@@ -1505,5 +1510,302 @@ class TeamsMeetingRead(SQLModel):
     created_at: datetime
     updated_at: datetime
     creator_name: Optional[str] = None
+
+
+# ==================== GENERIC REUSABLE TABLES ====================
+# These consolidate previously duplicated comment / membership / activity logic
+# so every entity in the new hierarchy (node, task, subtask) shares one source.
+
+
+class EntityType(str, Enum):
+    """Polymorphic target for generic tables (members, comments, activity)."""
+    node = "node"
+    task = "task"
+    subtask = "subtask"
+
+
+class Member(SQLModel, table=True):
+    """Generic membership: owners/members of a node or task."""
+    __tablename__ = "members"
+    __table_args__ = (
+        UniqueConstraint("entity_type", "entity_id", "user_id", name="uq_member_entity_user"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entity_type: str = Field(max_length=20, index=True)
+    entity_id: int = Field(index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    role: str = Field(default="member", max_length=20)  # owner | member
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class MemberRead(SQLModel):
+    id: int
+    entity_type: str
+    entity_id: int
+    user_id: int
+    role: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_profile_picture: Optional[str] = None
+
+
+class Comment(SQLModel, table=True):
+    """Generic comment usable on any entity (node, task, subtask...)."""
+    __tablename__ = "comments"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    entity_type: str = Field(max_length=20, index=True)
+    entity_id: int = Field(index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    body: str = Field(sa_column=Column(Text, nullable=False))
+    parent_comment_id: Optional[int] = Field(default=None, foreign_key="comments.id", index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CommentCreate(SQLModel):
+    body: str = Field(min_length=1, max_length=5000)
+    parent_comment_id: Optional[int] = None
+
+
+class CommentRead(SQLModel):
+    id: int
+    entity_type: str
+    entity_id: int
+    user_id: int
+    body: str
+    parent_comment_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    user_profile_picture: Optional[str] = None
+
+
+class ActivityLog(SQLModel, table=True):
+    """Generic activity/audit history for any entity."""
+    __tablename__ = "activity_logs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    entity_type: str = Field(max_length=20, index=True)
+    entity_id: int = Field(index=True)
+    actor_id: int = Field(foreign_key="users.id", index=True)
+    action: str = Field(max_length=50)  # created | updated | status_changed | assigned | moved | archived | commented
+    detail: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ActivityLogRead(SQLModel):
+    id: int
+    entity_type: str
+    entity_id: int
+    actor_id: int
+    actor_name: Optional[str] = None
+    action: str
+    detail: Optional[str] = None
+    created_at: datetime
+
+
+# ==================== PROJECT NODE HIERARCHY (Jira-style) ====================
+# Organization -> Workspace -> Parent Node -> Child Node -> Task -> Subtask
+
+
+class NodeType(str, Enum):
+    """Level of a project node within a workspace."""
+    parent = "parent"   # top-level main project (Epic)
+    child = "child"     # nested feature / module (Story)
+
+
+class NodeStatus(str, Enum):
+    """Lifecycle status shared by nodes."""
+    todo = "todo"
+    in_progress = "in_progress"
+    blocked = "blocked"
+    done = "done"
+    archived = "archived"
+
+
+class ProjectNode(SQLModel, table=True):
+    """Parent/Child node in the Workspace -> Parent -> Child -> Task hierarchy."""
+    __tablename__ = "project_nodes"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    public_id: Optional[str] = Field(default=None, max_length=10, unique=True, index=True)
+    workspace_id: int = Field(foreign_key="workspaces.id", index=True)
+    parent_node_id: Optional[int] = Field(default=None, foreign_key="project_nodes.id", index=True)  # NULL = parent node
+    node_type: NodeType = Field(default=NodeType.parent, index=True)
+    name: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    owner_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    status: NodeStatus = Field(default=NodeStatus.todo, index=True)
+    priority: TaskPriority = Field(default=TaskPriority.medium)
+    due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    actual_hours: Optional[float] = Field(default=None, ge=0)
+    created_by: int = Field(foreign_key="users.id")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    archived_at: Optional[datetime] = None
+
+
+class ProjectNodeCreate(SQLModel):
+    workspace_id: int
+    parent_node_id: Optional[int] = None  # provided -> creates a child node
+    node_type: Optional[NodeType] = None  # inferred from parent_node_id when omitted
+    name: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = None
+    owner_id: Optional[int] = None
+    status: Optional[NodeStatus] = None
+    priority: TaskPriority = TaskPriority.medium
+    due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    member_ids: Optional[List[int]] = None
+
+
+class ProjectNodeUpdate(SQLModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    owner_id: Optional[int] = None
+    status: Optional[NodeStatus] = None
+    priority: Optional[TaskPriority] = None
+    due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    actual_hours: Optional[float] = Field(default=None, ge=0)
+    parent_node_id: Optional[int] = None  # move under a different parent
+    workspace_id: Optional[int] = None    # move to a different workspace
+    member_ids: Optional[List[int]] = None
+
+
+class ProjectNodeRead(SQLModel):
+    id: int
+    organization_id: Optional[int] = None
+    public_id: Optional[str] = None
+    workspace_id: int
+    workspace_name: Optional[str] = None
+    parent_node_id: Optional[int] = None
+    node_type: NodeType
+    name: str
+    description: Optional[str] = None
+    owner_id: Optional[int] = None
+    owner_name: Optional[str] = None
+    status: NodeStatus
+    priority: TaskPriority
+    due_date: Optional[DateType] = None
+    estimated_hours: Optional[float] = None
+    actual_hours: Optional[float] = None
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    archived_at: Optional[datetime] = None
+    child_count: Optional[int] = None
+    task_count: Optional[int] = None
+    progress: Optional[int] = None  # 0-100, derived from task completion
+    members: Optional[List["MemberRead"]] = None
+
+
+class NodeTreeNode(SQLModel):
+    """Lightweight node used to render the workspace sidebar tree instantly."""
+    id: int
+    public_id: Optional[str] = None
+    name: str
+    node_type: NodeType
+    parent_node_id: Optional[int] = None
+    status: NodeStatus
+    priority: TaskPriority
+    task_count: int = 0
+    children: List["NodeTreeNode"] = []
+
+
+# ==================== TEAM COMMUNICATION (Slack-style) ====================
+
+
+class ChannelType(str, Enum):
+    channel = "channel"   # public workspace channel
+    private = "private"   # invite-only channel
+    direct = "direct"     # 1:1 direct message
+
+
+class Channel(SQLModel, table=True):
+    __tablename__ = "channels"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    workspace_id: Optional[int] = Field(default=None, foreign_key="workspaces.id", index=True)
+    channel_type: ChannelType = Field(default=ChannelType.channel)
+    name: Optional[str] = Field(default=None, max_length=120)  # null for DMs
+    description: Optional[str] = Field(default=None, max_length=500)
+    created_by: int = Field(foreign_key="users.id")
+    is_archived: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChannelMember(SQLModel, table=True):
+    __tablename__ = "channel_members"
+    __table_args__ = (UniqueConstraint("channel_id", "user_id", name="uq_channel_member"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    channel_id: int = Field(foreign_key="channels.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    last_read_message_id: Optional[int] = Field(default=None)
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Message(SQLModel, table=True):
+    __tablename__ = "messages"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
+    channel_id: int = Field(foreign_key="channels.id", index=True)
+    sender_id: int = Field(foreign_key="users.id", index=True)
+    body: str = Field(sa_column=Column(Text, nullable=False))
+    thread_root_id: Optional[int] = Field(default=None, foreign_key="messages.id", index=True)
+    edited_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ChannelCreate(SQLModel):
+    name: str = Field(min_length=1, max_length=120)
+    workspace_id: Optional[int] = None
+    channel_type: ChannelType = ChannelType.channel
+    description: Optional[str] = None
+    member_ids: Optional[List[int]] = None
+
+
+class ChannelRead(SQLModel):
+    id: int
+    organization_id: Optional[int] = None
+    workspace_id: Optional[int] = None
+    channel_type: ChannelType
+    name: Optional[str] = None
+    description: Optional[str] = None
+    created_by: int
+    is_archived: bool
+    created_at: datetime
+    member_count: Optional[int] = None
+    unread_count: Optional[int] = None
+    last_message_at: Optional[datetime] = None
+
+
+class MessageCreate(SQLModel):
+    body: str = Field(min_length=1, max_length=8000)
+    thread_root_id: Optional[int] = None
+
+
+class MessageRead(SQLModel):
+    id: int
+    channel_id: int
+    sender_id: int
+    sender_name: Optional[str] = None
+    sender_profile_picture: Optional[str] = None
+    body: str
+    thread_root_id: Optional[int] = None
+    edited_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    created_at: datetime
 
 

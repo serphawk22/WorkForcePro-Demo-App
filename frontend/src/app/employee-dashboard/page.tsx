@@ -13,7 +13,6 @@ import {
   RecurringInstancesSummary, TaskInstanceSummary,
   getMyHappySheets, HappySheetEntry, getMyPersonalProjects, PersonalProjectEntry,
 } from "@/lib/api";
-import { EmployeeTicketCenter } from "@/components/employee/EmployeeTicketCenter";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -560,14 +559,6 @@ export default function EmployeeDashboard() {
                     <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">The Lighthouse</p>
                     <h3 className="mt-2 text-lg font-semibold text-foreground">Personal Projects</h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/my-space/learning-canvas")}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-background"
-                  >
-                    Manage
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
@@ -667,8 +658,6 @@ export default function EmployeeDashboard() {
               </div>
             </article>
           </section>
-
-          <EmployeeTicketCenter />
 
           {/* Teams Meeting Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

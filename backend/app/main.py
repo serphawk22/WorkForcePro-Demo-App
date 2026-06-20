@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet, task_owner
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, workspaces, organizations, search, weekly_sheet, task_owner, nodes, chat, reports
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -206,6 +206,9 @@ async def lifespan(app: FastAPI):
         # Task workspace hierarchy
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id INTEGER',
         'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',
+        # Project node hierarchy (Workspace -> Parent Node -> Child Node -> Task)
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS node_id INTEGER',
+        'CREATE INDEX IF NOT EXISTS ix_tasks_node_id ON tasks(node_id)',
         # Happy Sheet new question column
         "ALTER TABLE happy_sheets ADD COLUMN IF NOT EXISTS goals_without_greed_impossible VARCHAR NOT NULL DEFAULT ''",
         # Happy Sheet interactions
@@ -510,13 +513,6 @@ async def lifespan(app: FastAPI):
             session.add(ts)
 
 
-        try:
-            session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
-            session.commit()
-            print("[SUCCESS] admin_queries.assigned_to column added")
-        except Exception:
-            session.rollback()
-
         session.commit()
 
         if default_workspace:
@@ -602,16 +598,16 @@ app.include_router(payroll.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)
-app.include_router(admin_queries.router)
 app.include_router(subtasks.router)
 app.include_router(leave.router)
 app.include_router(dashboard.router)
 app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(myspace.router)
-app.include_router(teams.router)
-app.include_router(ai_assistant.router)
 app.include_router(workspaces.router)
+app.include_router(nodes.router)
+app.include_router(chat.router)
+app.include_router(reports.router)
 app.include_router(organizations.router)
 app.include_router(search.router)
 app.include_router(weekly_sheet.router)

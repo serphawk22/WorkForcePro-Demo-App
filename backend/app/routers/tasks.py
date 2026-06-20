@@ -33,7 +33,7 @@ from app.models import (
     User, Task, TaskCreate, TaskUpdate, TaskRead, TaskWithAssignee,
     TaskStatus, UserRole, NotificationType, Subtask, TaskComment, Notification, SubtaskStatus,
     SubtaskWithAssignee, TaskCommentWithUser, TaskInstance, TaskInstanceStatus, Workspace,
-    SubtaskComment,
+    SubtaskComment, ProjectNode, NodeType,
 )
 from app.auth import get_current_user, get_current_admin_user, get_current_user_optional, ensure_same_organization, is_admin_user
 from app.routers.notifications import create_notification
@@ -208,6 +208,7 @@ def _workspace_kwargs(workspace: Optional[Workspace], task: Task) -> dict:
         "workspace_name": workspace.name if workspace else None,
         "workspace_icon": workspace.icon if workspace else None,
         "workspace_color": workspace.color if workspace else None,
+        "node_id": task.node_id,
     }
 
 
@@ -278,6 +279,10 @@ def _task_to_with_assignee(
         workspace_stmt = select(Workspace).where(Workspace.id == task.workspace_id)
         workspace = session.exec(workspace_stmt).first()
 
+    node = None
+    if task.node_id:
+        node = session.exec(select(ProjectNode).where(ProjectNode.id == task.node_id)).first()
+
     assigner = None
     if task.assigned_by:
         assigner_stmt = select(User).where(User.id == task.assigned_by)
@@ -315,6 +320,7 @@ def _task_to_with_assignee(
         assignee_email=assignee.email if assignee else None,
         assigned_by_name=assigner.name if assigner else None,
         progress=calculate_task_progress(task, session),
+        node_name=node.name if node else None,
         **_recurrence_kwargs(task),
         comments=comments,
     )
@@ -1232,10 +1238,26 @@ async def create_task(
     admin: User = Depends(get_current_admin_user)
 ):
     """Create a new task with deliverable tracking (admin only)."""
+    # Node-scoped creation: a task lives under a child node. When node_id is given
+    # the workspace is derived from the node. workspace_id stays supported for
+    # backward compatibility during the hierarchy migration.
+    node = None
+    if task_data.node_id:
+        node = session.exec(select(ProjectNode).where(ProjectNode.id == task_data.node_id)).first()
+        if not node:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Node not found")
+        ensure_same_organization(admin, node.organization_id, "node")
+        if node.node_type != NodeType.child:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tasks can only be created under a child node",
+            )
+        task_data.workspace_id = node.workspace_id
+
     if not task_data.workspace_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Workspace is required",
+            detail="A workspace or node is required",
         )
 
     workspace = session.exec(select(Workspace).where(Workspace.id == task_data.workspace_id)).first()
@@ -1352,6 +1374,7 @@ async def create_task(
         estimated_hours=task_data.estimated_hours,
         actual_hours=task_data.actual_hours,
         workspace_id=task_data.workspace_id,
+        node_id=task_data.node_id,
         parent_task_id=task_data.parent_task_id,
         assigned_to=requested_assignee_id,
         assigned_by=reporter_id,
@@ -1406,6 +1429,7 @@ async def get_all_tasks(
     status_filter: Optional[TaskStatus] = None,
     assigned_to: Optional[int] = None,
     workspace_id: Optional[int] = None,
+    node_id: Optional[int] = None,
     parent_task_id: Optional[int] = None,
     roots_only: bool = False,
     session: Session = Depends(get_session),
@@ -1420,6 +1444,8 @@ async def get_all_tasks(
         statement = statement.where(Task.assigned_to == assigned_to)
     if workspace_id:
         statement = statement.where(Task.workspace_id == workspace_id)
+    if node_id:
+        statement = statement.where(Task.node_id == node_id)
     if parent_task_id is not None:
         statement = statement.where(Task.parent_task_id == parent_task_id)
     elif roots_only:
@@ -1817,6 +1843,19 @@ async def update_task(
                 detail="Workspace not found"
             )
         ensure_same_organization(admin, workspace.organization_id, "workspace")
+
+    if "node_id" in update_data and update_data["node_id"] is not None:
+        node = session.exec(select(ProjectNode).where(ProjectNode.id == update_data["node_id"])).first()
+        if not node:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Node not found")
+        ensure_same_organization(admin, node.organization_id, "node")
+        if node.node_type != NodeType.child:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tasks must belong to a child node",
+            )
+        # Keep the denormalized workspace_id consistent with the node.
+        update_data["workspace_id"] = node.workspace_id
 
     if "status" in update_data:
         raise HTTPException(
