@@ -12,6 +12,7 @@ const ALL_TABS = [
   { label: "Workspace", path: "/project-management/workspaces" },
   { label: "Summary",   path: "/project-management/summary" },
   { label: "Board",     path: "/project-management/board" },
+  { label: "List",      path: "/project-management/list" },
   { label: "Projects",  path: "/project-management/projects" },
   { label: "Your Team", path: "/project-management/team" },
   { label: "Calendar",  path: "/project-management/calendar" },

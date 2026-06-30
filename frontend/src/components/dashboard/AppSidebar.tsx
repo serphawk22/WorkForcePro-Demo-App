@@ -29,15 +29,13 @@ import { getApiBaseUrl, getWorkspaces, getMyNodes, Workspace } from "@/lib/api";
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
-  { label: "Workspaces & Nodes", icon: Boxes, path: "/admin/projects" },
   { label: "Chat", icon: MessagesSquare, path: "/chat" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
-  { label: "Happy Sheet", icon: Smile, path: "/my-space/happy-sheet" },
-  { label: "Weekly Report", icon: FileText, path: "/my-space/weekly-sheet" },
+  { label: "Reports", icon: FileText, path: "/reports" },
 ];
 
 const employeeLinks = [
@@ -46,8 +44,7 @@ const employeeLinks = [
   { label: "Chat", icon: MessagesSquare, path: "/chat" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
-  { label: "Happy Sheet", icon: Smile, path: "/my-space/happy-sheet" },
-  { label: "Weekly Report", icon: FileText, path: "/my-space/weekly-sheet" },
+  { label: "Reports", icon: FileText, path: "/reports" },
 ];
 
 interface SidebarProps {

@@ -177,27 +177,50 @@ export default function ChatPage() {
           </aside>
 
           {/* Messages */}
-          <section className="flex flex-1 flex-col">
-            <div className="flex items-center gap-2 border-b border-border px-5 py-3">
-              {activeChannel?.channel_type === "direct" ? <AtSign size={16} /> : <Hash size={16} />}
-              <h3 className="text-sm font-semibold text-foreground">{activeChannel?.name || "Select a channel"}</h3>
+          <section className="flex flex-1 flex-col bg-background">
+            <div className="flex items-center justify-between border-b border-border px-5 py-3">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-foreground text-lg tracking-tight">
+                  {activeChannel?.channel_type === "direct" ? "@" : "#"} {activeChannel?.name || "Select a channel"}
+                </span>
+                {activeChannel && (
+                  <span className="flex items-center gap-1 ml-2 text-muted-foreground hover:bg-secondary p-1 rounded cursor-pointer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                  </span>
+                )}
+              </div>
+              {activeChannel && (
+                <div className="flex items-center gap-4 text-muted-foreground">
+                  <span className="hover:bg-secondary p-1.5 rounded cursor-pointer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
+                  <span className="hover:bg-secondary p-1.5 rounded cursor-pointer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="flex-1 overflow-y-auto px-5 py-6 flex flex-col">
               {loadingMsgs ? (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
+                <div className="flex flex-1 items-center justify-center text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
               ) : !activeChannel ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                   Select a channel to start messaging.
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No messages yet. Say hello.
+                <div className="flex flex-1 flex-col justify-end pb-8">
+                  <div className="bg-secondary/40 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
+                    <Hash size={32} className="text-foreground" />
+                  </div>
+                  <h1 className="text-4xl font-extrabold text-foreground mb-2">
+                    {activeChannel?.channel_type === "direct" ? "@" : "#"}{activeChannel?.name}
+                  </h1>
+                  <p className="text-muted-foreground text-base max-w-lg mb-4">
+                    You're looking at the <strong>#{activeChannel?.name}</strong> channel.<br/>
+                    This is the one channel that will always include everyone. It's a great spot for announcements and team-wide conversations.
+                  </p>
                 </div>
               ) : (
-                <ul className="space-y-3">
+                <ul className="space-y-4 flex-1">
                   {messages.map((m) => (
                     <li key={m.id} className="flex gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground">
@@ -221,9 +244,23 @@ export default function ChatPage() {
             </div>
 
             {activeChannel && (
-              <div className="border-t border-border p-3">
-                <div className="flex items-center gap-2">
-                  <input
+              <div className="px-5 pb-5 pt-2">
+                <div className="rounded-xl border border-border bg-card shadow-sm focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all flex flex-col">
+                  {/* Rich Text Format Bar Placeholder */}
+                  <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20">
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+                    <div className="w-px h-4 bg-border mx-1"></div>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground font-bold font-serif w-6">B</button>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground italic font-serif w-6">I</button>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground line-through w-6">S</button>
+                    <div className="w-px h-4 bg-border mx-1"></div>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
+                    <button className="p-1 hover:bg-secondary rounded text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
+                  </div>
+                  
+                  {/* Input Area */}
+                  <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
@@ -232,17 +269,32 @@ export default function ChatPage() {
                         handleSend();
                       }
                     }}
-                    placeholder={`Message ${activeChannel.name || ""}`}
-                    className="h-10 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+                    placeholder={`Message ${activeChannel?.channel_type === "direct" ? "@" : "#"}${activeChannel.name || ""}`}
+                    className="w-full resize-none bg-transparent px-4 py-3 text-sm text-foreground outline-none min-h-[60px]"
+                    rows={1}
                   />
-                  <button
-                    type="button"
-                    onClick={handleSend}
-                    disabled={!text.trim()}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-                  >
-                    <Send size={15} /> Send
-                  </button>
+
+                  {/* Actions Bar */}
+                  <div className="flex items-center justify-between px-2 py-2">
+                    <div className="flex items-center gap-1">
+                      <button className="p-1.5 hover:bg-secondary rounded-full bg-secondary/50 text-foreground"><Plus size={16} /></button>
+                      <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground font-medium text-xs">Aa</button>
+                      <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground"><AtSign size={16} /></button>
+                      <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      disabled={!text.trim()}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                        text.trim() ? "bg-green-600 text-white hover:bg-green-700" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      <Send size={14} className={text.trim() ? "ml-0.5" : ""} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

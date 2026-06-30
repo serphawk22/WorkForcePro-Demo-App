@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import MySpaceShell from "@/components/my-space/MySpaceShell";
+import ReportsShell from "@/components/reports/ReportsShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Link2, Swords, Pencil, Trash2, Filter, Download, Eye } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
@@ -503,7 +503,7 @@ export default function TaskSheetPage() {
   if (!user) return null;
 
   return (
-    <MySpaceShell>
+    <ReportsShell>
       <div className="max-w-3xl mx-auto space-y-6 pb-20">
         {/* Form Card */}
         <div className="rounded-2xl p-6 md:p-8 shadow-sm lighthouse-card">
@@ -878,6 +878,6 @@ export default function TaskSheetPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </MySpaceShell>
+    </ReportsShell>
   );
 }
