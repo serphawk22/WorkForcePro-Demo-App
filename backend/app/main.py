@@ -25,6 +25,28 @@ async def lifespan(app: FastAPI):
 
     is_sqlite = engine.url.drivername == "sqlite"
 
+    # Essential schema DDL the ORM models REQUIRE on pre-existing tables.
+    # create_db_and_tables() only CREATES new tables — it never ALTERs existing
+    # ones — so columns added to an existing model (e.g. tasks.node_id from the
+    # node hierarchy) must be applied here. These statements are idempotent
+    # (IF NOT EXISTS) and index-only/metadata-only (no table scans), so they run
+    # on EVERY Postgres boot, even when SKIP_STARTUP_BOOTSTRAP=1 skips the heavier
+    # data backfills below. Without this, any `select(Task)` (e.g. GET /workspaces)
+    # 500s with "column tasks.node_id does not exist".
+    if not is_sqlite:
+        essential_migrations = [
+            'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS node_id INTEGER',
+            'CREATE INDEX IF NOT EXISTS ix_tasks_node_id ON tasks(node_id)',
+        ]
+        for migration in essential_migrations:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(migration))
+                    conn.commit()
+            except Exception as e:
+                print(f"[ERROR] Essential migration failed: {migration}\nError: {e}")
+        print("[SUCCESS] Essential schema migrations complete")
+
     # Local/dev default: skip heavy bootstrap migrations/backfills after core tables exist.
     # Default behavior:
     # - SQLite (local dev): skip heavy bootstrap

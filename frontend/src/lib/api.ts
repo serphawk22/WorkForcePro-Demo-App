@@ -475,13 +475,26 @@ export interface ProjectNodeUpdate {
   member_ids?: number[];
 }
 
-export async function getWorkspaceTree(workspaceId: number): Promise<ApiResponse<NodeTreeNode[]>> {
-  return apiFetch<NodeTreeNode[]>(`/nodes/tree?workspace_id=${workspaceId}`);
+export async function getWorkspaceTree(workspaceId: number, mine = false): Promise<ApiResponse<NodeTreeNode[]>> {
+  const mineParam = mine ? "&mine=true" : "";
+  return apiFetch<NodeTreeNode[]>(`/nodes/tree?workspace_id=${workspaceId}${mineParam}`);
 }
 
-export async function getNodes(workspaceId: number, parentNodeId?: number): Promise<ApiResponse<ProjectNode[]>> {
+export async function getNodes(
+  workspaceId: number,
+  parentNodeId?: number,
+  mine = false,
+  withMembers = false
+): Promise<ApiResponse<ProjectNode[]>> {
   const parent = parentNodeId != null ? `&parent_node_id=${parentNodeId}` : "";
-  return apiFetch<ProjectNode[]>(`/nodes?workspace_id=${workspaceId}${parent}`);
+  const mineParam = mine ? "&mine=true" : "";
+  const membersParam = withMembers ? "&with_members=true" : "";
+  return apiFetch<ProjectNode[]>(`/nodes?workspace_id=${workspaceId}${parent}${mineParam}${membersParam}`);
+}
+
+/** Every node (across all workspaces) the current user is assigned to (owner or member). */
+export async function getMyNodes(): Promise<ApiResponse<ProjectNode[]>> {
+  return apiFetch<ProjectNode[]>("/nodes/my");
 }
 
 export async function getNode(nodeId: number): Promise<ApiResponse<ProjectNode>> {

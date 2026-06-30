@@ -29,7 +29,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 text-gray-900 font-semibold">
             <img
-              src="/Serp_Hwak_Logo-removebg-preview.png"
+              src="/Serp_Hawk_Logo-removebg-preview.png"
               alt="SerpHawk Logo"
               className="h-8 w-8 object-contain"
             />

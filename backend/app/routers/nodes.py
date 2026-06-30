@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 from app.auth import get_current_user, get_current_admin_user, ensure_same_organization
 from app.database import get_session
 from app.models import (
+    Member,
     NodeStatus,
     NodeType,
     ProjectNode,
@@ -53,6 +54,23 @@ def _get_node_or_404(session: Session, node_id: int, current_user: User) -> Proj
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     ensure_same_organization(current_user, node.organization_id, "node")
     return node
+
+
+def _assigned_node_ids(session: Session, user: User) -> set:
+    """IDs of nodes the user is assigned to (owner of, or a member of)."""
+    owned = session.exec(
+        select(ProjectNode.id).where(
+            ProjectNode.organization_id == user.organization_id,
+            ProjectNode.owner_id == user.id,
+        )
+    ).all()
+    member_of = session.exec(
+        select(Member.entity_id).where(
+            Member.entity_type == ENTITY,
+            Member.user_id == user.id,
+        )
+    ).all()
+    return set(owned) | set(member_of)
 
 
 def _child_node_ids(session: Session, parent: ProjectNode) -> List[int]:
@@ -139,10 +157,12 @@ async def list_nodes(
     parent_node_id: Optional[int] = None,
     node_type: Optional[NodeType] = None,
     include_archived: bool = False,
+    mine: bool = False,
+    with_members: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """List nodes in a workspace, optionally filtered by parent or type."""
+    """List nodes in a workspace, optionally filtered by parent, type, or assignment."""
     stmt = select(ProjectNode).where(
         ProjectNode.workspace_id == workspace_id,
         ProjectNode.organization_id == current_user.organization_id,
@@ -153,19 +173,50 @@ async def list_nodes(
         stmt = stmt.where(ProjectNode.node_type == node_type)
     if not include_archived:
         stmt = stmt.where(ProjectNode.status != NodeStatus.archived)
+    if mine:
+        assigned = _assigned_node_ids(session, current_user)
+        if not assigned:
+            return []
+        stmt = stmt.where(ProjectNode.id.in_(assigned))
 
     nodes = session.exec(stmt.order_by(ProjectNode.created_at.asc())).all()
-    return [_to_read(session, n) for n in nodes]
+    return [_to_read(session, n, with_members=with_members) for n in nodes]
+
+
+@router.get("/my", response_model=List[ProjectNodeRead])
+async def list_my_nodes(
+    include_archived: bool = False,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """List every node (across all workspaces) the current user is assigned to."""
+    assigned = _assigned_node_ids(session, current_user)
+    if not assigned:
+        return []
+    stmt = select(ProjectNode).where(
+        ProjectNode.id.in_(assigned),
+        ProjectNode.organization_id == current_user.organization_id,
+    )
+    if not include_archived:
+        stmt = stmt.where(ProjectNode.status != NodeStatus.archived)
+    nodes = session.exec(stmt.order_by(ProjectNode.updated_at.desc())).all()
+    return [_to_read(session, n, with_members=True) for n in nodes]
 
 
 @router.get("/tree", response_model=List[NodeTreeNode])
 async def get_workspace_tree(
     workspace_id: int,
     include_archived: bool = False,
+    mine: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the parent -> child node tree for a workspace (for the sidebar)."""
+    """Return the parent -> child node tree for a workspace (for the sidebar).
+
+    When ``mine`` is set, the tree is restricted to nodes the current user is
+    assigned to: any directly-assigned node, every child of an assigned parent,
+    and the parent of any assigned child (kept for hierarchy context).
+    """
     stmt = select(ProjectNode).where(
         ProjectNode.workspace_id == workspace_id,
         ProjectNode.organization_id == current_user.organization_id,
@@ -173,6 +224,13 @@ async def get_workspace_tree(
     if not include_archived:
         stmt = stmt.where(ProjectNode.status != NodeStatus.archived)
     nodes = session.exec(stmt.order_by(ProjectNode.created_at.asc())).all()
+
+    assigned = _assigned_node_ids(session, current_user) if mine else set()
+
+    def child_visible(c: ProjectNode) -> bool:
+        if not mine:
+            return True
+        return c.id in assigned or c.parent_node_id in assigned
 
     # Per-child direct task counts in one pass.
     child_ids = [n.id for n in nodes if n.node_type == NodeType.child]
@@ -207,7 +265,11 @@ async def get_workspace_tree(
         kids = [
             make(c, [], task_counts.get(c.id, 0))
             for c in children_by_parent.get(n.id, [])
+            if child_visible(c)
         ]
+        # Hide parents the user has no claim on (neither assigned nor any visible child).
+        if mine and n.id not in assigned and not kids:
+            continue
         parent_tcount = sum(k.task_count for k in kids)
         tree.append(make(n, kids, parent_tcount))
     return tree

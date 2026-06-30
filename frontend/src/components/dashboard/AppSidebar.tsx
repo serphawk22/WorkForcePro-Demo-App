@@ -21,13 +21,15 @@ import {
   PanelLeftClose,
   Smile,
   FileText,
+  Boxes,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
+import { getApiBaseUrl, getWorkspaces, getMyNodes, Workspace } from "@/lib/api";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
+  { label: "Workspaces & Nodes", icon: Boxes, path: "/admin/projects" },
   { label: "Chat", icon: MessagesSquare, path: "/chat" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
@@ -141,12 +143,19 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   useEffect(() => {
     const loadWorkspaces = async () => {
       const res = await getWorkspaces();
-      if (res.data) setWorkspaces(res.data);
+      let list = res.data || [];
+      // Workers only navigate workspaces where they have assigned nodes.
+      if (role !== "admin") {
+        const mine = await getMyNodes();
+        const wsIds = new Set((mine.data || []).map((n) => n.workspace_id));
+        list = list.filter((w) => wsIds.has(w.id));
+      }
+      setWorkspaces(list);
     };
     loadWorkspaces();
     window.addEventListener("workspaces-updated", loadWorkspaces);
     return () => window.removeEventListener("workspaces-updated", loadWorkspaces);
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     const width = isCompactViewport ? 0 : effectiveWidth;
@@ -299,7 +308,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
         <img
-          src="/Serp_Hwak_Logo-removebg-preview.png"
+          src="/Serp_Hawk_Logo-removebg-preview.png"
           alt="SerpHawk Logo"
           className="h-8 w-8 shrink-0 object-contain"
         />

@@ -14,6 +14,12 @@ class UserRole(str, Enum):
     admin = "admin"
     manager = "manager"
     employee = "employee"
+    client = "client"
+    Admin = "Admin"
+    Manager = "Manager"
+    Employee = "Employee"
+    Client = "Client"
+
 
 
 class TaskStatus(str, Enum):
@@ -1585,8 +1591,15 @@ class CommentRead(SQLModel):
 
 
 class ActivityLog(SQLModel, table=True):
-    """Generic activity/audit history for any entity."""
-    __tablename__ = "activity_logs"
+    """Generic activity/audit history for any entity.
+
+    Named ``entity_activity_logs`` (not ``activity_logs``) to avoid colliding
+    with a legacy ``activity_logs`` table left over from a different app on the
+    same database. create_all() never overwrites an existing table, so reusing
+    that name would silently leave this model bound to an incompatible schema
+    and 500 every es.log_activity() call.
+    """
+    __tablename__ = "entity_activity_logs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     organization_id: Optional[int] = Field(default=None, foreign_key="organizations.id", index=True)
