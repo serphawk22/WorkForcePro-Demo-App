@@ -4,8 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/components/AuthProvider";
-import { DashboardTicketWidget } from "@/components/admin/DashboardTicketWidget";
-import { DashboardTicketInsights } from "@/components/admin/DashboardTicketInsights";
 import { 
   Users, UserCheck, Calendar, Clock, AlertCircle, 
   ListTodo, Target, CalendarDays, Loader2, Award, Copy, ArrowRight,
@@ -408,11 +406,6 @@ export default function AdminDashboard() {
               </div>
             </section>
 
-            {/* Ticket Management Widget */}
-            <DashboardTicketWidget />
-
-            <DashboardTicketInsights />
-
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {prioritySummaryCards.map((card) => (
                 <button
@@ -549,14 +542,6 @@ export default function AdminDashboard() {
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">The Lighthouse</p>
                       <h3 className="mt-2 text-lg font-semibold text-foreground">Personal Projects</h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => router.push("/my-space/learning-canvas")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
-                    >
-                      Manage
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">

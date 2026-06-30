@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import create_db_and_tables, engine
-from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, teams, ai_assistant, workspaces, organizations, search, admin_queries, weekly_sheet, task_owner
+from app.routers import auth, admin, attendance, tasks, leave, dashboard, users, notifications, comments, subtasks, payroll, myspace, workspaces, organizations, search, weekly_sheet, task_owner, nodes, chat, reports
 from app.services.sheet_reminder_service import start_sheet_reminder_scheduler, stop_sheet_reminder_scheduler
 
 load_dotenv()
@@ -24,6 +24,28 @@ async def lifespan(app: FastAPI):
     sheet_reminder_scheduler = start_sheet_reminder_scheduler()
 
     is_sqlite = engine.url.drivername == "sqlite"
+
+    # Essential schema DDL the ORM models REQUIRE on pre-existing tables.
+    # create_db_and_tables() only CREATES new tables — it never ALTERs existing
+    # ones — so columns added to an existing model (e.g. tasks.node_id from the
+    # node hierarchy) must be applied here. These statements are idempotent
+    # (IF NOT EXISTS) and index-only/metadata-only (no table scans), so they run
+    # on EVERY Postgres boot, even when SKIP_STARTUP_BOOTSTRAP=1 skips the heavier
+    # data backfills below. Without this, any `select(Task)` (e.g. GET /workspaces)
+    # 500s with "column tasks.node_id does not exist".
+    if not is_sqlite:
+        essential_migrations = [
+            'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS node_id INTEGER',
+            'CREATE INDEX IF NOT EXISTS ix_tasks_node_id ON tasks(node_id)',
+        ]
+        for migration in essential_migrations:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(migration))
+                    conn.commit()
+            except Exception as e:
+                print(f"[ERROR] Essential migration failed: {migration}\nError: {e}")
+        print("[SUCCESS] Essential schema migrations complete")
 
     # Local/dev default: skip heavy bootstrap migrations/backfills after core tables exist.
     # Default behavior:
@@ -206,6 +228,9 @@ async def lifespan(app: FastAPI):
         # Task workspace hierarchy
         'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id INTEGER',
         'CREATE INDEX IF NOT EXISTS ix_tasks_workspace_id ON tasks(workspace_id)',
+        # Project node hierarchy (Workspace -> Parent Node -> Child Node -> Task)
+        'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS node_id INTEGER',
+        'CREATE INDEX IF NOT EXISTS ix_tasks_node_id ON tasks(node_id)',
         # Happy Sheet new question column
         "ALTER TABLE happy_sheets ADD COLUMN IF NOT EXISTS goals_without_greed_impossible VARCHAR NOT NULL DEFAULT ''",
         # Happy Sheet interactions
@@ -510,13 +535,6 @@ async def lifespan(app: FastAPI):
             session.add(ts)
 
 
-        try:
-            session.exec(text("ALTER TABLE admin_queries ADD COLUMN assigned_to INTEGER"))
-            session.commit()
-            print("[SUCCESS] admin_queries.assigned_to column added")
-        except Exception:
-            session.rollback()
-
         session.commit()
 
         if default_workspace:
@@ -602,16 +620,16 @@ app.include_router(payroll.router)
 app.include_router(admin.router)
 app.include_router(attendance.router)
 app.include_router(tasks.router)
-app.include_router(admin_queries.router)
 app.include_router(subtasks.router)
 app.include_router(leave.router)
 app.include_router(dashboard.router)
 app.include_router(notifications.router)
 app.include_router(comments.router)
 app.include_router(myspace.router)
-app.include_router(teams.router)
-app.include_router(ai_assistant.router)
 app.include_router(workspaces.router)
+app.include_router(nodes.router)
+app.include_router(chat.router)
+app.include_router(reports.router)
 app.include_router(organizations.router)
 app.include_router(search.router)
 app.include_router(weekly_sheet.router)

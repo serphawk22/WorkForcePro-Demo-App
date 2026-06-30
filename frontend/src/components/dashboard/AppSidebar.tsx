@@ -10,6 +10,7 @@ import {
   DollarSign,
   FolderKanban,
   MessageSquare,
+  MessagesSquare,
   Users,
   UserCheck,
   LogOut,
@@ -18,32 +19,35 @@ import {
   ChevronRight,
   Menu,
   PanelLeftClose,
-  Zap,
-  AlertCircle,
-  Compass,
+  Smile,
+  FileText,
+  Boxes,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { getApiBaseUrl, getWorkspaces, Workspace } from "@/lib/api";
+import { getApiBaseUrl, getWorkspaces, getMyNodes, Workspace } from "@/lib/api";
 
 const adminLinks = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { label: "My Day", icon: Zap, path: "/my-day" },
+  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
+  { label: "Workspaces & Nodes", icon: Boxes, path: "/admin/projects" },
+  { label: "Chat", icon: MessagesSquare, path: "/chat" },
   { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Payroll", icon: DollarSign, path: "/payroll" },
-  { label: "Project Management", icon: FolderKanban, path: "/project-management" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
-  { label: "Ticket Management", icon: AlertCircle, path: "/admin/queries" },
   { label: "Employees", icon: Users, path: "/employees" },
   { label: "User Approvals", icon: UserCheck, path: "/admin/approvals", badgeKey: "pending" },
-  { label: "The Lighthouse", icon: Compass, path: "/my-space/task-sheet" },
+  { label: "Happy Sheet", icon: Smile, path: "/my-space/happy-sheet" },
+  { label: "Weekly Report", icon: FileText, path: "/my-space/weekly-sheet" },
 ];
 
 const employeeLinks = [
   { label: "My Dashboard", icon: LayoutDashboard, path: "/employee-dashboard" },
-  { label: "My Day", icon: Zap, path: "/my-day" },
   { label: "Project Management", icon: FolderKanban, path: "/project-management" },
+  { label: "Chat", icon: MessagesSquare, path: "/chat" },
+  { label: "Attendance", icon: CalendarCheck, path: "/attendance" },
   { label: "Requests", icon: MessageSquare, path: "/requests" },
-  { label: "The Lighthouse", icon: Compass, path: "/my-space/task-sheet" },
+  { label: "Happy Sheet", icon: Smile, path: "/my-space/happy-sheet" },
+  { label: "Weekly Report", icon: FileText, path: "/my-space/weekly-sheet" },
 ];
 
 interface SidebarProps {
@@ -139,12 +143,19 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
   useEffect(() => {
     const loadWorkspaces = async () => {
       const res = await getWorkspaces();
-      if (res.data) setWorkspaces(res.data);
+      let list = res.data || [];
+      // Workers only navigate workspaces where they have assigned nodes.
+      if (role !== "admin") {
+        const mine = await getMyNodes();
+        const wsIds = new Set((mine.data || []).map((n) => n.workspace_id));
+        list = list.filter((w) => wsIds.has(w.id));
+      }
+      setWorkspaces(list);
     };
     loadWorkspaces();
     window.addEventListener("workspaces-updated", loadWorkspaces);
     return () => window.removeEventListener("workspaces-updated", loadWorkspaces);
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     const width = isCompactViewport ? 0 : effectiveWidth;
@@ -285,7 +296,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
         data-open={isOpen ? "true" : "false"}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`glass-sidebar fixed left-0 top-0 h-dvh flex flex-col z-40 ${
+        className={`bg-sidebar border-r border-sidebar-border fixed left-0 top-0 h-dvh flex flex-col z-40 ${
           isCompactViewport ? (isCompactOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
         } ${isCompactViewport ? "transition-transform duration-300" : ""}`}
         style={{
@@ -297,7 +308,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
       >
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border overflow-hidden">
         <img
-          src="/Serp_Hwak_Logo-removebg-preview.png"
+          src="/Serp_Hawk_Logo-removebg-preview.png"
           alt="SerpHawk Logo"
           className="h-8 w-8 shrink-0 object-contain"
         />
@@ -353,12 +364,12 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                     }
 
                     if (targetWorkspaceId) {
-                      router.push(`/project-management/workspaces/${targetWorkspaceId}`, { scroll: false });
+                      router.push(`/project-management/nodes?workspace=${targetWorkspaceId}`, { scroll: false });
                       handleCompactNavigate();
                       return;
                     }
 
-                    router.push("/project-management", { scroll: false });
+                    router.push("/project-management/nodes", { scroll: false });
                     handleCompactNavigate();
                   }}
                   className={`relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium overflow-hidden transition-colors duration-150 ${
@@ -395,7 +406,7 @@ export default function AppSidebar({ role = "admin", userName = "Administrator",
                       <p className="py-1 text-xs text-sidebar-foreground/60">No workspaces</p>
                     )}
                     {workspaces.map((ws) => {
-                      const wsPath = `/project-management/workspaces/${ws.id}`;
+                      const wsPath = `/project-management/nodes?workspace=${ws.id}`;
                       const wsActive = String(ws.id) === activeWorkspaceId;
                       const badgeBg = hexToRgba(ws.color || "#6b7280", wsActive ? 0.2 : 0.12);
                       const badgeBorder = hexToRgba(ws.color || "#6b7280", wsActive ? 0.5 : 0.3);

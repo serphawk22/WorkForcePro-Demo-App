@@ -247,6 +247,8 @@ export interface Task {
   workspace_name?: string | null;
   workspace_icon?: string | null;
   workspace_color?: string | null;
+  node_id?: number | null;
+  node_name?: string | null;
   title: string;
   description: string | null;
   voice_note_url?: string | null;
@@ -299,6 +301,7 @@ export interface Task {
 export interface TaskCreate {
   title: string;
   workspace_id: number;
+  node_id?: number;
   parent_task_id?: number;
   description?: string;
   voice_note_url?: string;
@@ -362,6 +365,256 @@ export interface Workspace {
 export interface WorkspaceProjectsResponse {
   workspace: Workspace;
   projects: Task[];
+}
+
+// ==================== PROJECT NODE HIERARCHY ====================
+// Workspace -> Parent Node -> Child Node -> Task -> Subtask
+
+export type NodeType = "parent" | "child";
+export type NodeStatus = "todo" | "in_progress" | "blocked" | "done" | "archived";
+
+export interface NodeMember {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  user_id: number;
+  role: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  user_profile_picture?: string | null;
+}
+
+export interface ProjectNode {
+  id: number;
+  organization_id?: number | null;
+  public_id?: string | null;
+  workspace_id: number;
+  workspace_name?: string | null;
+  parent_node_id?: number | null;
+  node_type: NodeType;
+  name: string;
+  description?: string | null;
+  owner_id?: number | null;
+  owner_name?: string | null;
+  status: NodeStatus;
+  priority: "low" | "medium" | "high";
+  due_date?: string | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+  child_count?: number | null;
+  task_count?: number | null;
+  progress?: number | null;
+  members?: NodeMember[] | null;
+}
+
+export interface NodeTreeNode {
+  id: number;
+  public_id?: string | null;
+  name: string;
+  node_type: NodeType;
+  parent_node_id?: number | null;
+  status: NodeStatus;
+  priority: "low" | "medium" | "high";
+  task_count: number;
+  children: NodeTreeNode[];
+}
+
+export interface NodeComment {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  user_id: number;
+  body: string;
+  parent_comment_id?: number | null;
+  created_at: string;
+  updated_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  user_profile_picture?: string | null;
+}
+
+export interface ActivityEntry {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  actor_id: number;
+  actor_name?: string | null;
+  action: string;
+  detail?: string | null;
+  created_at: string;
+}
+
+export interface ProjectNodeCreate {
+  workspace_id: number;
+  parent_node_id?: number | null;
+  name: string;
+  description?: string;
+  owner_id?: number | null;
+  status?: NodeStatus;
+  priority?: "low" | "medium" | "high";
+  due_date?: string;
+  estimated_hours?: number;
+  member_ids?: number[];
+}
+
+export interface ProjectNodeUpdate {
+  name?: string;
+  description?: string;
+  owner_id?: number | null;
+  status?: NodeStatus;
+  priority?: "low" | "medium" | "high";
+  due_date?: string;
+  estimated_hours?: number;
+  actual_hours?: number;
+  parent_node_id?: number | null;
+  workspace_id?: number;
+  member_ids?: number[];
+}
+
+export async function getWorkspaceTree(workspaceId: number, mine = false): Promise<ApiResponse<NodeTreeNode[]>> {
+  const mineParam = mine ? "&mine=true" : "";
+  return apiFetch<NodeTreeNode[]>(`/nodes/tree?workspace_id=${workspaceId}${mineParam}`);
+}
+
+export async function getNodes(
+  workspaceId: number,
+  parentNodeId?: number,
+  mine = false,
+  withMembers = false
+): Promise<ApiResponse<ProjectNode[]>> {
+  const parent = parentNodeId != null ? `&parent_node_id=${parentNodeId}` : "";
+  const mineParam = mine ? "&mine=true" : "";
+  const membersParam = withMembers ? "&with_members=true" : "";
+  return apiFetch<ProjectNode[]>(`/nodes?workspace_id=${workspaceId}${parent}${mineParam}${membersParam}`);
+}
+
+/** Every node (across all workspaces) the current user is assigned to (owner or member). */
+export async function getMyNodes(): Promise<ApiResponse<ProjectNode[]>> {
+  return apiFetch<ProjectNode[]>("/nodes/my");
+}
+
+export async function getNode(nodeId: number): Promise<ApiResponse<ProjectNode>> {
+  return apiFetch<ProjectNode>(`/nodes/${nodeId}`);
+}
+
+export async function createNode(data: ProjectNodeCreate): Promise<ApiResponse<ProjectNode>> {
+  return apiFetch<ProjectNode>("/nodes", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function updateNode(nodeId: number, data: ProjectNodeUpdate): Promise<ApiResponse<ProjectNode>> {
+  return apiFetch<ProjectNode>(`/nodes/${nodeId}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function archiveNode(nodeId: number): Promise<ApiResponse<ProjectNode>> {
+  return apiFetch<ProjectNode>(`/nodes/${nodeId}/archive`, { method: "POST" });
+}
+
+export async function deleteNode(nodeId: number): Promise<ApiResponse<{ message: string }>> {
+  return apiFetch<{ message: string }>(`/nodes/${nodeId}`, { method: "DELETE" });
+}
+
+export async function getNodeComments(nodeId: number): Promise<ApiResponse<NodeComment[]>> {
+  return apiFetch<NodeComment[]>(`/nodes/${nodeId}/comments`);
+}
+
+export async function addNodeComment(nodeId: number, body: string): Promise<ApiResponse<NodeComment[]>> {
+  return apiFetch<NodeComment[]>(`/nodes/${nodeId}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+export async function getNodeActivity(nodeId: number): Promise<ApiResponse<ActivityEntry[]>> {
+  return apiFetch<ActivityEntry[]>(`/nodes/${nodeId}/activity`);
+}
+
+export async function setNodeMembers(nodeId: number, userIds: number[]): Promise<ApiResponse<NodeMember[]>> {
+  return apiFetch<NodeMember[]>(`/nodes/${nodeId}/members`, { method: "PUT", body: JSON.stringify({ user_ids: userIds }) });
+}
+
+export async function getNodeTasks(nodeId: number): Promise<ApiResponse<Task[]>> {
+  return apiFetch<Task[]>(`/tasks?node_id=${nodeId}`);
+}
+
+// ==================== TEAM CHAT ====================
+
+export type ChannelType = "channel" | "private" | "direct";
+
+export interface ChatChannel {
+  id: number;
+  organization_id?: number | null;
+  workspace_id?: number | null;
+  channel_type: ChannelType;
+  name?: string | null;
+  description?: string | null;
+  created_by: number;
+  is_archived: boolean;
+  created_at: string;
+  member_count?: number | null;
+  unread_count?: number | null;
+  last_message_at?: string | null;
+}
+
+export interface ChatMessage {
+  id: number;
+  channel_id: number;
+  sender_id: number;
+  sender_name?: string | null;
+  sender_profile_picture?: string | null;
+  body: string;
+  thread_root_id?: number | null;
+  edited_at?: string | null;
+  deleted_at?: string | null;
+  created_at: string;
+}
+
+export async function getChannels(): Promise<ApiResponse<ChatChannel[]>> {
+  return apiFetch<ChatChannel[]>("/chat/channels");
+}
+
+export async function createChannel(data: {
+  name: string;
+  workspace_id?: number;
+  channel_type?: ChannelType;
+  description?: string;
+  member_ids?: number[];
+}): Promise<ApiResponse<ChatChannel>> {
+  return apiFetch<ChatChannel>("/chat/channels", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function getOrCreateDm(userId: number): Promise<ApiResponse<ChatChannel>> {
+  return apiFetch<ChatChannel>(`/chat/dm/${userId}`, { method: "POST" });
+}
+
+export async function getChannelMessages(channelId: number, beforeId?: number): Promise<ApiResponse<ChatMessage[]>> {
+  const before = beforeId ? `?before_id=${beforeId}` : "";
+  return apiFetch<ChatMessage[]>(`/chat/channels/${channelId}/messages${before}`);
+}
+
+export async function sendChannelMessage(channelId: number, body: string): Promise<ApiResponse<ChatMessage>> {
+  return apiFetch<ChatMessage>(`/chat/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+export async function markChannelRead(channelId: number): Promise<ApiResponse<{ unread_count: number }>> {
+  return apiFetch<{ unread_count: number }>(`/chat/channels/${channelId}/read`, { method: "POST" });
+}
+
+/** Build the chat WebSocket URL (best-effort; falls back to REST when unavailable). */
+export function getChatSocketUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = getToken();
+  if (!token) return null;
+  const base = getApiBaseUrl();
+  let wsBase: string;
+  if (base) {
+    wsBase = base.replace(/^http/, "ws");
+  } else {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    // Local dev: FastAPI runs on :8000 alongside the Next dev server.
+    wsBase = `${proto}://${window.location.hostname}:8000`;
+  }
+  return `${wsBase}/chat/ws?token=${encodeURIComponent(token)}`;
 }
 
 export interface LeaveRequest {

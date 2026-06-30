@@ -82,7 +82,7 @@ export default function TopBar() {
                 />
               ) : (
                 <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-foreground text-[10px] font-semibold">
-                  {user?.name?.[0] || <User size={14} />}
+                  {user?.name?.[0]?.toUpperCase() || <User size={14} />}
                 </div>
               )}
             </button>

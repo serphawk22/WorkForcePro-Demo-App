@@ -55,7 +55,7 @@ export default function SignupPage() {
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <img
-            src="/Serp_Hwak_Logo-removebg-preview.png"
+            src="/Serp_Hawk_Logo-removebg-preview.png"
             alt="SerpHawk Logo"
             className="h-8 w-8 object-contain"
           />
