@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import MySpaceShell from "@/components/my-space/MySpaceShell";
+import ReportsShell from "@/components/reports/ReportsShell";
 import { useAuth } from "@/components/AuthProvider";
 import { Calendar, Sparkles, Filter, Download, Send, MessageSquare, Plus, Star, Flame, Pencil, Trash2 } from "lucide-react";
 import { showFloatingToast } from "@/components/ui/FloatingToast";
@@ -603,7 +603,7 @@ export default function HappySheetPage() {
   if (!user) return null;
 
   return (
-    <MySpaceShell>
+    <ReportsShell>
       <div className="max-w-3xl mx-auto space-y-6 pb-20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div className="lg:col-span-2 rounded-2xl p-4 lighthouse-card">
@@ -1107,6 +1107,6 @@ export default function HappySheetPage() {
             </div>
           </DialogContent>
         </Dialog>
-    </MySpaceShell>
+    </ReportsShell>
   );
 }
